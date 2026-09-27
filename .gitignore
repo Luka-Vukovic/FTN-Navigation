@@ -35,6 +35,7 @@ __pycache__/
 # Izvorni PDF rasporedi - javno dostupni na sajtu FTN-a; u repozitorijumu je
 # generisani app/src/main/assets/schedule.json
 /rasporedi/
+/images/
 
 # --- Claude Code ---
 CLAUDE.md

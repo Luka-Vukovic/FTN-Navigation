@@ -1,57 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Privremeni plan sprata (Nastavni blok, prizemlje) dok ne ubacimo pravi
-    evakuacioni plan. Zameniti fajlom floor_plan_placeholder.png (ili promeniti
-    referencu u PocScreen.kt) - pozicije na ekranu su relativne (0..1) u odnosu
-    na sliku, pa rade sa bilo kojom rezolucijom.
+    Plan sprata Nastavnog bloka (prizemlje), precrtan sa fotografije evakuacionog
+    plana (images/IMG_20260918_120057.webp). Putanje su u pikselima te fotografije;
+    grupa ih pomera tako da viewport pokriva x 305..1055, y 305..560. Iste koordinate
+    koristi graph/PlaceholderGraph.kt - pri izmeni plana pomeriti i čvorove.
+    Šematski prikaz (bez vrata i sitnih detalja); skala nije poznata - vidi PLAN_WIDTH_M.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="1000dp"
-    android:height="400dp"
-    android:viewportWidth="1000"
-    android:viewportHeight="400">
+    android:width="750dp"
+    android:height="255dp"
+    android:viewportWidth="750"
+    android:viewportHeight="255">
 
-    <!-- Pozadina -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M0,0h1000v400h-1000z" />
+        android:pathData="M0,0h750v255h-750z" />
 
-    <!-- Hodnik -->
-    <path
-        android:fillColor="#FFE8EEF4"
-        android:pathData="M20,170h960v60h-960z" />
+    <group
+        android:translateX="-305"
+        android:translateY="-305">
 
-    <!-- Sobe gore -->
-    <path
-        android:strokeColor="#FF455A64"
-        android:strokeWidth="3"
-        android:pathData="M20,20h180v150h-180z M200,20h180v150h-180z M380,20h120v150h-120z M560,20h200v150h-200z M760,20h220v150h-220z" />
-
-    <!-- Sobe dole -->
-    <path
-        android:strokeColor="#FF455A64"
-        android:strokeWidth="3"
-        android:pathData="M20,230h240v150h-240z M260,230h200v150h-200z M620,230h180v150h-180z M800,230h180v150h-180z" />
-
-    <!-- Stepenište (gore) i lift (dole) između soba -->
-    <path
-        android:fillColor="#FFFFE0B2"
-        android:strokeColor="#FF455A64"
-        android:strokeWidth="3"
-        android:pathData="M500,20h60v150h-60z M460,230h160v150h-160z" />
-    <path
-        android:strokeColor="#FF8D6E63"
-        android:strokeWidth="2"
-        android:pathData="M500,40h60 M500,60h60 M500,80h60 M500,100h60 M500,120h60 M500,140h60" />
-
-    <!-- Ulaz -->
-    <path
-        android:fillColor="#FFC8E6C9"
-        android:pathData="M0,175h20v50h-20z" />
-
-    <!-- Spoljni zid -->
-    <path
-        android:strokeColor="#FF263238"
-        android:strokeWidth="6"
-        android:pathData="M20,20h960v360h-960z" />
+        <!-- Hodnici, hol, spojni prolaz (levo) i evakuacioni izlaz (desno) -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M450,379 H628 V370 H762 V400 H1010 V447 H762 V449 H692 V504 H662 V449 H419 V400 H450 Z M311,397 H416 V432 H311 Z M1010,400 H1040 V430 H1010 Z" />
+        <!-- Glavni ulaz (dole) i izlaz na istoku -->
+        <path
+            android:fillColor="#FFC8E6C9"
+            android:pathData="M662,504 H692 V540 H662 Z M1040,403 H1052 V427 H1040 Z" />
+        <!-- Stepenište i spoljne stepenice ulaza -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M628,328 H692 V370 H628 Z M628,540 H692 V557 H628 Z" />
+        <!-- Gazišta -->
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="1"
+            android:pathData="M628,333 H651 M668,333 H692 M628,339 H651 M668,339 H692 M628,345 H651 M668,345 H692 M628,351 H651 M668,351 H692 M628,357 H651 M668,357 H692 M628,363 H651 M668,363 H692 M628,369 H651 M668,369 H692 M628,545 H692 M628,551 H692" />
+        <!-- Lift (u sredini stepeništa) -->
+        <path
+            android:fillColor="#FFFFCC80"
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M651,341 H668 V370 H651 Z" />
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1"
+            android:pathData="M651,341 L668,370 M668,341 L651,370" />
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M413,311 H484 V379 H450 V368 H413 Z M413,368 H450 V400 H413 Z M484,311 H520 V379 H484 Z M520,311 H554 V379 H520 Z M554,311 H588 V379 H554 Z M588,311 H628 V379 H588 Z M628,311 H692 V370 H628 Z M692,311 H727 V370 H692 Z M727,311 H762 V370 H727 Z M762,311 H1038 V400 H762 Z M419,449 H513 V468 H488 V504 H419 Z M488,468 H524 V504 H488 Z M513,449 H557 V504 H524 V468 H513 Z M557,449 H590 V504 H557 Z M590,449 H627 V504 H590 Z M627,449 H662 V476 H627 Z M627,476 H662 V504 H627 Z M692,449 H762 V504 H692 Z M762,447 H996 V504 H762 Z M996,447 H1038 V504 H996 Z" />
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="3"
+            android:pathData="M413,311 H1038 V504 H413 Z" />
+        <!-- Spojni prolaz ka susednoj zgradi -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M311,397 H416 V432 H311 Z" />
+    </group>
 </vector>

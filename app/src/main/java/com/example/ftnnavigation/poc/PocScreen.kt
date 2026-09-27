@@ -39,10 +39,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.graph.Node
+import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
 
@@ -50,18 +58,16 @@ import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
 @Composable
 fun PocRoute(viewModel: PocViewModel = viewModel()) {
     val state = viewModel.state
-    val planSize = painterResource(R.drawable.floor_plan_placeholder).intrinsicSize
-    // Visina plana u metrima sledi iz odnosa stranica slike.
-    val planHeightM = PLAN_WIDTH_M * planSize.height / planSize.width
 
     PdrSensorsEffect(
         trackSteps = state.isTracking,
         onAzimuth = viewModel::onAzimuth,
-        onStep = { viewModel.onStep(planHeightM) },
+        onStep = viewModel::onStep,
     )
 
     PocScreen(
         state = state,
+        graph = viewModel.graph,
         onPickStartToggle = viewModel::togglePickStart,
         onMapTap = viewModel::setStart,
         onTrackingToggle = viewModel::toggleTracking,
@@ -72,6 +78,7 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
 @Composable
 fun PocScreen(
     state: PocUiState,
+    graph: BuildingGraph?,
     onPickStartToggle: () -> Unit,
     onMapTap: (Offset) -> Unit,
     onTrackingToggle: () -> Unit,
@@ -89,6 +96,7 @@ fun PocScreen(
         Column(Modifier.padding(top = innerPadding.calculateTopPadding()).fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 FloorPlan(
+                    graph = graph,
                     position = state.position,
                     headingDeg = state.headingDeg,
                     isPickingStart = state.isPickingStart,
@@ -117,9 +125,10 @@ fun PocScreen(
     }
 }
 
-/** Slika sprata sa pan/zoom gestovima i markerom korisnika. */
+/** Slika sprata sa pan/zoom gestovima, grafom prizemlja i markerom korisnika. */
 @Composable
 private fun FloorPlan(
+    graph: BuildingGraph?,
     position: Offset?,
     headingDeg: Float,
     isPickingStart: Boolean,
@@ -164,6 +173,14 @@ private fun FloorPlan(
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize(),
             )
+            if (graph != null) {
+                val colors = MaterialTheme.colorScheme
+                val textMeasurer = rememberTextMeasurer()
+                val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface, lineHeight = TextUnit.Unspecified)
+                Canvas(Modifier.fillMaxSize()) {
+                    drawGraph(graph, floor = 0, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / scale)
+                }
+            }
             if (position != null) {
                 val color = MaterialTheme.colorScheme.primary
                 Canvas(Modifier.fillMaxSize()) {
@@ -172,6 +189,46 @@ private fun FloorPlan(
                     drawUserMarker(center, headingDeg, color, 1f / scale)
                 }
             }
+        }
+    }
+}
+
+/** Visina natpisa sale kao deo visine plana. */
+private const val LABEL_HEIGHT = 0.03f
+
+/** Ivice i čvorovi jednog sprata; sale imaju natpis sa nazivom iz rasporeda. */
+private fun DrawScope.drawGraph(
+    graph: BuildingGraph,
+    floor: Int,
+    edgeColor: Color,
+    roomColor: Color,
+    textMeasurer: TextMeasurer,
+    labelStyle: TextStyle,
+    k: Float,
+) {
+    fun Node.toOffset() = Offset(x * size.width, y * size.height)
+    val nodes = graph.nodes.filter { it.floor == floor }.associateBy { it.id }
+    for (edge in graph.edges) {
+        val a = nodes[edge.fromId] ?: continue
+        val b = nodes[edge.toId] ?: continue
+        drawLine(edgeColor.copy(alpha = 0.35f), a.toOffset(), b.toOffset(), strokeWidth = 2.dp.toPx() * k)
+    }
+    for (node in nodes.values) {
+        val center = node.toOffset()
+        when (node.type) {
+            NodeType.HODNIK, NodeType.VRATA -> drawCircle(edgeColor.copy(alpha = 0.5f), radius = 3.dp.toPx() * k, center = center)
+            NodeType.PROSTORIJA -> {
+                drawCircle(roomColor, radius = 5.dp.toPx() * k, center = center)
+                // Natpis je deo plana (raste sa zumom, kao tekst na pravom planu) da bi stao u sobu.
+                val style = labelStyle.copy(fontSize = (size.height * LABEL_HEIGHT).toSp())
+                val label = textMeasurer.measure(node.name.orEmpty(), style)
+                // Natpis na strani sobe dalje od hodnika, da ga ivica ka hodniku ne preseca.
+                val gap = size.height * LABEL_HEIGHT / 2
+                val dy = if (node.y < 0.5f) -gap - label.size.height else gap
+                drawText(label, topLeft = center + Offset(-label.size.width / 2f, dy))
+            }
+            NodeType.STEPENISTE, NodeType.LIFT, NodeType.ULAZ ->
+                drawCircle(edgeColor, radius = 5.dp.toPx() * k, center = center)
         }
     }
 }
@@ -292,6 +349,7 @@ private fun PocScreenPreview() {
                 steps = 42,
                 isTracking = true,
             ),
+            graph = null,
             onPickStartToggle = {},
             onMapTap = {},
             onTrackingToggle = {},
