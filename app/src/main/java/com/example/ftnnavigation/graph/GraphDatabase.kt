@@ -11,11 +11,11 @@ import androidx.room.Transaction
 
 @Dao
 abstract class GraphDao {
-    @Query("SELECT * FROM nodes WHERE buildingId = :buildingId")
-    abstract suspend fun nodes(buildingId: String): List<Node>
+    @Query("SELECT * FROM nodes")
+    abstract suspend fun nodes(): List<Node>
 
-    @Query("SELECT e.* FROM edges e JOIN nodes n ON n.id = e.fromId WHERE n.buildingId = :buildingId")
-    abstract suspend fun edges(buildingId: String): List<Edge>
+    @Query("SELECT * FROM edges")
+    abstract suspend fun edges(): List<Edge>
 
     @Query("SELECT COUNT(*) FROM nodes")
     abstract suspend fun nodeCount(): Int
@@ -36,10 +36,11 @@ abstract class GraphDao {
 }
 
 /**
- * Graf zgrade. Za sada se puni iz [PlaceholderGraph]; svaka izmena grafa ili šeme ide uz
- * povećanje [version] - stara baza se briše i puni iznova (nema korisničkih podataka).
+ * Graf kampusa i zgrada. Puni se iz [PlaceholderGraph] i assets/campus.json; svaka izmena
+ * grafa, šeme ili campus.json ide uz povećanje [version] - stara baza se briše i puni iznova
+ * (nema korisničkih podataka).
  */
-@Database(entities = [Node::class, Edge::class], version = 5, exportSchema = false)
+@Database(entities = [Node::class, Edge::class], version = 6, exportSchema = false)
 abstract class GraphDatabase : RoomDatabase() {
     abstract fun graphDao(): GraphDao
 
@@ -56,8 +57,9 @@ abstract class GraphDatabase : RoomDatabase() {
 }
 
 class GraphRepository(private val dao: GraphDao) {
-    suspend fun loadBuilding(buildingId: String, scale: FloorScale): BuildingGraph {
-        dao.seedIfEmpty(PlaceholderGraph.nodes, PlaceholderGraph.edges)
-        return BuildingGraph(dao.nodes(buildingId), dao.edges(buildingId), scale)
+    /** Ceo graf (mali je - stotine čvorova); [placements] smeštaju planove zgrada u kampus. */
+    suspend fun load(seedNodes: List<Node>, seedEdges: List<Edge>, placements: Map<String, PlanPlacement>): BuildingGraph {
+        dao.seedIfEmpty(seedNodes, seedEdges)
+        return BuildingGraph(dao.nodes(), dao.edges(), placements)
     }
 }

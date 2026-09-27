@@ -48,6 +48,7 @@ import java.time.format.DateTimeFormatter
 /**
  * @param scheduleSummary npr. "4. godina · grupa 3 · ..."; null dok raspored nije izabran.
  * @param upcoming sledeći čas iz izabranog rasporeda (null ako nema ili nije izabran).
+ * @param nextBuilding zgrada sale sledećeg časa (null ako se ne zna).
  * @param routeToNext ruta od glavnog ulaza do sale sledećeg časa (null ako sala nije na mapi).
  */
 @Composable
@@ -55,6 +56,7 @@ fun HomeScreen(
     scheduleSummary: String?,
     upcoming: UpcomingClass?,
     now: LocalDateTime,
+    nextBuilding: String?,
     routeToNext: Route?,
     onOpenSchedule: () -> Unit,
     onOpenMap: () -> Unit,
@@ -93,13 +95,13 @@ fun HomeScreen(
                 when {
                     scheduleSummary == null -> CardBody(stringResource(R.string.home_next_class_empty))
                     upcoming == null -> CardBody(stringResource(R.string.home_no_upcoming))
-                    else -> NextClass(upcoming, now, routeToNext, onShowRoute)
+                    else -> NextClass(upcoming, now, nextBuilding, routeToNext, onShowRoute)
                 }
             }
             HomeCard(
                 icon = R.drawable.ic_map,
                 title = stringResource(R.string.home_map_title),
-                subtitle = stringResource(R.string.poc_location),
+                subtitle = stringResource(R.string.home_map_subtitle),
                 actionLabel = stringResource(R.string.home_open_map),
                 onAction = onOpenMap,
             ) {
@@ -110,7 +112,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime, route: Route?, onShowRoute: () -> Unit) {
+private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime, building: String?, route: Route?, onShowRoute: () -> Unit) {
     val entry = upcoming.entry
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
@@ -124,7 +126,7 @@ private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime, route: Route?
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        RoomLabel(entry.room, Modifier.padding(top = 2.dp))
+        RoomLabel(if (building != null) "${entry.room} · $building" else entry.room, Modifier.padding(top = 2.dp))
         if (route == null) {
             Text(
                 stringResource(R.string.route_not_on_map),
@@ -240,7 +242,8 @@ private fun HomeScreenPreview() {
                 LocalDate.of(2026, 9, 29),
             ),
             now = now,
-            routeToNext = Route(emptyList(), durationSec = 95.0, lengthM = 110.0),
+            nextBuilding = "Naučno-tehnološki park",
+            routeToNext = Route(emptyList(), durationSec = 240.0, lengthM = 310.0),
             onOpenSchedule = {},
             onOpenMap = {},
             onShowRoute = {},

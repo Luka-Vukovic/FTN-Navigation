@@ -3,10 +3,37 @@ package com.example.ftnnavigation.graph
 import java.util.PriorityQueue
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 
 /** Dimenzije plana sprata u metrima - pretvaraju relativne koordinate čvorova u metre. */
 data class FloorScale(val widthM: Float, val heightM: Float)
+
+/** Tačka u metrima zajedničkog koordinatnog sistema (kampusa); y raste naniže, kao na ekranu. */
+data class PointM(val x: Double, val y: Double)
+
+/**
+ * Gde je plan u zajedničkom sistemu: tačka (0, 0) plana je u [originX]/[originY] (metri), a
+ * plan je zarotiran za [rotationDeg] u smeru kazaljke na satu. Podrazumevano plan počinje u
+ * koordinatnom početku bez rotacije - dovoljno za graf jedne zgrade.
+ */
+data class PlanPlacement(
+    val scale: FloorScale,
+    val originX: Double = 0.0,
+    val originY: Double = 0.0,
+    val rotationDeg: Double = 0.0,
+) {
+    private val cos = cos(Math.toRadians(rotationDeg))
+    private val sin = sin(Math.toRadians(rotationDeg))
+
+    /** Relativna tačka plana (0..1) u metre. */
+    fun toMeters(x: Float, y: Float): PointM {
+        val dx = x * scale.widthM.toDouble()
+        val dy = y * scale.heightM.toDouble()
+        return PointM(originX + dx * cos - dy * sin, originY + dx * sin + dy * cos)
+    }
+}
 
 /**
  * Težine za A*; sva vremena su u sekundama. [crowdFactor] (gužva između časova) množi
@@ -35,15 +62,22 @@ data class Route(val nodes: List<Node>, val durationSec: Double, val lengthM: Do
 }
 
 /**
- * Graf jedne zgrade učitan iz baze. Svi spratovi dele [scale] (u PoC-u svi koriste isti
- * placeholder plan); kad stignu pravi planovi, skala ide po spratu.
+ * Graf učitan iz baze: zgrade i spoljni graf kampusa. Svaka zgrada ([Node.buildingId]) ima
+ * svoj [PlanPlacement], pa su sve dužine u metrima istog sistema i ivica sme da spaja dve
+ * zgrade (ulaz sa stazom, spojni prolaz). Svi spratovi zgrade dele smeštaj (u PoC-u svi
+ * koriste isti placeholder plan); kad stignu pravi planovi, smeštaj ide po spratu.
  */
 class BuildingGraph(
     val nodes: List<Node>,
     val edges: List<Edge>,
-    private val scale: FloorScale,
+    private val placements: Map<String, PlanPlacement>,
 ) {
+    /** Graf u kome sve zgrade dele plan [scale] bez pomeraja (npr. jedna zgrada). */
+    constructor(nodes: List<Node>, edges: List<Edge>, scale: FloorScale) :
+        this(nodes, edges, nodes.map { it.buildingId }.distinct().associateWith { PlanPlacement(scale) })
+
     private val byId = nodes.associateBy { it.id }
+    private val positions = nodes.associate { it.id to placement(it.buildingId).toMeters(it.x, it.y) }
     private val adjacency: Map<String, List<Pair<Node, EdgeType>>>
 
     init {
@@ -68,6 +102,12 @@ class BuildingGraph(
     val rooms: List<Node> get() = nodes.filter { it.type == NodeType.PROSTORIJA }
 
     fun node(id: String): Node? = byId[id]
+
+    fun placement(buildingId: String): PlanPlacement =
+        requireNotNull(placements[buildingId]) { "Nema smeštaja plana za zgradu $buildingId" }
+
+    /** Položaj čvora u metrima zajedničkog sistema. */
+    fun position(node: Node): PointM = positions.getValue(node.id)
 
     /** Sala po nazivu iz rasporeda. */
     fun room(name: String): Node? = nodes.find { it.type == NodeType.PROSTORIJA && it.name == name }
@@ -104,18 +144,31 @@ class BuildingGraph(
         return null
     }
 
-    /** Čvor najbliži tački ([x]/[y] relativno na plan sprata), ili null ako sprat nema čvorova. */
-    fun nearestNode(floor: Int, x: Float, y: Float): Node? =
-        nodes.filter { it.floor == floor }.minByOrNull { distanceM(it.x, it.y, x, y) }
+    /**
+     * Čvor zgrade [buildingId] najbliži tački ([x]/[y] relativno na plan sprata), ili null ako
+     * sprat nema čvorova.
+     */
+    fun nearestNode(buildingId: String, floor: Int, x: Float, y: Float): Node? {
+        val point = placement(buildingId).toMeters(x, y)
+        return nodes.filter { it.buildingId == buildingId && it.floor == floor }
+            .minByOrNull { distanceM(position(it), point) }
+    }
 
     /**
      * Ruta od proizvoljne tačke (npr. PDR pozicije): pravom linijom do najbližeg čvora, pa A*.
      * Prvi deo puta je uračunat u vreme i dužinu; [Route.nodes] počinje tim čvorom.
      */
-    fun routeFrom(floor: Int, x: Float, y: Float, toId: String, profile: RoutingProfile = RoutingProfile()): Route? {
-        val start = nearestNode(floor, x, y) ?: return null
+    fun routeFrom(
+        buildingId: String,
+        floor: Int,
+        x: Float,
+        y: Float,
+        toId: String,
+        profile: RoutingProfile = RoutingProfile(),
+    ): Route? {
+        val start = nearestNode(buildingId, floor, x, y) ?: return null
         val route = route(start.id, toId, profile) ?: return null
-        val legM = distanceM(x, y, start.x, start.y)
+        val legM = distanceM(position(start), placement(buildingId).toMeters(x, y))
         return route.copy(
             durationSec = route.durationSec + legM / profile.walkingSpeedMps * profile.crowdFactor,
             lengthM = route.lengthM + legM,
@@ -136,8 +189,9 @@ class BuildingGraph(
     }
 
     /**
-     * Donja granica preostalog vremena: na istom spratu vazdušna linija, inače najjeftinija
-     * promena sprata (horizontalni deo se preskače - planovi spratova ne moraju biti poravnati).
+     * Donja granica preostalog vremena: na istom spratu vazdušna linija (i između zgrada -
+     * sve je u metrima istog sistema), inače najjeftinija promena sprata (horizontalni deo se
+     * preskače - planovi spratova ne moraju biti poravnati).
      */
     private fun heuristic(node: Node, goal: Node, profile: RoutingProfile): Double {
         if (node.floor == goal.floor) return distanceM(node, goal) / profile.walkingSpeedMps
@@ -145,10 +199,9 @@ class BuildingGraph(
         return abs(node.floor - goal.floor) * perFloor
     }
 
-    private fun distanceM(a: Node, b: Node): Double = distanceM(a.x, a.y, b.x, b.y)
+    private fun distanceM(a: Node, b: Node): Double = distanceM(position(a), position(b))
 
-    private fun distanceM(ax: Float, ay: Float, bx: Float, by: Float): Double =
-        hypot((ax - bx) * scale.widthM.toDouble(), (ay - by) * scale.heightM.toDouble())
+    private fun distanceM(a: PointM, b: PointM): Double = hypot(a.x - b.x, a.y - b.y)
 
     private fun path(cameFrom: Map<String, String>, toId: String): List<Node> =
         generateSequence(toId) { cameFrom[it] }.map(byId::getValue).toList().asReversed()

@@ -8,14 +8,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.ftnnavigation.R
+import com.example.ftnnavigation.campus.CampusData
+import com.example.ftnnavigation.campus.RouteTarget
+import com.example.ftnnavigation.campus.resolveTarget
+import com.example.ftnnavigation.campus.seedGraph
 import com.example.ftnnavigation.graph.BuildingGraph
-import com.example.ftnnavigation.graph.FloorScale
 import com.example.ftnnavigation.graph.GraphDatabase
 import com.example.ftnnavigation.graph.GraphRepository
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.Route
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -34,9 +38,8 @@ data class PocUiState(
     val distanceM: Float get() = steps * stepLengthM
 }
 
-// Širina plana (x 305..1055 px fotografije evakuacionog plana). Procena: ~0,1 m/px (kancelarija
-// u gornjem redu ~3,5 m). TODO: zameniti izmerenom vrednošću nakon kalibracije razmere plana.
-private const val PLAN_WIDTH_M = 75f
+/** Šta Mapa prikazuje: spoljnu mapu kampusa ili plan prizemlja Nastavnog bloka. */
+enum class MapMode { KAMPUS, ZGRADA }
 
 // Azimut (od severa) pravca koji je "gore" na planu. TODO: izmeriti kompasom u hodniku.
 private const val PLAN_UP_AZIMUTH_DEG = 0f
@@ -50,13 +53,27 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     var state by mutableStateOf(PocUiState())
         private set
 
-    /** Graf zgrade (null dok se učitava iz baze). Za sada je sve u prizemlju. */
+    /** Mapa kampusa iz assets-a (null dok se učitava). */
+    var campus by mutableStateOf<CampusData?>(null)
+        private set
+
+    /** Graf kampusa i zgrada (null dok se učitava iz baze). Zgrade su za sada samo prizemlje. */
     var graph by mutableStateOf<BuildingGraph?>(null)
         private set
 
-    /** Naziv sale odredišta (kao u rasporedu); čuva se i dok se graf još učitava. */
+    var mode by mutableStateOf(MapMode.ZGRADA)
+        private set
+
+    /** Naziv sale (kao u rasporedu) ili zgrade; čuva se i dok se graf još učitava. */
     var destination by mutableStateOf<String?>(null)
         private set
+
+    /** Gde vodi ruta do [destination]; null ako se ne zna gde je (ili se graf učitava). */
+    val target: RouteTarget? by derivedStateOf {
+        val graph = graph ?: return@derivedStateOf null
+        val campus = campus ?: return@derivedStateOf null
+        destination?.let { resolveTarget(it, graph, campus) }
+    }
 
     /**
      * Ruta do odredišta: od postavljene pozicije (najbliži čvor), inače od glavnog ulaza.
@@ -64,33 +81,49 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      */
     val route: Route? by derivedStateOf {
         val graph = graph ?: return@derivedStateOf null
-        val target = destination?.let(graph::room) ?: return@derivedStateOf null
+        val target = target ?: return@derivedStateOf null
         val position = state.position
-        if (position != null) graph.routeFrom(0, position.x, position.y, target.id)
-        else graph.route(PlaceholderGraph.ENTRANCE_ID, target.id)
-    }
-
-    // Visina plana u metrima sledi iz odnosa stranica slike.
-    private val planScale = application.getDrawable(R.drawable.floor_plan_placeholder)!!.let {
-        FloorScale(PLAN_WIDTH_M, PLAN_WIDTH_M * it.intrinsicHeight / it.intrinsicWidth)
+        if (position != null) {
+            graph.routeFrom(PlaceholderGraph.BUILDING_ID, 0, position.x, position.y, target.node.id)
+        } else {
+            graph.route(PlaceholderGraph.ENTRANCE_ID, target.node.id)
+        }
     }
 
     init {
         viewModelScope.launch {
+            val campus = withContext(Dispatchers.IO) {
+                CampusData.parse(application.assets.open(CampusData.ASSET).bufferedReader().use { it.readText() })
+            }
+            this@PocViewModel.campus = campus
+            val (nodes, edges) = seedGraph(campus)
             val repository = GraphRepository(GraphDatabase.get(application).graphDao())
-            graph = repository.loadBuilding(PlaceholderGraph.BUILDING_ID, planScale)
+            graph = repository.load(nodes, edges, campus.placements())
         }
     }
 
-    /** Ruta od glavnog ulaza do sale, ili null ako sala nije na mapi (ili se graf učitava). */
+    /** Ruta od glavnog ulaza do sale, ili null ako se ne zna gde je sala (ili se graf učitava). */
     fun routeFromEntrance(room: String): Route? {
         val graph = graph ?: return null
-        val target = graph.room(room) ?: return null
-        return graph.route(PlaceholderGraph.ENTRANCE_ID, target.id)
+        val target = resolveTarget(room, graph, campus ?: return null) ?: return null
+        return graph.route(PlaceholderGraph.ENTRANCE_ID, target.node.id)
     }
 
+    /** Zgrada sale (za prikaz uz salu), ili null ako se ne zna. */
+    fun buildingNameOf(room: String): String? {
+        val graph = graph ?: return null
+        return resolveTarget(room, graph, campus ?: return null)?.building?.name
+    }
+
+    /** Menja odredište; ako je van Nastavnog bloka, Mapa prelazi na kampus. */
     fun selectDestination(room: String?) {
         destination = room
+        val building = target?.node?.buildingId ?: return
+        if (building != PlaceholderGraph.BUILDING_ID) mode = MapMode.KAMPUS
+    }
+
+    fun selectMode(mode: MapMode) {
+        this.mode = mode
     }
 
     fun onAzimuth(azimuth: Float) {
@@ -100,6 +133,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Pomera poziciju za jedan korak u trenutnom smeru. */
     fun onStep() {
         val pos = state.position ?: return
+        val planScale = graph?.placement(PlaceholderGraph.BUILDING_ID)?.scale ?: return
         val rad = Math.toRadians(state.headingDeg.toDouble())
         val next = Offset(
             (pos.x + state.stepLengthM * sin(rad).toFloat() / planScale.widthM).coerceIn(0f, 1f),
@@ -108,8 +142,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         state = state.copy(position = next, steps = state.steps + 1)
     }
 
+    /** Start se postavlja na planu zgrade, pa Mapa prelazi na njega. */
     fun togglePickStart() {
         state = state.copy(isPickingStart = !state.isPickingStart)
+        if (state.isPickingStart) mode = MapMode.ZGRADA
     }
 
     fun setStart(point: Offset) {

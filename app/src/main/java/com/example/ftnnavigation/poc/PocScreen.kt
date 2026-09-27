@@ -29,6 +29,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,9 +68,12 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.campus.CampusData
+import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
@@ -85,9 +91,13 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
 
     PocScreen(
         state = state,
+        campus = viewModel.campus,
         graph = viewModel.graph,
+        mode = viewModel.mode,
         destination = viewModel.destination,
+        target = viewModel.target,
         route = viewModel.route,
+        onModeChange = viewModel::selectMode,
         onDestinationChange = viewModel::selectDestination,
         onPickStartToggle = viewModel::togglePickStart,
         onMapTap = viewModel::setStart,
@@ -99,9 +109,13 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
 @Composable
 fun PocScreen(
     state: PocUiState,
+    campus: CampusData?,
     graph: BuildingGraph?,
+    mode: MapMode,
     destination: String?,
+    target: RouteTarget?,
     route: Route?,
+    onModeChange: (MapMode) -> Unit,
     onDestinationChange: (String?) -> Unit,
     onPickStartToggle: () -> Unit,
     onMapTap: (Offset) -> Unit,
@@ -113,23 +127,37 @@ fun PocScreen(
         topBar = {
             FtnTopAppBar(
                 title = stringResource(R.string.poc_title),
-                subtitle = stringResource(R.string.poc_location),
+                subtitle = stringResource(if (mode == MapMode.KAMPUS) R.string.map_campus_location else R.string.poc_location),
             )
         },
     ) { innerPadding ->
         // Samo gornji padding - donji panel sam rešava navigation bar da bi mu pozadina išla do ivice.
         Column(Modifier.padding(top = innerPadding.calculateTopPadding()).fillMaxSize()) {
+            MapModeSelector(mode, onModeChange)
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                FloorPlan(
-                    graph = graph,
-                    route = route,
-                    position = state.position,
-                    headingDeg = state.headingDeg,
-                    isPickingStart = state.isPickingStart,
-                    onTap = onMapTap,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                if (mode == MapMode.KAMPUS && campus != null) {
+                    CampusMap(
+                        campus = campus,
+                        graph = graph,
+                        route = route,
+                        position = state.position,
+                        headingDeg = state.headingDeg,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    FloorPlan(
+                        graph = graph,
+                        route = route,
+                        position = state.position,
+                        headingDeg = state.headingDeg,
+                        isPickingStart = state.isPickingStart,
+                        onTap = onMapTap,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                // Start se postavlja samo na planu zgrade (PDR je za sada samo u Nastavnom bloku).
                 val hint = when {
+                    mode == MapMode.KAMPUS -> null
                     state.isPickingStart -> R.string.poc_hint_pick_start
                     state.position == null -> R.string.poc_hint_no_start
                     else -> null
@@ -142,6 +170,7 @@ fun PocScreen(
                     if (destination != null) {
                         RouteBanner(
                             destination = destination,
+                            target = target,
                             route = route,
                             fromPosition = state.position != null,
                             onClear = { onDestinationChange(null) },
@@ -160,8 +189,9 @@ fun PocScreen(
             )
         }
     }
-    if (showDestinations && graph != null) {
+    if (showDestinations && graph != null && campus != null) {
         DestinationSheet(
+            buildings = campus.namedBuildings.mapNotNull { it.name },
             rooms = graph.rooms.mapNotNull { it.name }.sorted(),
             selected = destination,
             onSelect = {
@@ -227,13 +257,13 @@ private fun FloorPlan(
                 val textMeasurer = rememberTextMeasurer()
                 val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface, lineHeight = TextUnit.Unspecified)
                 Canvas(Modifier.fillMaxSize()) {
-                    drawGraph(graph, floor = 0, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / scale)
+                    drawGraph(graph, PlaceholderGraph.BUILDING_ID, floor = 0, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / scale)
                 }
             }
             if (route != null) {
                 val colors = MaterialTheme.colorScheme
                 Canvas(Modifier.fillMaxSize()) {
-                    drawRoute(route, position, colors.primary, colors.secondary, 1f / scale)
+                    drawRoute(route, PlaceholderGraph.BUILDING_ID, position, colors.primary, colors.secondary, 1f / scale)
                 }
             }
             if (position != null) {
@@ -251,9 +281,10 @@ private fun FloorPlan(
 /** Visina natpisa sale kao deo visine plana. */
 private const val LABEL_HEIGHT = 0.03f
 
-/** Ivice i čvorovi jednog sprata; sale imaju natpis sa nazivom iz rasporeda. */
+/** Ivice i čvorovi jednog sprata zgrade; sale imaju natpis sa nazivom iz rasporeda. */
 private fun DrawScope.drawGraph(
     graph: BuildingGraph,
+    buildingId: String,
     floor: Int,
     edgeColor: Color,
     roomColor: Color,
@@ -262,7 +293,7 @@ private fun DrawScope.drawGraph(
     k: Float,
 ) {
     fun Node.toOffset() = Offset(x * size.width, y * size.height)
-    val nodes = graph.nodes.filter { it.floor == floor }.associateBy { it.id }
+    val nodes = graph.nodes.filter { it.buildingId == buildingId && it.floor == floor }.associateBy { it.id }
     for (edge in graph.edges) {
         val a = nodes[edge.fromId] ?: continue
         val b = nodes[edge.toId] ?: continue
@@ -282,30 +313,49 @@ private fun DrawScope.drawGraph(
                 val dy = if (node.y < 0.5f) -gap - label.size.height else gap
                 drawText(label, topLeft = center + Offset(-label.size.width / 2f, dy))
             }
-            NodeType.STEPENISTE, NodeType.LIFT, NodeType.ULAZ ->
+            NodeType.STEPENISTE, NodeType.LIFT, NodeType.ULAZ, NodeType.PROLAZ ->
                 drawCircle(edgeColor, radius = 5.dp.toPx() * k, center = center)
+            NodeType.STAZA, NodeType.ZGRADA -> Unit // ne postoje na planu zgrade
         }
     }
 }
 
-/** Ruta kao debela linija (od pozicije, ako je postavljena) i obeleženo odredište. */
-private fun DrawScope.drawRoute(route: Route, position: Offset?, color: Color, targetColor: Color, k: Float) {
-    val points = listOfNotNull(position) + route.nodes.filter { it.floor == 0 }.map { Offset(it.x, it.y) }
+/**
+ * Deo rute u prizemlju zgrade [buildingId] kao debela linija (od pozicije, ako je postavljena);
+ * delovi van zgrade se preskaču. Odredište se obeležava ako je u zgradi.
+ */
+private fun DrawScope.drawRoute(route: Route, buildingId: String, position: Offset?, color: Color, targetColor: Color, k: Float) {
+    fun Node.isHere() = this.buildingId == buildingId && floor == 0
+    fun Node.toOffset() = Offset(x * size.width, y * size.height)
     val path = Path()
-    points.forEachIndexed { i, p ->
-        val x = p.x * size.width
-        val y = p.y * size.height
-        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    var drawing = false
+    if (position != null) {
+        path.moveTo(position.x * size.width, position.y * size.height)
+        drawing = true
+    }
+    for (node in route.nodes) {
+        if (!node.isHere()) {
+            drawing = false
+            continue
+        }
+        val p = node.toOffset()
+        if (drawing) path.lineTo(p.x, p.y) else path.moveTo(p.x, p.y)
+        drawing = true
     }
     drawPath(path, color, style = Stroke(5.dp.toPx() * k, cap = StrokeCap.Round, join = StrokeJoin.Round))
-    val target = route.nodes.last().let { Offset(it.x * size.width, it.y * size.height) }
-    drawCircle(color, radius = 10.dp.toPx() * k, center = target)
-    drawCircle(Color.White, radius = 7.dp.toPx() * k, center = target)
-    drawCircle(targetColor, radius = 5.dp.toPx() * k, center = target)
+    val target = route.nodes.last()
+    if (target.isHere()) drawTargetMarker(target.toOffset(), color, targetColor, k)
+}
+
+/** Odredište: prsten u boji rute sa tačkom u sredini. */
+internal fun DrawScope.drawTargetMarker(center: Offset, color: Color, targetColor: Color, k: Float) {
+    drawCircle(color, radius = 10.dp.toPx() * k, center = center)
+    drawCircle(Color.White, radius = 7.dp.toPx() * k, center = center)
+    drawCircle(targetColor, radius = 5.dp.toPx() * k, center = center)
 }
 
 /** Plava tačka sa konusom smera. 0° = gore na planu (poravnanje plana sa severom je TODO). */
-private fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: Color, k: Float) {
+internal fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: Color, k: Float) {
     val coneRadius = 36.dp.toPx() * k
     drawArc(
         color = color.copy(alpha = 0.25f),
@@ -325,9 +375,12 @@ private fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: C
     )
 }
 
-/** Odredište i procena rute; ako sala nije na mapi, to piše umesto procene. */
+/**
+ * Odredište i procena rute; ako sala nije na mapi, to piše umesto procene. Ispod piše zgrada
+ * sale - ako sala nije ucrtana, ruta vodi samo do zgrade.
+ */
 @Composable
-private fun RouteBanner(destination: String, route: Route?, fromPosition: Boolean, onClear: () -> Unit) {
+private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?, fromPosition: Boolean, onClear: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         shadowElevation = 3.dp,
@@ -353,6 +406,14 @@ private fun RouteBanner(destination: String, route: Route?, fromPosition: Boolea
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val building = target?.building?.name
+                if (route != null && building != null && building != destination) {
+                    Text(
+                        stringResource(if (target.approximate) R.string.route_to_building else R.string.route_in_building, building),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             IconButton(onClick = onClear) {
                 Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.route_clear))
@@ -364,6 +425,7 @@ private fun RouteBanner(destination: String, route: Route?, fromPosition: Boolea
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DestinationSheet(
+    buildings: List<String>,
     rooms: List<String>,
     selected: String?,
     onSelect: (String) -> Unit,
@@ -379,22 +441,58 @@ private fun DestinationSheet(
             modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp),
         )
         LazyColumn(Modifier.navigationBarsPadding()) {
+            item { SheetSectionHeader(stringResource(R.string.route_destinations_buildings)) }
+            items(buildings) { building ->
+                DestinationItem(building, isSelected = building == selected, onClick = { onSelect(building) })
+            }
+            item { SheetSectionHeader(stringResource(R.string.route_destinations_rooms)) }
             items(rooms) { room ->
-                val isSelected = room == selected
-                ListItem(
-                    headlineContent = { Text(room) },
-                    leadingContent = {
-                        Icon(
-                            painterResource(R.drawable.ic_place),
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    colors = ListItemDefaults.colors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                    ),
-                    modifier = Modifier.padding(horizontal = 8.dp).clickable { onSelect(room) },
-                )
+                DestinationItem(room, isSelected = room == selected, onClick = { onSelect(room) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetSectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun DestinationItem(name: String, isSelected: Boolean, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(name) },
+        leadingContent = {
+            Icon(
+                painterResource(R.drawable.ic_place),
+                contentDescription = null,
+                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        ),
+        modifier = Modifier.padding(horizontal = 8.dp).clickable(onClick = onClick),
+    )
+}
+
+/** Prekidač prikaza Mape: kampus (spolja) ili plan Nastavnog bloka. */
+@Composable
+private fun MapModeSelector(mode: MapMode, onModeChange: (MapMode) -> Unit) {
+    val options = listOf(MapMode.KAMPUS to R.string.map_mode_campus, MapMode.ZGRADA to R.string.map_mode_building)
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        options.forEachIndexed { index, (option, label) ->
+            SegmentedButton(
+                selected = mode == option,
+                onClick = { onModeChange(option) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+            ) {
+                Text(stringResource(label))
             }
         }
     }
@@ -506,9 +604,13 @@ private fun PocScreenPreview() {
                 steps = 42,
                 isTracking = true,
             ),
+            campus = null,
             graph = null,
+            mode = MapMode.ZGRADA,
             destination = "NTP-307",
+            target = null,
             route = null,
+            onModeChange = {},
             onDestinationChange = {},
             onPickStartToggle = {},
             onMapTap = {},

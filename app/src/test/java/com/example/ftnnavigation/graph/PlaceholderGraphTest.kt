@@ -1,5 +1,6 @@
 package com.example.ftnnavigation.graph
 
+import com.example.ftnnavigation.campus.buildingOfRoom
 import com.example.ftnnavigation.graph.PlaceholderGraph.ENTRANCE_ID
 import com.example.ftnnavigation.graph.PlaceholderGraph.PASSAGE_ID
 import org.junit.Assert.assertEquals
@@ -20,11 +21,12 @@ class PlaceholderGraphTest {
         assertTrue(graph.nodes.all { it.floor == 0 && it.x in 0f..1f && it.y in 0f..1f })
     }
 
-    /** Sale podrazumevanog rasporeda (SIIT, 4. godina, grupa 3) su na mapi. */
+    /** Placeholder učionice nose nazive sala koje su po rasporedu u Nastavnom bloku. */
     @Test
-    fun defaultScheduleRoomsPresent() {
-        listOf("NTP-001", "F 315", "NTP-A", "A2", "NTP-307", "L4 (RC)", "L6 (RC)", "F 318")
-            .forEach { assertNotNull(it, graph.room(it)) }
+    fun classroomNamesBelongToBuilding() {
+        val named = setOf("Svečana sala", "Studentska služba", "Portir", "Toalet")
+        graph.rooms.map { it.name!! }.filter { it !in named }
+            .forEach { assertEquals(it, PlaceholderGraph.BUILDING_ID, buildingOfRoom(it)) }
     }
 
     @Test
@@ -34,11 +36,11 @@ class PlaceholderGraphTest {
 
     @Test
     fun entranceToRoom_goesThroughVestibuleHallAndDoor() {
-        val route = checkNotNull(graph.route(ENTRANCE_ID, graph.room("NTP-001")!!.id))
+        val route = checkNotNull(graph.route(ENTRANCE_ID, graph.room("101")!!.id))
         assertEquals(
             listOf(ENTRANCE_ID, "NB-0-PREDVORJE", "NB-0-H677", "NB-0-H660") +
                 listOf(612, 596, 580, 569, 546, 525, 497, 477).map { "NB-0-H$it" } +
-                listOf("NB-0-V477_379", "NB-0-NTP-001"),
+                listOf("NB-0-V477_379", "NB-0-101"),
             route.nodes.map { it.id },
         )
         val metres = route.nodes.zipWithNext { a, b -> Math.hypot((a.x - b.x) * 75.0, (a.y - b.y) * 25.5) }.sum()
@@ -48,7 +50,7 @@ class PlaceholderGraphTest {
 
     @Test
     fun passage_leadsIntoHall() {
-        val route = checkNotNull(graph.route(PASSAGE_ID, graph.room("NTP-001")!!.id))
+        val route = checkNotNull(graph.route(PASSAGE_ID, graph.room("101")!!.id))
         assertEquals("NB-0-H435", route.nodes[1].id)
     }
 }

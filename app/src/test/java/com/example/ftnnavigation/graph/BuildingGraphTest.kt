@@ -81,12 +81,24 @@ class BuildingGraphTest {
     @Test
     fun routeFrom_walksToNearestNodeFirst() {
         // Tačka 6 m levo od hodnika C0 -> najbliži je C0, pa još 24 m do sale.
-        val route = checkNotNull(graph.routeFrom(0, 0.4f, 0.5f, "R0"))
+        val route = checkNotNull(graph.routeFrom("T", 0, 0.4f, 0.5f, "R0"))
         assertEquals("C0", route.nodes.first().id)
         assertEquals(30.0, route.lengthM, 1e-4)
         assertEquals(30.0 / 1.3, route.durationSec, 1e-4)
-        assertEquals("S2", graph.nearestNode(2, 0.5f, 0.35f)!!.id)
-        assertNull(graph.nearestNode(9, 0.5f, 0.5f))
+        assertEquals("S2", graph.nearestNode("T", 2, 0.5f, 0.35f)!!.id)
+        assertNull(graph.nearestNode("T", 9, 0.5f, 0.5f))
+    }
+
+    @Test
+    fun planPlacement_rotatesClockwiseAndShifts() {
+        val placement = PlanPlacement(FloorScale(10f, 4f), originX = 100.0, originY = 50.0, rotationDeg = 90.0)
+        // Desna ivica plana posle rotacije za 90° u smeru kazaljke gleda naniže (y raste).
+        val right = placement.toMeters(1f, 0f)
+        assertEquals(100.0, right.x, 1e-9)
+        assertEquals(60.0, right.y, 1e-9)
+        val bottom = placement.toMeters(0f, 1f)
+        assertEquals(96.0, bottom.x, 1e-9)
+        assertEquals(50.0, bottom.y, 1e-9)
     }
 
     @Test

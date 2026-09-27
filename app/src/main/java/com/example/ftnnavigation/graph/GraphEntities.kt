@@ -5,7 +5,18 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class NodeType { PROSTORIJA, VRATA, HODNIK, STEPENISTE, LIFT, ULAZ }
+enum class NodeType {
+    PROSTORIJA, VRATA, HODNIK, STEPENISTE, LIFT, ULAZ,
+
+    /** Spojni prolaz između dve zgrade. */
+    PROLAZ,
+
+    /** Tačka spoljne pešačke staze (graf kampusa). */
+    STAZA,
+
+    /** Cela zgrada bez unutrašnjeg plana - jedan čvor povezan sa njenim ulazima i prolazima. */
+    ZGRADA,
+}
 
 /** Vrsta prelaza određuje kako se računa vreme (vidi [RoutingProfile]). */
 enum class EdgeType {
@@ -20,8 +31,9 @@ enum class EdgeType {
 }
 
 /**
- * Čvor topološkog grafa zgrade. [x]/[y] su relativni (0..1) u odnosu na sliku plana
- * sprata - kao i pozicija na Mapi - pa metri zavise samo od kalibracije plana ([FloorScale]).
+ * Čvor topološkog grafa. [x]/[y] su relativni (0..1) u odnosu na sliku plana sprata - kao i
+ * pozicija na Mapi - pa metri zavise samo od smeštaja plana ([PlanPlacement]). Spoljni graf
+ * kampusa je "zgrada" [com.example.ftnnavigation.campus.CAMPUS_ID] čiji je plan cela mapa kampusa.
  */
 @Entity(
     tableName = "nodes",

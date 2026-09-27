@@ -4,11 +4,14 @@ package com.example.ftnnavigation.graph
  * Privremeni graf zgrade - samo prizemlje, po planu res/drawable/floor_plan_placeholder.xml
  * (precrtan sa evakuacionog plana Nastavnog bloka): hol levo, uži hodnik desno (Svečana sala
  * gore, Studentska služba dole), stepenište sa liftom u sredini gore, glavni ulaz dole kroz
- * predvorje kod portirnice, spojni prolaz ka susednoj zgradi levo.
+ * predvorje kod portirnice, spojni prolaz ka Kuli levo.
  *
- * Dok ne dobijemo stvarne lokacije, sve sale su u prizemlju: učionice nose nazive iz
- * rasporeda (podrazumevani izbor - SIIT, 4. godina) samo kao placeholdere. Stepenište i lift
- * postoje kao čvorovi, ali bez viših spratova. Promena podataka zahteva povećanje verzije
+ * Orijentacija (smeštaj u obris zgrade iz OSM-a, tools/kampus): desno na planu je sever,
+ * dole istok (glavni ulaz prema Trgu Dositeja Obradovića), levo jug, gore zapad (Amfiteatri).
+ *
+ * Dok ne dobijemo stvarne lokacije, sve sale su u prizemlju: učionice nose nazive sala
+ * Nastavnog bloka iz rasporeda (brojevi, L… (RC)), ali na izmišljenim mestima. Stepenište i
+ * lift postoje kao čvorovi, ali bez viših spratova. Promena podataka zahteva povećanje verzije
  * [GraphDatabase] (baza se tada briše i ponovo puni).
  */
 object PlaceholderGraph {
@@ -44,20 +47,20 @@ object PlaceholderGraph {
 
     private val rooms = listOf(
         // gornji red, levo od stepeništa (prva je mala soba u uglu hola)
-        Room("AR3", 432f, 384f, 450f, 386f, hall(452f)),
-        Room("NTP-001", 450f, 340f, 477f, 379f, hall(477f)),
-        Room("NTP-307", 502f, 345f, 497f, 379f, hall(497f)),
-        Room("NTP-309", 537f, 345f, 546f, 379f, hall(546f)),
-        Room("NTP-311", 571f, 345f, 580f, 379f, hall(580f)),
-        Room("F 315", 608f, 345f, 612f, 379f, hall(612f)),
+        Room("109", 432f, 384f, 450f, 386f, hall(452f)),
+        Room("101", 450f, 340f, 477f, 379f, hall(477f)),
+        Room("102", 502f, 345f, 497f, 379f, hall(497f)),
+        Room("103", 537f, 345f, 546f, 379f, hall(546f)),
+        Room("104", 571f, 345f, 580f, 379f, hall(580f)),
+        Room("105", 608f, 345f, 612f, 379f, hall(612f)),
         // desno od stepeništa, svečana sala
-        Room("F 318", 710f, 340f, 722f, 370f, hall(722f)),
+        Room("107", 710f, 340f, 722f, 370f, hall(722f)),
         Room("Toalet", 745f, 340f, 750f, 370f, hall(750f)),
         Room("Svečana sala", 900f, 355f, 822f, 400f, hall(822f)),
         // donji red; prve dve sobe dele malo predsoblje sa vratima kod x 525
-        Room("A2", 453f, 485f, 525f, 449f, hall(525f)),
+        Room("L2 (RC)", 453f, 485f, 525f, 449f, hall(525f)),
         Room("L4 (RC)", 540f, 485f, 525f, 449f, hall(525f)),
-        Room("NTP-A", 573f, 478f, 569f, 449f, hall(569f)),
+        Room("108", 573f, 478f, 569f, 449f, hall(569f)),
         Room("L6 (RC)", 608f, 478f, 596f, 449f, hall(596f)),
         Room("Portir", 645f, 490f, 662f, 482f, VESTIBULE),
         Room("Studentska služba", 880f, 475f, 765f, 447f, hall(770f)),
@@ -70,8 +73,24 @@ object PlaceholderGraph {
     /** Glavni ulaz (dole, kod portirnice). */
     const val ENTRANCE_ID = "$BUILDING_ID-$FLOOR-ULAZ"
 
-    /** Spojni prolaz ka susednoj zgradi (levo). */
+    /** Spojni prolaz ka Kuli (levo, južni kraj zgrade). */
     const val PASSAGE_ID = "$BUILDING_ID-$FLOOR-PROLAZ"
+
+    /**
+     * Prolaz ka Amfiteatrima: zapadni zid kod stepeništa (gde OSM ima spojni deo zgrade).
+     * Pretpostavka - evakuacioni plan ga ne prikazuje, možda je samo na spratu.
+     */
+    const val AMF_PASSAGE_ID = "$BUILDING_ID-$FLOOR-PROLAZ-AMF"
+
+    /**
+     * Veze sa spoljnim grafom kampusa (id-jevi čvorova iz assets/campus.json, tools/kampus):
+     * glavni ulaz sa OSM ulazom i oba prolaza sa spojnim delovima zgrada.
+     */
+    val campusLinks = listOf(
+        Edge("K-U-NB-1", ENTRANCE_ID, EdgeType.HOD),
+        Edge("K-P-NB-KULA", PASSAGE_ID, EdgeType.HOD),
+        Edge("K-P-AMF-NB", AMF_PASSAGE_ID, EdgeType.HOD),
+    )
 
     private fun buildGraph(): Pair<List<Node>, List<Edge>> {
         val nodes = mutableListOf<Node>()
@@ -99,13 +118,16 @@ object PlaceholderGraph {
         edges += Edge(id("S"), id(hall(660f)), EdgeType.HOD)
         edges += Edge(id("L"), id(hall(660f)), EdgeType.HOD)
 
-        // Predvorje između hola i glavnog ulaza, spojni prolaz levo od hola.
+        // Predvorje između hola i glavnog ulaza, spojni prolaz levo od hola, prolaz ka
+        // Amfiteatrima kroz stepenišni prostor.
         node(id(VESTIBULE), 677f, 476f, NodeType.HODNIK)
         edges += Edge(id(VESTIBULE), id(hall(677f)), EdgeType.HOD)
         node(ENTRANCE_ID, 677f, 515f, NodeType.ULAZ)
         edges += Edge(ENTRANCE_ID, id(VESTIBULE), EdgeType.HOD)
-        node(PASSAGE_ID, 322f, 414f, NodeType.ULAZ)
+        node(PASSAGE_ID, 322f, 414f, NodeType.PROLAZ)
         edges += Edge(PASSAGE_ID, id(hall(435f)), EdgeType.HOD)
+        node(AMF_PASSAGE_ID, 688f, 311f, NodeType.PROLAZ)
+        edges += Edge(AMF_PASSAGE_ID, id(hall(677f)), EdgeType.HOD)
 
         return nodes to edges.toList()
     }
