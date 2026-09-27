@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.ClassEntry
 import com.example.ftnnavigation.schedule.ClassType
 import com.example.ftnnavigation.schedule.Groups
@@ -41,18 +43,22 @@ import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * @param scheduleSummary npr. "4. godina · grupa 3 · ..."; null dok raspored nije izabran.
  * @param upcoming sledeći čas iz izabranog rasporeda (null ako nema ili nije izabran).
+ * @param routeToNext ruta od glavnog ulaza do sale sledećeg časa (null ako sala nije na mapi).
  */
 @Composable
 fun HomeScreen(
     scheduleSummary: String?,
     upcoming: UpcomingClass?,
     now: LocalDateTime,
+    routeToNext: Route?,
     onOpenSchedule: () -> Unit,
     onOpenMap: () -> Unit,
+    onShowRoute: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -87,7 +93,7 @@ fun HomeScreen(
                 when {
                     scheduleSummary == null -> CardBody(stringResource(R.string.home_next_class_empty))
                     upcoming == null -> CardBody(stringResource(R.string.home_no_upcoming))
-                    else -> NextClass(upcoming, now)
+                    else -> NextClass(upcoming, now, routeToNext, onShowRoute)
                 }
             }
             HomeCard(
@@ -104,7 +110,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime) {
+private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime, route: Route?, onShowRoute: () -> Unit) {
     val entry = upcoming.entry
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
@@ -119,8 +125,46 @@ private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         RoomLabel(entry.room, Modifier.padding(top = 2.dp))
+        if (route == null) {
+            Text(
+                stringResource(R.string.route_not_on_map),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            RouteEstimate(upcoming, now, route, onShowRoute)
+        }
     }
 }
+
+/** Vreme od ulaza do sale i, za današnji čas koji nije počeo, najkasnije vreme ulaska u zgradu. */
+@Composable
+private fun RouteEstimate(upcoming: UpcomingClass, now: LocalDateTime, route: Route, onShowRoute: () -> Unit) {
+    val start = upcoming.date.atTime(upcoming.entry.startTime)
+    val enterBy = start.minusMinutes(route.minutes.toLong())
+    val deadline = when {
+        upcoming.date != now.toLocalDate() || !start.isAfter(now) -> null
+        now.isBefore(enterBy) -> stringResource(R.string.home_route_enter_by, enterBy.format(TIME_FORMAT))
+        else -> stringResource(R.string.home_route_go_now)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.home_route_from_entrance, route.minutes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (deadline != null) {
+                Text(deadline, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        TextButton(onClick = onShowRoute) {
+            Text(stringResource(R.string.home_show_route))
+        }
+    }
+}
+
+private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 private fun CardBody(text: String) {
@@ -196,8 +240,10 @@ private fun HomeScreenPreview() {
                 LocalDate.of(2026, 9, 29),
             ),
             now = now,
+            routeToNext = Route(emptyList(), durationSec = 95.0, lengthM = 110.0),
             onOpenSchedule = {},
             onOpenMap = {},
+            onShowRoute = {},
         )
     }
 }

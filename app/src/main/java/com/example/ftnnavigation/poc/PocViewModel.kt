@@ -1,6 +1,7 @@
 package com.example.ftnnavigation.poc
 
 import android.app.Application
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -13,6 +14,7 @@ import com.example.ftnnavigation.graph.FloorScale
 import com.example.ftnnavigation.graph.GraphDatabase
 import com.example.ftnnavigation.graph.GraphRepository
 import com.example.ftnnavigation.graph.PlaceholderGraph
+import com.example.ftnnavigation.graph.Route
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
@@ -40,16 +42,33 @@ private const val PLAN_WIDTH_M = 75f
 private const val PLAN_UP_AZIMUTH_DEG = 0f
 
 /**
- * Drži stanje mape preko promene taba (back stack entry čuva ViewModel dok je tab sačuvan).
- * Senzori ostaju vezani za ekran (PdrSensorsEffect): dok je drugi tab otvoren, koraci se ne broje.
+ * Stanje mape i rute. Vezan za aktivnost: preživljava promenu taba, a Početna preko njega
+ * nudi rutu do sale sledećeg časa. Senzori ostaju vezani za ekran Mape (PdrSensorsEffect):
+ * dok je drugi tab otvoren, koraci se ne broje.
  */
 class PocViewModel(application: Application) : AndroidViewModel(application) {
     var state by mutableStateOf(PocUiState())
         private set
 
-    /** Graf zgrade (null dok se učitava iz baze); svi spratovi dele placeholder plan. */
+    /** Graf zgrade (null dok se učitava iz baze). Za sada je sve u prizemlju. */
     var graph by mutableStateOf<BuildingGraph?>(null)
         private set
+
+    /** Naziv sale odredišta (kao u rasporedu); čuva se i dok se graf još učitava. */
+    var destination by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * Ruta do odredišta: od postavljene pozicije (najbliži čvor), inače od glavnog ulaza.
+     * Ponovo se računa pri svakom koraku - graf je mali, A* traje ispod milisekunde.
+     */
+    val route: Route? by derivedStateOf {
+        val graph = graph ?: return@derivedStateOf null
+        val target = destination?.let(graph::room) ?: return@derivedStateOf null
+        val position = state.position
+        if (position != null) graph.routeFrom(0, position.x, position.y, target.id)
+        else graph.route(PlaceholderGraph.ENTRANCE_ID, target.id)
+    }
 
     // Visina plana u metrima sledi iz odnosa stranica slike.
     private val planScale = application.getDrawable(R.drawable.floor_plan_placeholder)!!.let {
@@ -61,6 +80,17 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             val repository = GraphRepository(GraphDatabase.get(application).graphDao())
             graph = repository.loadBuilding(PlaceholderGraph.BUILDING_ID, planScale)
         }
+    }
+
+    /** Ruta od glavnog ulaza do sale, ili null ako sala nije na mapi (ili se graf učitava). */
+    fun routeFromEntrance(room: String): Route? {
+        val graph = graph ?: return null
+        val target = graph.room(room) ?: return null
+        return graph.route(PlaceholderGraph.ENTRANCE_ID, target.id)
+    }
+
+    fun selectDestination(room: String?) {
+        destination = room
     }
 
     fun onAzimuth(azimuth: Float) {

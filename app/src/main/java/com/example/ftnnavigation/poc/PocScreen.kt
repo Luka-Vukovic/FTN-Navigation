@@ -3,28 +3,42 @@ package com.example.ftnnavigation.poc
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +46,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -51,10 +68,11 @@ import com.example.ftnnavigation.R
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
 
-/** Ekran Mapa: drži ViewModel i kači PDR senzore (akcelerometar za korake, TYPE_ROTATION_VECTOR za smer). */
+/** Ekran Mapa: kači PDR senzore (akcelerometar za korake, TYPE_ROTATION_VECTOR za smer). */
 @Composable
 fun PocRoute(viewModel: PocViewModel = viewModel()) {
     val state = viewModel.state
@@ -68,6 +86,9 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
     PocScreen(
         state = state,
         graph = viewModel.graph,
+        destination = viewModel.destination,
+        route = viewModel.route,
+        onDestinationChange = viewModel::selectDestination,
         onPickStartToggle = viewModel::togglePickStart,
         onMapTap = viewModel::setStart,
         onTrackingToggle = viewModel::toggleTracking,
@@ -79,11 +100,15 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
 fun PocScreen(
     state: PocUiState,
     graph: BuildingGraph?,
+    destination: String?,
+    route: Route?,
+    onDestinationChange: (String?) -> Unit,
     onPickStartToggle: () -> Unit,
     onMapTap: (Offset) -> Unit,
     onTrackingToggle: () -> Unit,
     onReset: () -> Unit,
 ) {
+    var showDestinations by rememberSaveable { mutableStateOf(false) }
     Scaffold(
         topBar = {
             FtnTopAppBar(
@@ -97,6 +122,7 @@ fun PocScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 FloorPlan(
                     graph = graph,
+                    route = route,
                     position = state.position,
                     headingDeg = state.headingDeg,
                     isPickingStart = state.isPickingStart,
@@ -108,27 +134,50 @@ fun PocScreen(
                     state.position == null -> R.string.poc_hint_no_start
                     else -> null
                 }
-                if (hint != null) {
-                    HintBanner(
-                        text = stringResource(hint),
-                        modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
-                    )
+                Column(
+                    Modifier.align(Alignment.TopCenter).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (destination != null) {
+                        RouteBanner(
+                            destination = destination,
+                            route = route,
+                            fromPosition = state.position != null,
+                            onClear = { onDestinationChange(null) },
+                        )
+                    }
+                    if (hint != null) HintBanner(stringResource(hint))
                 }
             }
             ControlPanel(
                 state = state,
+                hasDestination = destination != null,
+                onChooseDestination = { showDestinations = true },
                 onPickStartToggle = onPickStartToggle,
                 onTrackingToggle = onTrackingToggle,
                 onReset = onReset,
             )
         }
     }
+    if (showDestinations && graph != null) {
+        DestinationSheet(
+            rooms = graph.rooms.mapNotNull { it.name }.sorted(),
+            selected = destination,
+            onSelect = {
+                onDestinationChange(it)
+                showDestinations = false
+            },
+            onDismiss = { showDestinations = false },
+        )
+    }
 }
 
-/** Slika sprata sa pan/zoom gestovima, grafom prizemlja i markerom korisnika. */
+/** Slika sprata sa pan/zoom gestovima, grafom prizemlja, rutom i markerom korisnika. */
 @Composable
 private fun FloorPlan(
     graph: BuildingGraph?,
+    route: Route?,
     position: Offset?,
     headingDeg: Float,
     isPickingStart: Boolean,
@@ -179,6 +228,12 @@ private fun FloorPlan(
                 val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface, lineHeight = TextUnit.Unspecified)
                 Canvas(Modifier.fillMaxSize()) {
                     drawGraph(graph, floor = 0, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / scale)
+                }
+            }
+            if (route != null) {
+                val colors = MaterialTheme.colorScheme
+                Canvas(Modifier.fillMaxSize()) {
+                    drawRoute(route, position, colors.primary, colors.secondary, 1f / scale)
                 }
             }
             if (position != null) {
@@ -233,6 +288,22 @@ private fun DrawScope.drawGraph(
     }
 }
 
+/** Ruta kao debela linija (od pozicije, ako je postavljena) i obeleženo odredište. */
+private fun DrawScope.drawRoute(route: Route, position: Offset?, color: Color, targetColor: Color, k: Float) {
+    val points = listOfNotNull(position) + route.nodes.filter { it.floor == 0 }.map { Offset(it.x, it.y) }
+    val path = Path()
+    points.forEachIndexed { i, p ->
+        val x = p.x * size.width
+        val y = p.y * size.height
+        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+    drawPath(path, color, style = Stroke(5.dp.toPx() * k, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    val target = route.nodes.last().let { Offset(it.x * size.width, it.y * size.height) }
+    drawCircle(color, radius = 10.dp.toPx() * k, center = target)
+    drawCircle(Color.White, radius = 7.dp.toPx() * k, center = target)
+    drawCircle(targetColor, radius = 5.dp.toPx() * k, center = target)
+}
+
 /** Plava tačka sa konusom smera. 0° = gore na planu (poravnanje plana sa severom je TODO). */
 private fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: Color, k: Float) {
     val coneRadius = 36.dp.toPx() * k
@@ -254,6 +325,81 @@ private fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: C
     )
 }
 
+/** Odredište i procena rute; ako sala nije na mapi, to piše umesto procene. */
+@Composable
+private fun RouteBanner(destination: String, route: Route?, fromPosition: Boolean, onClear: () -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        shadowElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                painterResource(R.drawable.ic_place),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(destination, style = MaterialTheme.typography.titleMedium)
+                val details = if (route == null) {
+                    stringResource(R.string.route_not_on_map)
+                } else {
+                    val from = stringResource(if (fromPosition) R.string.route_from_position else R.string.route_from_entrance)
+                    stringResource(R.string.route_summary, route.minutes, route.lengthM.toInt()) + " · " + from
+                }
+                Text(
+                    details,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onClear) {
+                Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.route_clear))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DestinationSheet(
+    rooms: List<String>,
+    selected: String?,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Text(
+            stringResource(R.string.route_destinations_title),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp),
+        )
+        LazyColumn(Modifier.navigationBarsPadding()) {
+            items(rooms) { room ->
+                val isSelected = room == selected
+                ListItem(
+                    headlineContent = { Text(room) },
+                    leadingContent = {
+                        Icon(
+                            painterResource(R.drawable.ic_place),
+                            contentDescription = null,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    ),
+                    modifier = Modifier.padding(horizontal = 8.dp).clickable { onSelect(room) },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun HintBanner(text: String, modifier: Modifier = Modifier) {
     Surface(
@@ -273,6 +419,8 @@ private fun HintBanner(text: String, modifier: Modifier = Modifier) {
 @Composable
 private fun ControlPanel(
     state: PocUiState,
+    hasDestination: Boolean,
+    onChooseDestination: () -> Unit,
     onPickStartToggle: () -> Unit,
     onTrackingToggle: () -> Unit,
     onReset: () -> Unit,
@@ -293,6 +441,15 @@ private fun ControlPanel(
                 StatItem(
                     stringResource(R.string.poc_stat_distance),
                     stringResource(R.string.poc_distance_value, state.distanceM),
+                )
+            }
+            OutlinedButton(onClick = onChooseDestination, modifier = Modifier.fillMaxWidth()) {
+                Icon(painterResource(R.drawable.ic_place), contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(
+                        if (hasDestination) R.string.route_change_destination else R.string.route_choose_destination,
+                    ),
                 )
             }
             Row(
@@ -350,6 +507,9 @@ private fun PocScreenPreview() {
                 isTracking = true,
             ),
             graph = null,
+            destination = "NTP-307",
+            route = null,
+            onDestinationChange = {},
             onPickStartToggle = {},
             onMapTap = {},
             onTrackingToggle = {},

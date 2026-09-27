@@ -93,4 +93,18 @@
     <string name="poc_start">Start</string>
     <string name="poc_stop">Stop</string>
     <string name="poc_reset">Reset</string>
+
+    <!-- Ruta -->
+    <string name="route_choose_destination">Izaberi odredište</string>
+    <string name="route_change_destination">Promeni odredište</string>
+    <string name="route_destinations_title">Odredište</string>
+    <string name="route_summary">~%1$d min · %2$d m</string>
+    <string name="route_from_position">od tvoje pozicije</string>
+    <string name="route_from_entrance">od glavnog ulaza</string>
+    <string name="route_not_on_map">Sala još nije na mapi</string>
+    <string name="route_clear">Ukloni rutu</string>
+    <string name="home_route_from_entrance">Od glavnog ulaza ~%1$d min</string>
+    <string name="home_route_enter_by">Uđi u zgradu najkasnije u %1$s</string>
+    <string name="home_route_go_now">Kreni odmah</string>
+    <string name="home_show_route">Prikaži rutu</string>
 </resources>

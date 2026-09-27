@@ -29,6 +29,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.home.HomeScreen
 import com.example.ftnnavigation.poc.PocRoute
+import com.example.ftnnavigation.poc.PocViewModel
 import com.example.ftnnavigation.schedule.ScheduleScreen
 import com.example.ftnnavigation.schedule.ScheduleViewModel
 import com.example.ftnnavigation.schedule.nextClass
@@ -65,8 +66,10 @@ private fun NavController.navigateToTopLevel(route: Any) = navigate(route) {
 @Composable
 fun FtnApp() {
     val navController = rememberNavController()
-    // Vezan za aktivnost (poziv je van NavHost-a), pa ga Početna i Raspored dele.
+    // Vezani za aktivnost (poziv je van NavHost-a): raspored dele Početna i Raspored,
+    // a mapu (graf, odredište) Početna i Mapa.
     val scheduleViewModel: ScheduleViewModel = viewModel()
+    val mapViewModel: PocViewModel = viewModel()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
 
     Scaffold(
@@ -102,15 +105,21 @@ fun FtnApp() {
             composable<HomeRoute> {
                 val now by rememberNow()
                 val timetable = scheduleViewModel.selectedTimetable
+                val upcoming = nextClass(scheduleViewModel.myClasses, now)
                 HomeScreen(
                     scheduleSummary = timetable?.let { selectionSummary(it, scheduleViewModel.selection?.group) },
-                    upcoming = nextClass(scheduleViewModel.myClasses, now),
+                    upcoming = upcoming,
                     now = now,
+                    routeToNext = upcoming?.let { mapViewModel.routeFromEntrance(it.entry.room) },
                     onOpenSchedule = { navController.navigateToTopLevel(ScheduleRoute) },
                     onOpenMap = { navController.navigateToTopLevel(MapRoute) },
+                    onShowRoute = {
+                        mapViewModel.selectDestination(upcoming?.entry?.room)
+                        navController.navigateToTopLevel(MapRoute)
+                    },
                 )
             }
-            composable<MapRoute> { PocRoute() }
+            composable<MapRoute> { PocRoute(mapViewModel) }
             composable<ScheduleRoute> { ScheduleScreen(scheduleViewModel) }
         }
     }

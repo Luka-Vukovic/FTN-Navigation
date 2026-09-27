@@ -2,6 +2,7 @@ package com.example.ftnnavigation.graph
 
 import java.util.PriorityQueue
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.hypot
 
 /** Dimenzije plana sprata u metrima - pretvaraju relativne koordinate čvorova u metre. */
@@ -27,7 +28,11 @@ data class RoutingProfile(
     }
 }
 
-data class Route(val nodes: List<Node>, val durationSec: Double)
+/** Ruta kroz [nodes]; [lengthM] je pređeni put po spratovima (bez vertikale stepenica/lifta). */
+data class Route(val nodes: List<Node>, val durationSec: Double, val lengthM: Double) {
+    /** Trajanje za prikaz: minuti zaokruženi naviše, najmanje 1. */
+    val minutes: Int get() = ceil(durationSec / 60).toInt().coerceAtLeast(1)
+}
 
 /**
  * Graf jedne zgrade učitan iz baze. Svi spratovi dele [scale] (u PoC-u svi koriste isti
@@ -81,7 +86,11 @@ class BuildingGraph(
         while (open.isNotEmpty()) {
             val (_, g, id) = open.poll()!!
             if (g > best.getValue(id)) continue // zastareo unos
-            if (id == toId) return Route(path(cameFrom, toId), g)
+            if (id == toId) {
+                val nodes = path(cameFrom, toId)
+                val lengthM = nodes.zipWithNext { a, b -> if (a.floor == b.floor) distanceM(a, b) else 0.0 }.sum()
+                return Route(nodes, g, lengthM)
+            }
             val node = byId.getValue(id)
             for ((next, type) in neighbors(id)) {
                 val nextG = g + (cost(node, next, type, profile) ?: continue)
@@ -93,6 +102,24 @@ class BuildingGraph(
             }
         }
         return null
+    }
+
+    /** Čvor najbliži tački ([x]/[y] relativno na plan sprata), ili null ako sprat nema čvorova. */
+    fun nearestNode(floor: Int, x: Float, y: Float): Node? =
+        nodes.filter { it.floor == floor }.minByOrNull { distanceM(it.x, it.y, x, y) }
+
+    /**
+     * Ruta od proizvoljne tačke (npr. PDR pozicije): pravom linijom do najbližeg čvora, pa A*.
+     * Prvi deo puta je uračunat u vreme i dužinu; [Route.nodes] počinje tim čvorom.
+     */
+    fun routeFrom(floor: Int, x: Float, y: Float, toId: String, profile: RoutingProfile = RoutingProfile()): Route? {
+        val start = nearestNode(floor, x, y) ?: return null
+        val route = route(start.id, toId, profile) ?: return null
+        val legM = distanceM(x, y, start.x, start.y)
+        return route.copy(
+            durationSec = route.durationSec + legM / profile.walkingSpeedMps * profile.crowdFactor,
+            lengthM = route.lengthM + legM,
+        )
     }
 
     internal fun neighbors(id: String): List<Pair<Node, EdgeType>> = adjacency[id].orEmpty()
@@ -118,8 +145,10 @@ class BuildingGraph(
         return abs(node.floor - goal.floor) * perFloor
     }
 
-    private fun distanceM(a: Node, b: Node): Double =
-        hypot((a.x - b.x) * scale.widthM.toDouble(), (a.y - b.y) * scale.heightM.toDouble())
+    private fun distanceM(a: Node, b: Node): Double = distanceM(a.x, a.y, b.x, b.y)
+
+    private fun distanceM(ax: Float, ay: Float, bx: Float, by: Float): Double =
+        hypot((ax - bx) * scale.widthM.toDouble(), (ay - by) * scale.heightM.toDouble())
 
     private fun path(cameFrom: Map<String, String>, toId: String): List<Node> =
         generateSequence(toId) { cameFrom[it] }.map(byId::getValue).toList().asReversed()

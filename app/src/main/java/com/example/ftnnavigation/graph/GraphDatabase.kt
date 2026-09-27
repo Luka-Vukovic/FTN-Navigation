@@ -39,7 +39,7 @@ abstract class GraphDao {
  * Graf zgrade. Za sada se puni iz [PlaceholderGraph]; svaka izmena grafa ili šeme ide uz
  * povećanje [version] - stara baza se briše i puni iznova (nema korisničkih podataka).
  */
-@Database(entities = [Node::class, Edge::class], version = 4, exportSchema = false)
+@Database(entities = [Node::class, Edge::class], version = 5, exportSchema = false)
 abstract class GraphDatabase : RoomDatabase() {
     abstract fun graphDao(): GraphDao
 
