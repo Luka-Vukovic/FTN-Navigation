@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Privremeni plan sprata (Nastavni blok, prizemlje) dok ne ubacimo pravi
+    evakuacioni plan. Zameniti fajlom floor_plan_placeholder.png (ili promeniti
+    referencu u PocScreen.kt) - pozicije na ekranu su relativne (0..1) u odnosu
+    na sliku, pa rade sa bilo kojom rezolucijom.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="1000dp"
+    android:height="400dp"
+    android:viewportWidth="1000"
+    android:viewportHeight="400">
+
+    <!-- Pozadina -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M0,0h1000v400h-1000z" />
+
+    <!-- Hodnik -->
+    <path
+        android:fillColor="#FFE8EEF4"
+        android:pathData="M20,170h960v60h-960z" />
+
+    <!-- Sobe gore -->
+    <path
+        android:strokeColor="#FF455A64"
+        android:strokeWidth="3"
+        android:pathData="M20,20h180v150h-180z M200,20h180v150h-180z M380,20h120v150h-120z M560,20h200v150h-200z M760,20h220v150h-220z" />
+
+    <!-- Sobe dole -->
+    <path
+        android:strokeColor="#FF455A64"
+        android:strokeWidth="3"
+        android:pathData="M20,230h240v150h-240z M260,230h200v150h-200z M620,230h180v150h-180z M800,230h180v150h-180z" />
+
+    <!-- Stepenište (gore) i lift (dole) između soba -->
+    <path
+        android:fillColor="#FFFFE0B2"
+        android:strokeColor="#FF455A64"
+        android:strokeWidth="3"
+        android:pathData="M500,20h60v150h-60z M460,230h160v150h-160z" />
+    <path
+        android:strokeColor="#FF8D6E63"
+        android:strokeWidth="2"
+        android:pathData="M500,40h60 M500,60h60 M500,80h60 M500,100h60 M500,120h60 M500,140h60" />
+
+    <!-- Ulaz -->
+    <path
+        android:fillColor="#FFC8E6C9"
+        android:pathData="M0,175h20v50h-20z" />
+
+    <!-- Spoljni zid -->
+    <path
+        android:strokeColor="#FF263238"
+        android:strokeWidth="6"
+        android:pathData="M20,20h960v360h-960z" />
+</vector>

@@ -1,0 +1,48 @@
+# --- Gradle / build ---
+.gradle/
+build/
+.kotlin/
+.externalNativeBuild/
+.cxx/
+/captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.hprof
+
+# Lokalna podešavanja (putanja do Android SDK-a)
+local.properties
+
+# --- Android Studio / IntelliJ ---
+.idea/
+*.iml
+.navigation/
+
+# --- Potpisivanje i tajne ---
+*.jks
+*.keystore
+keystore.properties
+# Firebase konfiguracija (dodati namerno ako repozitorijum treba da se builduje bez nje)
+google-services.json
+
+# --- Python (tools/raspored) ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Izvorni PDF rasporedi - javno dostupni na sajtu FTN-a; u repozitorijumu je
+# generisani app/src/main/assets/schedule.json
+/rasporedi/
+
+# --- Claude Code ---
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# --- OS / editori ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/

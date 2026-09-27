@@ -1,0 +1,96 @@
+<resources>
+    <string name="app_name">FTN Navigation</string>
+
+    <!-- Navigacija -->
+    <string name="nav_home">Početna</string>
+    <string name="nav_map">Mapa</string>
+    <string name="nav_schedule">Raspored</string>
+
+    <!-- Početni ekran -->
+    <string name="home_subtitle">Fakultet tehničkih nauka · Novi Sad</string>
+    <string name="home_greeting">Dobro došli!</string>
+    <string name="home_next_class_title">Sledeći čas</string>
+    <string name="home_next_class_empty">Izaberi smer, godinu i grupu, pa ćeš ovde videti gde ti je sledeći čas.</string>
+    <string name="home_no_upcoming">Nema predstojećih časova u rasporedu.</string>
+    <string name="home_open_schedule">Otvori raspored</string>
+    <string name="home_choose_program">Izaberi smer</string>
+    <string name="home_map_title">Mapa sprata</string>
+    <string name="home_map_body">Postavi početnu poziciju na planu i prati svoje kretanje kroz hodnik.</string>
+    <string name="home_open_map">Otvori mapu</string>
+
+    <!-- Raspored -->
+    <string name="schedule_title">Raspored</string>
+    <string name="schedule_empty_title">Izaberi svoj raspored</string>
+    <string name="schedule_empty_body">Izaberi smer, godinu i grupu, pa ćeš ovde videti svoja predavanja i vežbe sa salama.</string>
+    <string name="schedule_choose">Izaberi smer</string>
+    <string name="schedule_change">Promeni izbor rasporeda</string>
+    <string name="schedule_year">%1$d. godina</string>
+    <string name="schedule_group">grupa %1$d</string>
+    <string name="schedule_all_groups">sve grupe</string>
+    <string name="schedule_no_classes">Nema nastave ovog dana</string>
+    <string name="schedule_notes">Napomene</string>
+    <string name="schedule_last_modified">Poslednja izmena rasporeda: %1$s</string>
+    <string name="schedule_badge_biweekly">svake druge nedelje</string>
+    <string name="schedule_badge_elective">izborni</string>
+    <string name="schedule_badge_date">samo %1$s</string>
+    <string name="schedule_badge_groups">grupe: %1$s</string>
+
+    <string name="class_type_lecture">Predavanje</string>
+    <string name="class_type_auditory">Auditorne vežbe</string>
+    <string name="class_type_computer">Računarske vežbe</string>
+    <string name="class_type_lab">Laboratorijske vežbe</string>
+    <string name="class_type_other">Nastava</string>
+
+    <string name="when_today">Danas</string>
+    <string name="when_tomorrow">Sutra</string>
+    <string name="when_ongoing">u toku</string>
+    <string name="when_in_minutes">za %1$d min</string>
+    <string name="when_in_hours">za %1$d h %2$d min</string>
+
+    <string-array name="days_full">
+        <item>Ponedeljak</item>
+        <item>Utorak</item>
+        <item>Sreda</item>
+        <item>Četvrtak</item>
+        <item>Petak</item>
+        <item>Subota</item>
+        <item>Nedelja</item>
+    </string-array>
+    <string-array name="days_short">
+        <item>Pon</item>
+        <item>Uto</item>
+        <item>Sre</item>
+        <item>Čet</item>
+        <item>Pet</item>
+        <item>Sub</item>
+        <item>Ned</item>
+    </string-array>
+
+    <!-- Izbor rasporeda -->
+    <string name="selection_title">Izbor rasporeda</string>
+    <string name="selection_level">Nivo studija</string>
+    <string name="selection_level_oas">Osnovne</string>
+    <string name="selection_level_mas">Master</string>
+    <string name="selection_program">Studijski program</string>
+    <string name="selection_year">Godina</string>
+    <string name="selection_module">Modul / stručna oblast</string>
+    <string name="selection_group">Grupa</string>
+    <string name="selection_group_all">Sve</string>
+    <string name="selection_save">Sačuvaj</string>
+
+    <!-- PoC ekran -->
+    <string name="poc_title">Mapa</string>
+    <string name="poc_location">Nastavni blok · prizemlje</string>
+    <string name="poc_hint_no_start">Postavi početnu poziciju da bi pokrenuo praćenje</string>
+    <string name="poc_hint_pick_start">Dodirni plan na mestu gde stojiš</string>
+    <string name="poc_stat_steps">Koraci</string>
+    <string name="poc_stat_heading">Smer</string>
+    <string name="poc_stat_distance">Pređeno</string>
+    <string name="poc_heading_value">%1$d°</string>
+    <string name="poc_distance_value">%1$.1f m</string>
+    <string name="poc_set_start">Postavi start</string>
+    <string name="poc_cancel">Otkaži</string>
+    <string name="poc_start">Start</string>
+    <string name="poc_stop">Stop</string>
+    <string name="poc_reset">Reset</string>
+</resources>

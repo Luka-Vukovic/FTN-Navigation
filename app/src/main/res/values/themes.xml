@@ -1,0 +1,8 @@
+<resources>
+    <!-- Compose crta ceo UI; XML tema služi samo za prozor pre prvog frejma i splash (Android 12+ API). -->
+    <style name="Theme.FTNNavigation" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/white</item>
+        <item name="android:windowSplashScreenBackground">@color/ftn_teal</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+    </style>
+</resources>

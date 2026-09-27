@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Pin lokacije koji stoji na "podu". Sadržaj je unutar sigurne zone adaptivne
+    ikonice (krug prečnika 66 u centru 108x108), pa se isti drawable koristi i
+    kao ikonica splash ekrana (isti odnos: 192/288).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Senka / pod ispod vrha pina -->
+    <path
+        android:fillColor="@color/ftn_cyan"
+        android:pathData="M42,79a12,3.5 0,1 0,24 0a12,3.5 0,1 0,-24 0z" />
+
+    <!-- Pin: krug r=16 u (54,47) sa tangentama do vrha u (54,77) -->
+    <path
+        android:fillColor="@color/white"
+        android:pathData="M54,77L40.46,55.53A16,16 0,1 1,67.54 55.53z" />
+
+    <!-- Tačka u glavi pina -->
+    <path
+        android:fillColor="@color/ftn_cyan"
+        android:pathData="M47.5,47a6.5,6.5 0,1 0,13 0a6.5,6.5 0,1 0,-13 0z" />
+</vector>
