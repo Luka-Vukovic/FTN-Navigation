@@ -14,11 +14,15 @@ import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
 import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
+import com.example.ftnnavigation.departure.Departure
+import com.example.ftnnavigation.departure.departureFor
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.MapMatcher
 import com.example.ftnnavigation.graph.MatchedPosition
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.schedule.ClassEntry
+import com.example.ftnnavigation.schedule.UpcomingClass
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
@@ -112,9 +116,16 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Ruta od glavnog ulaza do sale, ili null ako se ne zna gde je sala (ili se graf učitava). */
-    fun routeFromEntrance(room: String): Route? {
-        return routeBetween(graph ?: return null, campus ?: return null, fromRoom = null, toRoom = room)
+    /**
+     * Polazak na čas kao u obaveštenju: iz sale prethodnog časa istog dana, inače od glavnog
+     * ulaza. Null = prethodni čas je u istoj sali. Dok se graf učitava, ruta je null.
+     */
+    fun departureFor(upcoming: UpcomingClass, classes: List<ClassEntry>): Departure? {
+        val graph = graph
+        val campus = campus
+        return departureFor(upcoming.entry, upcoming.date, classes, route = { from, to ->
+            if (graph != null && campus != null) routeBetween(graph, campus, from, to) else null
+        })
     }
 
     /** Zgrada sale (za prikaz uz salu), ili null ako se ne zna. */

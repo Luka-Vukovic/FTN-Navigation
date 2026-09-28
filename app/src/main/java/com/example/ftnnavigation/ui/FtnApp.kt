@@ -125,7 +125,7 @@ fun FtnApp() {
                     upcoming = upcoming,
                     now = now,
                     nextBuilding = upcoming?.let { mapViewModel.buildingNameOf(it.entry.room) },
-                    routeToNext = upcoming?.let { mapViewModel.routeFromEntrance(it.entry.room) },
+                    departure = upcoming?.let { mapViewModel.departureFor(it, scheduleViewModel.myClasses) },
                     onOpenSchedule = { navController.navigateToTopLevel(ScheduleRoute) },
                     onOpenMap = { navController.navigateToTopLevel(MapRoute) },
                     onShowRoute = {

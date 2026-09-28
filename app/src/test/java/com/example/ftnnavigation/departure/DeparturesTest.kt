@@ -93,6 +93,22 @@ class DeparturesTest {
         assertEquals(LocalDateTime.of(monday.plusDays(1), LocalTime.of(8, 52)), d.notifyAt)
     }
 
+    /** Početna: polazak za dati čas, isto kao obaveštenje (i kad je obaveštenje već prošlo). */
+    @Test
+    fun departureFor_matchesNotification() {
+        val classes = listOf(
+            entry("08:15", "10:00", "101"), entry("10:15", "12:00", "102"), entry("12:15", "14:00", "102"),
+            entry("09:00", "10:00", "201", day = 2),
+        )
+        val second = departureFor(classes[1], monday, classes, routes)!!
+        assertEquals("101", second.fromRoom)
+        assertEquals(at("10:13"), second.leaveAt)
+        assertEquals(nextDeparture(classes, at("10:07"), routes), second)
+        // Prvi čas u danu (drugi dani se ne mešaju) je od ulaza; isti čas kao prethodni -> null.
+        assertNull(departureFor(classes[0], monday, classes, routes)!!.fromRoom)
+        assertNull(departureFor(classes[2], monday, classes, routes))
+    }
+
     @Test
     fun noClasses_noDeparture() {
         assertNull(nextDeparture(emptyList(), at("07:00"), routes))

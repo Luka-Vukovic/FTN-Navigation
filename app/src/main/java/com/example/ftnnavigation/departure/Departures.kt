@@ -41,7 +41,7 @@ fun nextDeparture(
         val day = classes.filter { it.occursOn(date) }
         // Obaveštenja istog dana ne moraju da idu redom časova (duža ruta, kraj prethodnog časa).
         val first = day
-            .mapNotNull { departureFor(it, date, day, route, marginMin) }
+            .mapNotNull { departureOnDay(it, date, day, route, marginMin) }
             .filter { it.notifyAt.isAfter(after) }
             .minByOrNull { it.notifyAt }
         if (first != null) return first
@@ -49,7 +49,20 @@ fun nextDeparture(
     return null
 }
 
-private fun departureFor(
+/**
+ * Polazak na čas [entry] dana [date] (isto računanje kao za obaveštenje - Početna ga
+ * prikazuje), ili null ako je prethodni čas u istoj sali, pa nema kuda da se ide.
+ */
+fun departureFor(
+    entry: ClassEntry,
+    date: LocalDate,
+    classes: List<ClassEntry>,
+    route: (fromRoom: String?, toRoom: String) -> Route?,
+    marginMin: Long = DEPARTURE_MARGIN_MIN,
+): Departure? = departureOnDay(entry, date, classes.filter { it.occursOn(date) }, route, marginMin)
+
+/** [day] = časovi tog dana. */
+private fun departureOnDay(
     entry: ClassEntry,
     date: LocalDate,
     day: List<ClassEntry>,

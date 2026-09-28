@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.departure.Departure
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.ClassEntry
 import com.example.ftnnavigation.schedule.ClassType
@@ -50,7 +51,8 @@ import java.time.format.DateTimeFormatter
  * @param scheduleSummary npr. "4. godina · grupa 3 · ..."; null dok raspored nije izabran.
  * @param upcoming sledeći čas iz izabranog rasporeda (null ako nema ili nije izabran).
  * @param nextBuilding zgrada sale sledećeg časa (null ako se ne zna).
- * @param routeToNext ruta od glavnog ulaza do sale sledećeg časa (null ako sala nije na mapi).
+ * @param departure polazak na sledeći čas, isti kao u obaveštenju (iz sale prethodnog časa ili
+ *   od glavnog ulaza); null = prethodni čas je u istoj sali.
  */
 @Composable
 fun HomeScreen(
@@ -58,7 +60,7 @@ fun HomeScreen(
     upcoming: UpcomingClass?,
     now: LocalDateTime,
     nextBuilding: String?,
-    routeToNext: Route?,
+    departure: Departure?,
     onOpenSchedule: () -> Unit,
     onOpenMap: () -> Unit,
     onShowRoute: () -> Unit,
@@ -105,7 +107,7 @@ fun HomeScreen(
                 when {
                     scheduleSummary == null -> CardBody(stringResource(R.string.home_next_class_empty))
                     upcoming == null -> CardBody(stringResource(R.string.home_no_upcoming))
-                    else -> NextClass(upcoming, now, nextBuilding, routeToNext, onShowRoute)
+                    else -> NextClass(upcoming, now, nextBuilding, departure, onShowRoute)
                 }
             }
             HomeCard(
@@ -122,7 +124,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime, building: String?, route: Route?, onShowRoute: () -> Unit) {
+private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime, building: String?, departure: Departure?, onShowRoute: () -> Unit) {
     val entry = upcoming.entry
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
@@ -137,32 +139,41 @@ private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime, building: Str
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         RoomLabel(if (building != null) "${entry.room} · $building" else entry.room, Modifier.padding(top = 2.dp))
+        val route = departure?.route
         if (route == null) {
             Text(
-                stringResource(R.string.route_not_on_map),
+                stringResource(if (departure == null) R.string.home_same_room else R.string.route_not_on_map),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            RouteEstimate(upcoming, now, route, onShowRoute)
+            RouteEstimate(departure, route, now, onShowRoute)
         }
     }
 }
 
-/** Vreme od ulaza do sale i, za današnji čas koji nije počeo, najkasnije vreme ulaska u zgradu. */
+/**
+ * Trajanje rute (od glavnog ulaza ili iz sale prethodnog časa) i, za današnji čas koji nije
+ * počeo, najkasnije vreme polaska - isto kao u obaveštenju.
+ */
 @Composable
-private fun RouteEstimate(upcoming: UpcomingClass, now: LocalDateTime, route: Route, onShowRoute: () -> Unit) {
-    val start = upcoming.date.atTime(upcoming.entry.startTime)
-    val enterBy = start.minusMinutes(route.minutes.toLong())
+private fun RouteEstimate(departure: Departure, route: Route, now: LocalDateTime, onShowRoute: () -> Unit) {
+    val from = departure.fromRoom
+    val leaveAt = departure.leaveAt.format(TIME_FORMAT)
     val deadline = when {
-        upcoming.date != now.toLocalDate() || !start.isAfter(now) -> null
-        now.isBefore(enterBy) -> stringResource(R.string.home_route_enter_by, enterBy.format(TIME_FORMAT))
-        else -> stringResource(R.string.home_route_go_now)
+        departure.date != now.toLocalDate() || !departure.classStart.isAfter(now) -> null
+        !now.isBefore(departure.leaveAt) -> stringResource(R.string.home_route_go_now)
+        from == null -> stringResource(R.string.home_route_enter_by, leaveAt)
+        else -> stringResource(R.string.home_route_leave_room_by, from, leaveAt)
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
-                stringResource(R.string.home_route_from_entrance, route.minutes),
+                if (from == null) {
+                    stringResource(R.string.home_route_from_entrance, route.minutes)
+                } else {
+                    stringResource(R.string.home_route_from_room, from, route.minutes)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -240,20 +251,26 @@ private fun HomeCard(
 @Composable
 private fun HomeScreenPreview() {
     val now = LocalDateTime.of(2026, 9, 29, 9, 50)
+    val date = LocalDate.of(2026, 9, 29)
+    val entry = ClassEntry(
+        day = 2, start = "10:15", end = "12:00", room = "NTP-001", type = ClassType.PREDAVANJE,
+        subject = "Napredne veb tehnologije", lecturers = listOf("dr Branko Milosavljević"),
+        groups = Groups("SVI", all = true, elective = false, numbers = emptyList(), areas = emptyList(), biweekly = false),
+    )
     FTNNavigationTheme {
         HomeScreen(
             scheduleSummary = "4. godina · grupa 3 · Softversko inženjerstvo i informacione tehnologije",
-            upcoming = UpcomingClass(
-                ClassEntry(
-                    day = 2, start = "10:15", end = "12:00", room = "NTP-001", type = ClassType.PREDAVANJE,
-                    subject = "Napredne veb tehnologije", lecturers = listOf("dr Branko Milosavljević"),
-                    groups = Groups("SVI", all = true, elective = false, numbers = emptyList(), areas = emptyList(), biweekly = false),
-                ),
-                LocalDate.of(2026, 9, 29),
-            ),
+            upcoming = UpcomingClass(entry, date),
             now = now,
             nextBuilding = "Naučno-tehnološki park",
-            routeToNext = Route(emptyList(), durationSec = 240.0, lengthM = 310.0),
+            departure = Departure(
+                entry = entry,
+                date = date,
+                fromRoom = null,
+                route = Route(emptyList(), durationSec = 240.0, lengthM = 310.0),
+                leaveAt = date.atTime(10, 11),
+                notifyAt = date.atTime(10, 6),
+            ),
             onOpenSchedule = {},
             onOpenMap = {},
             onShowRoute = {},
