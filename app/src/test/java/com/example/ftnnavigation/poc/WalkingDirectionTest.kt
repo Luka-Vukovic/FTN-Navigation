@@ -59,9 +59,12 @@ class WalkingDirectionTest {
     private var timeNs = 0L
     private val direction = WalkingDirection()
 
+    /** Smer svakog koraka od početka testa, sa primenjenim ponavljanjima koraka. */
+    private val allHeadings = mutableListOf<Float>()
+
     /**
      * Hod [seconds] sekundi u pravcu [walkDeg] sa položajem telefona [pose] (u trenutku t, s);
-     * vraća smer hoda za svaki korak.
+     * vraća smer hoda za svaki korak (ponavljanje koraka iz kasnijeg hoda se vidi samo u [allHeadings]).
      */
     private fun walk(
         seconds: Double,
@@ -70,7 +73,7 @@ class WalkingDirectionTest {
         lateralAmp: Double = 0.5,
         pose: (Double) -> Pose,
     ): List<Float> {
-        val headings = mutableListOf<Float>()
+        val start = allHeadings.size
         val f = forward(walkDeg)
         val side = f cross up
         val end = timeNs + (seconds * 1e9).toLong()
@@ -87,9 +90,14 @@ class WalkingDirectionTest {
                 (world dot p.x).toFloat(), (world dot p.y).toFloat(), (world dot p.z).toFloat(), timeNs,
             )
             timeNs += sampleNs
-            if (timeNs % stepNs == 0L) direction.onStep(timeNs)?.let(headings::add)
+            if (timeNs % stepNs == 0L) direction.onStep(timeNs)?.let { step ->
+                for (i in allHeadings.size - minOf(step.redoSteps, allHeadings.size) until allHeadings.size) {
+                    allHeadings[i] = step.headingDeg
+                }
+                allHeadings.add(step.headingDeg)
+            }
         }
-        return headings
+        return allHeadings.subList(start, allHeadings.size).toList()
     }
 
     /** Stajanje [seconds] sekundi sa telefonom u položaju [pose] (samo gravitacija). */
@@ -196,6 +204,61 @@ class WalkingDirectionTest {
         // Skretanje desno za 90°: telefon se okreće sa telom, smer ga odmah prati.
         val headings = walk(6.0, 90.0) { t -> inPocket(90.0, 90.0, swingDeg = 25.0 * sin(2 * PI * t)) }
         headings.drop(1).forEach { assertNear(90.0, it, 15.0) }
+    }
+
+    @Test
+    fun phoneInHand_turnedAsideWhileWalkingStraight_keepsDirection() {
+        // Telefon u ruci se okrene za 90° (npr. gleda se u stranu), a hod ide pravo: posle dva
+        // koraka osa hoda kaže da telo nije skrenulo i koraci od okreta se ponavljaju pravo.
+        stand(1.0, inHand(0.0))
+        direction.reset()
+        walk(5.0, 0.0) { inHand(0.0) }
+        walk(4.0, 0.0) { inHand(90.0) }
+        assertNear(-90.0, direction.offset.toFloat(), 5.0, "odstupanje")
+        // I povratak telefona je samo okret telefona.
+        walk(4.0, 0.0) { inHand(0.0) }
+        allHeadings.forEachIndexed { i, it -> assertNear(0.0, it, 10.0, "korak $i") }
+    }
+
+    @Test
+    fun phoneInHand_glancedAsideBriefly_keepsDirection() {
+        // Telefon okrenut u stranu samo dva koraka, pa vraćen - smer ostaje, bez vijuganja.
+        stand(1.0, inHand(0.0))
+        direction.reset()
+        walk(5.0, 0.0) { inHand(0.0) }
+        walk(1.0, 0.0) { inHand(-70.0) }
+        walk(4.0, 0.0) { inHand(0.0) }
+        allHeadings.forEachIndexed { i, it -> assertNear(0.0, it, 10.0, "korak $i") }
+    }
+
+    @Test
+    fun phoneInHand_bodyTurns_headingFollowsTurn() {
+        stand(1.0, inHand(0.0))
+        direction.reset()
+        walk(5.0, 0.0) { inHand(0.0) }
+        walk(5.0, 90.0) { inHand(90.0) }
+        allHeadings.takeLast(9).forEach { assertNear(90.0, it, 10.0) }
+    }
+
+    @Test
+    fun sidewaysSway_bodyTurns_isNotTakenAsPhoneTurn() {
+        // Bočno ljuljanje: osa hoda je poprečna, pa bi posle skretanja za 90° bila na starom
+        // pravcu - takvoj osi se ne veruje, skretanje ostaje skretanje.
+        stand(1.0, inHand(0.0))
+        direction.reset()
+        walk(5.0, 0.0, forwardAmp = 0.3, lateralAmp = 1.5) { inHand(0.0) }
+        walk(5.0, 90.0, forwardAmp = 0.3, lateralAmp = 1.5) { inHand(90.0) }
+        allHeadings.takeLast(9).forEach { assertNear(90.0, it, 10.0) }
+    }
+
+    @Test
+    fun uTurn_isAlwaysATurn() {
+        // Okret za 180°: osa hoda je ista, pa se ne razlikuje od okreta telefona - telo se okrenulo.
+        stand(1.0, inHand(0.0))
+        direction.reset()
+        walk(5.0, 0.0) { inHand(0.0) }
+        walk(5.0, 180.0) { inHand(180.0) }
+        allHeadings.takeLast(9).forEach { assertNear(180.0, it, 10.0) }
     }
 
     @Test

@@ -18,14 +18,15 @@ import kotlin.math.abs
  * - TYPE_ACCELEROMETER + [AccelStepDetector] samo kad je [trackSteps] true.
  *
  * Oba senzora idu u [direction] (smer hoda, ne pravac telefona). [onHeading] dobija smer za
- * prikaz, a [onStep] smer hoda koraka - azimut u stepenima (0..360, 0 = sever, u smeru kazaljke).
+ * prikaz (azimut u stepenima, 0..360, 0 = sever, u smeru kazaljke), a [onStep] smer hoda koraka
+ * (uz broj prethodnih koraka koje treba ponoviti).
  */
 @Composable
 fun PdrSensorsEffect(
     trackSteps: Boolean,
     direction: WalkingDirection,
     onHeading: (Float) -> Unit,
-    onStep: (Float) -> Unit,
+    onStep: (WalkingDirection.WalkStep) -> Unit,
 ) {
     val context = LocalContext.current
     val sensorManager = remember(context) { context.getSystemService(SensorManager::class.java) }

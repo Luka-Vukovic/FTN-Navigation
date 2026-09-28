@@ -170,19 +170,40 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    /** Pomera poziciju za jedan korak u smeru hoda [azimuth]; pozicija na grafu prati korak. */
-    fun onStep(azimuth: Float) {
-        val raw = state.rawPosition ?: return
+    /** Pozicija pre koraka - za ponavljanje koraka kad se ispravi smer (okret samo telefona). */
+    private class StepStart(val raw: Offset, val match: MatchedPosition?)
+
+    private val stepStarts = ArrayDeque<StepStart>()
+
+    /**
+     * Pomera poziciju za jedan korak u smeru hoda; ako [step] traži, prethodni koraci se
+     * ponavljaju u tom smeru (od pozicije pre njih). Pozicija na grafu prati korak.
+     */
+    fun onStep(step: WalkingDirection.WalkStep) {
+        var raw = state.rawPosition ?: return
         val planScale = graph?.placement(PlaceholderGraph.BUILDING_ID)?.scale ?: return
-        val rad = Math.toRadians((azimuth - PLAN_UP_AZIMUTH_DEG).toDouble())
+        var match = state.match
+        val redo = step.redoSteps.coerceAtMost(stepStarts.size)
+        if (redo > 0) {
+            val from = stepStarts[stepStarts.size - redo]
+            repeat(redo) { stepStarts.removeLast() }
+            raw = from.raw
+            match = from.match
+        }
+
+        val rad = Math.toRadians((step.headingDeg - PLAN_UP_AZIMUTH_DEG).toDouble())
         val dxM = state.stepLengthM * sin(rad)
         val dyM = -state.stepLengthM * cos(rad)
-        val nextRaw = Offset(
-            (raw.x + dxM / planScale.widthM).toFloat().coerceIn(0f, 1f),
-            (raw.y + dyM / planScale.heightM).toFloat().coerceIn(0f, 1f),
-        )
-        val match = state.match?.let { matcher?.step(it, dxM, dyM) } ?: matcher?.start(nextRaw.x, nextRaw.y)
-        state = state.copy(rawPosition = nextRaw, match = match, steps = state.steps + 1)
+        repeat(redo + 1) {
+            stepStarts.addLast(StepStart(raw, match))
+            if (stepStarts.size > WalkingDirection.MAX_TURN_STEPS) stepStarts.removeFirst()
+            raw = Offset(
+                (raw.x + dxM / planScale.widthM).toFloat().coerceIn(0f, 1f),
+                (raw.y + dyM / planScale.heightM).toFloat().coerceIn(0f, 1f),
+            )
+            match = match?.let { matcher?.step(it, dxM, dyM) } ?: matcher?.start(raw.x, raw.y)
+        }
+        state = state.copy(rawPosition = raw, match = match, steps = state.steps + 1)
     }
 
     /** Start se postavlja na planu zgrade, pa Mapa prelazi na njega. */
@@ -192,18 +213,23 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setStart(point: Offset) {
+        stepStarts.clear()
         state = state.copy(rawPosition = point, match = matcher?.start(point.x, point.y), isPickingStart = false)
     }
 
     fun toggleTracking() {
         // Start se pritiska sa telefonom u ruci - odstupanje od pravca hoda se uči iznova.
-        if (!state.isTracking) walkingDirection.reset()
+        if (!state.isTracking) {
+            walkingDirection.reset()
+            stepStarts.clear()
+        }
         state = state.copy(isTracking = !state.isTracking)
     }
 
     // Smer se zadržava - dolazi sa senzora, nije deo sesije praćenja.
     fun reset() {
         walkingDirection.reset()
+        stepStarts.clear()
         state = PocUiState(headingDeg = state.headingDeg, phoneOffsetDeg = 0f)
     }
 }
