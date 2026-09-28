@@ -19,6 +19,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,6 +51,7 @@ import java.time.format.DateTimeFormatter
  * @param upcoming sledeći čas iz izabranog rasporeda (null ako nema ili nije izabran).
  * @param nextBuilding zgrada sale sledećeg časa (null ako se ne zna).
  * @param routeToNext ruta od glavnog ulaza do sale sledećeg časa (null ako sala nije na mapi).
+ * @param onTestNotification probno obaveštenje o polasku; null = bez dugmeta (release build).
  */
 @Composable
 fun HomeScreen(
@@ -61,6 +63,7 @@ fun HomeScreen(
     onOpenSchedule: () -> Unit,
     onOpenMap: () -> Unit,
     onShowRoute: () -> Unit,
+    onTestNotification: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {
@@ -106,6 +109,11 @@ fun HomeScreen(
                 onAction = onOpenMap,
             ) {
                 CardBody(stringResource(R.string.home_map_body))
+            }
+            if (onTestNotification != null) {
+                OutlinedButton(onClick = onTestNotification, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text(stringResource(R.string.debug_test_notification))
+                }
             }
         }
     }

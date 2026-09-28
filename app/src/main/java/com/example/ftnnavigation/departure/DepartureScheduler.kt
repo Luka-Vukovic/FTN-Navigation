@@ -34,31 +34,48 @@ object DepartureScheduler {
 
     suspend fun reschedule(context: Context) {
         val context = context.applicationContext
-        val zone = ZoneId.systemDefault()
         // Neprecizan alarm okida i pre notifyAt - taj polazak se ne zakazuje ponovo.
         val lastNotified = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_LAST_NOTIFY_AT, 0)
-        val after = LocalDateTime.ofInstant(Instant.ofEpochMilli(maxOf(System.currentTimeMillis(), lastNotified)), zone)
-
-        val store = ScheduleStore(context)
-        val classes = withContext(Dispatchers.IO) { store.loadData() }.classesFor(store.loadSelection())
-        val campus = loadCampus(context)
-        val graph = loadGraph(context, campus)
-        val departure = nextDeparture(classes, after, route = { from, to -> routeBetween(graph, campus, from, to) })
+        val next = next(context, afterMs = maxOf(System.currentTimeMillis(), lastNotified))
 
         val alarms = context.getSystemService(AlarmManager::class.java)
-        if (departure == null) {
+        if (next == null) {
             alarms.cancel(alarmIntent(context, Intent()))
             return
         }
-        val building = resolveTarget(departure.entry.room, graph, campus)?.building?.name
-            ?: buildingOfRoom(departure.entry.room)?.let { campus.building(it)?.name }
-        val notifyAtMs = departure.notifyAt.toEpochMilli(zone)
-        val pending = alarmIntent(context, content(context, departure, building, zone))
+        val (notifyAtMs, content) = next
+        val pending = alarmIntent(context, content)
         if (alarms.canScheduleExactAlarms()) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, notifyAtMs, pending)
         } else {
             alarms.setWindow(AlarmManager.RTC_WAKEUP, notifyAtMs - INEXACT_WINDOW_MS, INEXACT_WINDOW_MS, pending)
         }
+    }
+
+    /**
+     * Probno obaveštenje (samo debug build): odmah prikazuje obaveštenje za sledeći polazak,
+     * a zakazani alarm i zapamćeni poslednji polazak ostaju netaknuti. false = nema polaska.
+     */
+    suspend fun showTest(context: Context): Boolean {
+        val context = context.applicationContext
+        val (_, content) = next(context, afterMs = System.currentTimeMillis()) ?: return false
+        DepartureNotifications.show(context, content)
+        return true
+    }
+
+    /** Sledeći polazak posle [afterMs]: vreme obaveštenja i sadržaj za [DepartureNotifications]. */
+    private suspend fun next(context: Context, afterMs: Long): Pair<Long, Intent>? {
+        val zone = ZoneId.systemDefault()
+        val after = LocalDateTime.ofInstant(Instant.ofEpochMilli(afterMs), zone)
+        val store = ScheduleStore(context)
+        val classes = withContext(Dispatchers.IO) { store.loadData() }.classesFor(store.loadSelection())
+        val campus = loadCampus(context)
+        val graph = loadGraph(context, campus)
+        val departure = nextDeparture(classes, after, route = { from, to -> routeBetween(graph, campus, from, to) })
+            ?: return null
+        val building = resolveTarget(departure.entry.room, graph, campus)?.building?.name
+            ?: buildingOfRoom(departure.entry.room)?.let { campus.building(it)?.name }
+        return departure.notifyAt.toEpochMilli(zone) to content(context, departure, building, zone)
     }
 
     /** Pamti da je obaveštenje za polazak sa ovim notifyAt prikazano. */

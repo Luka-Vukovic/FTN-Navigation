@@ -2,6 +2,7 @@ package com.example.ftnnavigation.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -19,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -32,6 +34,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.ftnnavigation.BuildConfig
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.departure.DepartureScheduler
 import com.example.ftnnavigation.home.HomeScreen
@@ -43,6 +46,7 @@ import com.example.ftnnavigation.schedule.ScheduleViewModel
 import com.example.ftnnavigation.schedule.nextClass
 import com.example.ftnnavigation.schedule.rememberNow
 import com.example.ftnnavigation.schedule.selectionSummary
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 @Serializable data object HomeRoute
@@ -127,10 +131,29 @@ fun FtnApp() {
                         mapViewModel.selectDestination(upcoming?.entry?.room)
                         navController.navigateToTopLevel(MapRoute)
                     },
+                    onTestNotification = if (BuildConfig.DEBUG) rememberTestNotification() else null,
                 )
             }
             composable<MapRoute> { PocRoute(mapViewModel) }
             composable<ScheduleRoute> { ScheduleScreen(scheduleViewModel) }
+        }
+    }
+}
+
+/** Probno obaveštenje za sledeći polazak (debug); ishod se javlja Toast-om kad nije prikazano. */
+@Composable
+private fun rememberTestNotification(): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    return {
+        scope.launch {
+            val message = when {
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED ->
+                    R.string.debug_test_no_permission
+                !DepartureScheduler.showTest(context) -> R.string.debug_test_no_departure
+                else -> null
+            }
+            if (message != null) Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 }

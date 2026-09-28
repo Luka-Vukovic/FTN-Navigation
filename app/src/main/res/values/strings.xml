@@ -121,4 +121,9 @@
     <string name="departure_channel_description">Javlja kad treba da kreneš na čas, prema rasporedu i trajanju rute</string>
     <string name="departure_title">Kreni najkasnije u %1$s</string>
     <string name="departure_from_room">Iz sale %1$s ~%2$d min</string>
+
+    <!-- Debug -->
+    <string name="debug_test_notification">Probno obaveštenje</string>
+    <string name="debug_test_no_permission">Obaveštenja nisu dozvoljena</string>
+    <string name="debug_test_no_departure">Nema predstojećih časova u rasporedu</string>
 </resources>
