@@ -167,13 +167,26 @@ class BuildingGraph(
         profile: RoutingProfile = RoutingProfile(),
     ): Route? {
         val start = nearestNode(buildingId, floor, x, y) ?: return null
-        val route = route(start.id, toId, profile) ?: return null
         val legM = distanceM(position(start), placement(buildingId).toMeters(x, y))
-        return route.copy(
-            durationSec = route.durationSec + legM / profile.walkingSpeedMps * profile.crowdFactor,
-            lengthM = route.lengthM + legM,
-        )
+        return route(start.id, toId, profile)?.withLeg(legM, profile)
     }
+
+    /**
+     * Ruta od tačke na ivici (PDR pozicija posle map-matching-a): kroz onaj kraj ivice koji daje
+     * kraće ukupno vreme. Deo ivice do tog kraja je uračunat; [Route.nodes] počinje tim krajem.
+     */
+    fun routeFrom(point: EdgePoint, toId: String, profile: RoutingProfile = RoutingProfile()): Route? {
+        val edgeM = distanceM(point.from, point.to)
+        return listOf(point.from to point.t * edgeM, point.to to (1 - point.t) * edgeM)
+            .mapNotNull { (end, legM) -> route(end.id, toId, profile)?.withLeg(legM, profile) }
+            .minByOrNull { it.durationSec }
+    }
+
+    /** Ruta produžena hodom od [legM] metara pre prvog čvora. */
+    private fun Route.withLeg(legM: Double, profile: RoutingProfile) = copy(
+        durationSec = durationSec + legM / profile.walkingSpeedMps * profile.crowdFactor,
+        lengthM = lengthM + legM,
+    )
 
     internal fun neighbors(id: String): List<Pair<Node, EdgeType>> = adjacency[id].orEmpty()
 

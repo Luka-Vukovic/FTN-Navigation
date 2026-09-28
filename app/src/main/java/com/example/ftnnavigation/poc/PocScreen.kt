@@ -149,6 +149,7 @@ fun PocScreen(
                         graph = graph,
                         route = route,
                         position = state.position,
+                        rawPosition = state.rawPosition,
                         headingDeg = state.headingDeg,
                         isPickingStart = state.isPickingStart,
                         onTap = onMapTap,
@@ -203,12 +204,16 @@ fun PocScreen(
     }
 }
 
-/** Slika sprata sa pan/zoom gestovima, grafom prizemlja, rutom i markerom korisnika. */
+/**
+ * Slika sprata sa pan/zoom gestovima, grafom prizemlja, rutom i markerom korisnika. [position]
+ * je pozicija na grafu; [rawPosition] (čist PDR, bez map-matching-a) je bleda tačka za poređenje.
+ */
 @Composable
 private fun FloorPlan(
     graph: BuildingGraph?,
     route: Route?,
     position: Offset?,
+    rawPosition: Offset?,
     headingDeg: Float,
     isPickingStart: Boolean,
     onTap: (Offset) -> Unit,
@@ -269,6 +274,10 @@ private fun FloorPlan(
             if (position != null) {
                 val color = MaterialTheme.colorScheme.primary
                 Canvas(Modifier.fillMaxSize()) {
+                    if (rawPosition != null && rawPosition != position) {
+                        val raw = Offset(rawPosition.x * size.width, rawPosition.y * size.height)
+                        drawCircle(color.copy(alpha = 0.35f), radius = 4.dp.toPx() / scale, center = raw)
+                    }
                     val center = Offset(position.x * size.width, position.y * size.height)
                     // Delimo sa scale da bi marker ostao iste veličine na ekranu pri zumiranju.
                     drawUserMarker(center, headingDeg, color, 1f / scale)
@@ -599,7 +608,7 @@ private fun PocScreenPreview() {
     FTNNavigationTheme {
         PocScreen(
             state = PocUiState(
-                position = Offset(0.3f, 0.5f),
+                rawPosition = Offset(0.3f, 0.5f),
                 headingDeg = 90f,
                 steps = 42,
                 isTracking = true,
