@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.ftnnavigation.campus.BuildingCategory
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.campus.loadCampus
@@ -16,13 +17,13 @@ import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.departure.Departure
 import com.example.ftnnavigation.departure.departureFor
+import com.example.ftnnavigation.events.PlaceOptions
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.MapMatcher
 import com.example.ftnnavigation.graph.MatchedPosition
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.Route
-import com.example.ftnnavigation.schedule.ClassEntry
-import com.example.ftnnavigation.schedule.UpcomingClass
+import com.example.ftnnavigation.schedule.AgendaItem
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
@@ -117,15 +118,26 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Polazak na čas kao u obaveštenju: iz sale prethodnog časa istog dana, inače od glavnog
-     * ulaza. Null = prethodni čas je u istoj sali. Dok se graf učitava, ruta je null.
+     * Polazak kao u obaveštenju: sa mesta prethodne stavke istog dana ([day]), inače od glavnog
+     * ulaza. Null = prethodna stavka je na istom mestu. Dok se graf učitava, ruta je null.
      */
-    fun departureFor(upcoming: UpcomingClass, classes: List<ClassEntry>): Departure? {
+    fun departureFor(item: AgendaItem, day: List<AgendaItem>): Departure? {
         val graph = graph
         val campus = campus
-        return departureFor(upcoming.entry, upcoming.date, classes, route = { from, to ->
+        return departureFor(item, day, route = { from, to ->
             if (graph != null && campus != null) routeBetween(graph, campus, from, to) else null
         })
+    }
+
+    /** Mesta za događaje - ista kao odredišta na Mapi; null dok se mapa učitava. */
+    val placeOptions: PlaceOptions? by derivedStateOf {
+        val campus = campus ?: return@derivedStateOf null
+        val graph = graph ?: return@derivedStateOf null
+        PlaceOptions(
+            buildings = campus.named(BuildingCategory.FTN).mapNotNull { it.name },
+            services = campus.named(BuildingCategory.SLUZBA).mapNotNull { it.name },
+            rooms = graph.rooms.mapNotNull { it.name }.sorted(),
+        )
     }
 
     /** Zgrada sale (za prikaz uz salu), ili null ako se ne zna. */

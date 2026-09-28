@@ -2,7 +2,6 @@ package com.example.ftnnavigation.schedule
 
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.LocalTime
 
 /*
@@ -34,6 +33,8 @@ data class Timetable(
 ) {
     val id: String get() = listOf(programId, level, semester, module.orEmpty()).joinToString("|")
 
+    val semesterKind: SemesterKind get() = SemesterKind.of(semester)
+
     /** Grupe koje se pojavljuju u rasporedu - ponuda za izbor grupe. */
     val groupNumbers: List<Int>
         get() = (classes.flatMap { it.groups.numbers } + areaGroups.values.flatten()).distinct().sorted()
@@ -58,9 +59,6 @@ data class ClassEntry(
     val endTime: LocalTime get() = LocalTime.parse(end)
     val localDate: LocalDate? get() = date?.let(LocalDate::parse)
 
-    fun occursOn(day: LocalDate): Boolean =
-        localDate?.let { it == day } ?: (day.dayOfWeek.value == this.day)
-
     fun isFor(group: Int?, areaGroups: Map<String, List<Int>>): Boolean =
         group == null || groups.all || groups.elective || group in groups.numbers ||
             // Oblast bez poznatog mapiranja na grupe prikazujemo svima, da čas ne nestane.
@@ -80,21 +78,3 @@ data class Groups(
     /** Svake druge nedelje (ili smenjivanje grupa) - ne znamo koje, pa samo označavamo. */
     val biweekly: Boolean,
 )
-
-data class UpcomingClass(val entry: ClassEntry, val date: LocalDate)
-
-/**
- * Prvi čas koji još nije završen, počev od [now]. Čas u toku se računa kao sledeći.
- * [horizonDays] pokriva i blok nastavu zakazanu po datumima nekoliko nedelja unapred.
- */
-fun nextClass(classes: List<ClassEntry>, now: LocalDateTime, horizonDays: Int = 120): UpcomingClass? {
-    val today = now.toLocalDate()
-    for (offset in 0..horizonDays) {
-        val date = today.plusDays(offset.toLong())
-        val first = classes
-            .filter { it.occursOn(date) && (offset > 0 || it.endTime > now.toLocalTime()) }
-            .minByOrNull { it.startTime }
-        if (first != null) return UpcomingClass(first, date)
-    }
-    return null
-}

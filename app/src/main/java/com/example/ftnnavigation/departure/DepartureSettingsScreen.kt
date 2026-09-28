@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -46,6 +47,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.ftnnavigation.BuildConfig
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.schedule.TIME_FORMAT
 import com.example.ftnnavigation.schedule.dayName
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import kotlinx.coroutines.CoroutineScope
@@ -174,10 +176,10 @@ fun DepartureSettingsScreen(onBack: () -> Unit) {
     }
 }
 
-/** Kada stiže obaveštenje (bez tačnih alarma: prozor pre notifyAt), za koji čas i odakle je ruta. */
+/** Kada stiže obaveštenje (bez tačnih alarma: prozor pre notifyAt), za koji čas / događaj i odakle je ruta. */
 @Composable
 private fun UpcomingDeparture(departure: Departure, exact: Boolean) {
-    val entry = departure.entry
+    val item = departure.item
     val notifyAt = departure.notifyAt
     val day = dayLabel(notifyAt.toLocalDate())
     val time = if (exact) {
@@ -186,17 +188,12 @@ private fun UpcomingDeparture(departure: Departure, exact: Boolean) {
         val from = notifyAt.minusMinutes(DepartureScheduler.INEXACT_WINDOW_MIN)
         stringResource(R.string.notifications_next_window, day, from.format(TIME_FORMAT), notifyAt.format(TIME_FORMAT))
     }
-    val route = departure.route
-    val routeLine = when {
-        route == null -> stringResource(R.string.route_not_on_map)
-        departure.fromRoom == null -> stringResource(R.string.home_route_from_entrance, route.minutes)
-        else -> stringResource(R.string.departure_from_room, departure.fromRoom, route.minutes)
-    }
+    val routeLine = departure.routeText(LocalResources.current)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(time, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        Text(entry.subject, style = MaterialTheme.typography.bodyLarge)
-        CardBody("${entry.start} · ${entry.room}")
-        CardBody(routeLine)
+        Text(item.title, style = MaterialTheme.typography.bodyLarge)
+        CardBody(listOfNotNull(item.start.format(TIME_FORMAT), item.place).joinToString(" · "))
+        if (routeLine != null) CardBody(routeLine)
     }
 }
 
@@ -254,5 +251,4 @@ private fun CardBody(text: String) {
     Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
-private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm")
 private val DATE_FORMAT = DateTimeFormatter.ofPattern("d.M.")

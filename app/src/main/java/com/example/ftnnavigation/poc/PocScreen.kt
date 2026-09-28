@@ -433,26 +433,35 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
     }
 }
 
+/**
+ * Izbor odredišta: zgrade FTN-a, studentske službe i sale Nastavnog bloka. Koristi ga i
+ * izmena događaja (mesto događaja) - tada [noneLabel] dodaje stavku bez mesta ([onSelect] null).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DestinationSheet(
+internal fun DestinationSheet(
     buildings: List<String>,
     services: List<String>,
     rooms: List<String>,
     selected: String?,
-    onSelect: (String) -> Unit,
+    onSelect: (String?) -> Unit,
     onDismiss: () -> Unit,
+    title: String = stringResource(R.string.route_destinations_title),
+    noneLabel: String? = null,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Text(
-            stringResource(R.string.route_destinations_title),
+            title,
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp),
         )
         LazyColumn(Modifier.navigationBarsPadding()) {
+            if (noneLabel != null) {
+                item { DestinationItem(noneLabel, isSelected = selected == null, onClick = { onSelect(null) }) }
+            }
             item { SheetSectionHeader(stringResource(R.string.route_destinations_buildings)) }
             items(buildings) { building ->
                 DestinationItem(building, isSelected = building == selected, onClick = { onSelect(building) })

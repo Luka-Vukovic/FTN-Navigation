@@ -10,9 +10,9 @@
     <!-- Početni ekran -->
     <string name="home_subtitle">Fakultet tehničkih nauka · Novi Sad</string>
     <string name="home_greeting">Dobro došli!</string>
-    <string name="home_next_class_title">Sledeći čas</string>
+    <string name="home_next_class_title">Sledeće</string>
     <string name="home_next_class_empty">Izaberi smer, godinu i grupu, pa ćeš ovde videti gde ti je sledeći čas.</string>
-    <string name="home_no_upcoming">Nema predstojećih časova u rasporedu.</string>
+    <string name="home_no_upcoming">Nema predstojećih časova ni događaja.</string>
     <string name="home_open_schedule">Otvori raspored</string>
     <string name="home_choose_program">Izaberi smer</string>
     <string name="home_map_title">Mapa</string>
@@ -29,8 +29,17 @@
     <string name="schedule_year">%1$d. godina</string>
     <string name="schedule_group">grupa %1$d</string>
     <string name="schedule_all_groups">sve grupe</string>
-    <string name="schedule_no_classes">Nema nastave ovog dana</string>
-    <string name="schedule_notes">Napomene</string>
+    <string name="schedule_no_classes">Nema časova ni događaja ovog dana</string>
+    <string name="schedule_week_previous">Prethodna nedelja</string>
+    <string name="schedule_week_next">Sledeća nedelja</string>
+    <string name="schedule_today">Danas</string>
+    <string name="schedule_day_off">Neradni dan · %1$s</string>
+    <string name="schedule_no_teaching">Nema nastave · %1$s</string>
+    <string name="schedule_makeup">%1$s · nastava po rasporedu za %2$s</string>
+    <string name="schedule_out_of_semester">Van semestra · nema nastave</string>
+    <string name="schedule_other_semester">Izabrani raspored je za %1$s semestar</string>
+    <string name="semester_winter">zimski</string>
+    <string name="semester_summer">letnji</string>
     <string name="schedule_last_modified">Poslednja izmena rasporeda: %1$s</string>
     <string name="schedule_badge_biweekly">svake druge nedelje</string>
     <string name="schedule_badge_elective">izborni</string>
@@ -57,6 +66,16 @@
         <item>Petak</item>
         <item>Subota</item>
         <item>Nedelja</item>
+    </string-array>
+    <!-- "nastava po rasporedu za sredu" -->
+    <string-array name="days_accusative">
+        <item>ponedeljak</item>
+        <item>utorak</item>
+        <item>sredu</item>
+        <item>četvrtak</item>
+        <item>petak</item>
+        <item>subotu</item>
+        <item>nedelju</item>
     </string-array>
     <string-array name="days_short">
         <item>Pon</item>
@@ -115,10 +134,11 @@
     <string name="route_clear">Ukloni rutu</string>
     <string name="home_route_from_entrance">Od glavnog ulaza ~%1$d min</string>
     <string name="home_route_enter_by">Kreni od glavnog ulaza najkasnije u %1$s</string>
-    <string name="home_route_from_room">Iz sale %1$s ~%2$d min</string>
     <string name="home_route_leave_room_by">Kreni iz sale %1$s najkasnije u %2$s</string>
+    <string name="home_route_leave_place_by">Kreni od: %1$s najkasnije u %2$s</string>
     <string name="home_route_go_now">Kreni odmah</string>
     <string name="home_same_room">Ostaješ u istoj sali</string>
+    <string name="home_same_place">Već si na tom mestu</string>
     <string name="home_show_route">Prikaži rutu</string>
 
     <!-- Obaveštenje o polasku -->
@@ -126,6 +146,7 @@
     <string name="departure_channel_description">Javlja kad treba da kreneš na čas, prema rasporedu i trajanju rute</string>
     <string name="departure_title">Kreni najkasnije u %1$s</string>
     <string name="departure_from_room">Iz sale %1$s ~%2$d min</string>
+    <string name="departure_from_place">Od: %1$s ~%2$d min</string>
 
     <!-- Podešavanja obaveštenja -->
     <string name="notifications_title">Obaveštenja</string>
@@ -143,4 +164,31 @@
     <string name="debug_test_notification">Probno obaveštenje</string>
     <string name="debug_test_no_permission">Obaveštenja nisu dozvoljena</string>
     <string name="debug_test_no_departure">Nema predstojećih časova u rasporedu</string>
+
+    <!-- Sopstveni događaji -->
+    <string name="event_label">Moj događaj</string>
+    <string name="event_add">Događaj</string>
+    <string name="event_new_title">Novi događaj</string>
+    <string name="event_edit_title">Izmena događaja</string>
+    <string name="event_field_title">Naziv</string>
+    <string name="event_field_date">Datum</string>
+    <string name="event_field_start">Početak</string>
+    <string name="event_field_end">Kraj</string>
+    <string name="event_field_place">Mesto</string>
+    <string name="event_field_note">Beleška</string>
+    <string name="event_no_place">Bez mesta</string>
+    <string name="event_repeat">Ponavlja se svake nedelje</string>
+    <string name="event_repeat_until">Do</string>
+    <string name="event_notify">Obavesti me kad treba da krenem</string>
+    <string name="event_notify_hint">Kao za časove: kad treba da kreneš, prema ruti od prethodnog mesta.</string>
+    <string name="event_badge_weekly">svake nedelje do %1$s</string>
+    <string name="event_save">Sačuvaj</string>
+    <string name="event_delete">Obriši događaj</string>
+    <string name="event_delete_confirm">Obrisati događaj „%1$s“?</string>
+    <string name="event_delete_repeat_note">Briše se i svako njegovo ponavljanje.</string>
+    <string name="event_error_title">Unesi naziv</string>
+    <string name="event_error_time">Kraj mora biti posle početka</string>
+    <string name="event_error_until">Kraj ponavljanja mora biti posle datuma događaja</string>
+    <string name="dialog_ok">U redu</string>
+    <string name="dialog_cancel">Otkaži</string>
 </resources>

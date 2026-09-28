@@ -3,13 +3,9 @@ package com.example.ftnnavigation.schedule
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
-import java.time.LocalDate
-import java.time.LocalDateTime
 
 class ScheduleModelsTest {
 
@@ -59,34 +55,4 @@ class ScheduleModelsTest {
         assertFalse(ep.isFor(25, master.areaGroups))
     }
 
-    @Test
-    fun nextClass_duringDay_returnsOngoingOrLaterClassToday() {
-        // Utorak 29.09.2026. u 10:00 - grupa 3 ima predavanje Soft kompjuting 09:15-12:00 (u toku).
-        val next = nextClass(siit7.classesFor(3), LocalDateTime.of(2026, 9, 29, 10, 0))
-        assertNotNull(next)
-        assertEquals(LocalDate.of(2026, 9, 29), next!!.date)
-        assertEquals("09:15", next.entry.start)
-        assertEquals("Soft kompjuting", next.entry.subject)
-    }
-
-    @Test
-    fun nextClass_afterLastClassOfWeek_jumpsToMonday() {
-        // Petak 02.10.2026. u 20:00 -> ponedeljak 05.10. prvi čas grupe 3 (12:30 Soft kompjuting).
-        val next = nextClass(siit7.classesFor(3), LocalDateTime.of(2026, 10, 2, 20, 0))!!
-        assertEquals(LocalDate.of(2026, 10, 5), next.date)
-        assertEquals("12:30", next.entry.start)
-    }
-
-    @Test
-    fun datedClass_occursOnlyOnItsDate() {
-        val block = data.timetables.flatMap { it.classes }.first { it.date != null }
-        val date = LocalDate.parse(block.date)
-        assertTrue(block.occursOn(date))
-        assertFalse(block.occursOn(date.plusWeeks(1)))
-    }
-
-    @Test
-    fun nextClass_emptySchedule_isNull() {
-        assertNull(nextClass(emptyList(), LocalDateTime.of(2026, 9, 29, 10, 0)))
-    }
 }

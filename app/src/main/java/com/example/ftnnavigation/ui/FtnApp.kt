@@ -32,24 +32,29 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.departure.DepartureScheduler
 import com.example.ftnnavigation.departure.DepartureSettingsScreen
+import com.example.ftnnavigation.events.EventEditScreen
 import com.example.ftnnavigation.home.HomeScreen
 import com.example.ftnnavigation.poc.PocRoute
 import com.example.ftnnavigation.poc.PocViewModel
 import com.example.ftnnavigation.schedule.ScheduleScreen
 import com.example.ftnnavigation.schedule.ScheduleSelection
 import com.example.ftnnavigation.schedule.ScheduleViewModel
-import com.example.ftnnavigation.schedule.nextClass
 import com.example.ftnnavigation.schedule.rememberNow
 import com.example.ftnnavigation.schedule.selectionSummary
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 
 @Serializable data object HomeRoute
 @Serializable data object MapRoute
 @Serializable data object ScheduleRoute
 @Serializable data object NotificationsRoute
+
+/** Izmena događaja [eventId], ili novi događaj (eventId 0) za dan [date] (ISO). */
+@Serializable data class EventEditRoute(val eventId: Long = 0, val date: String? = null)
 
 /** Tabovi donje navigacione trake, redom kojim se prikazuju. */
 private enum class TopLevelDestination(
@@ -88,8 +93,9 @@ fun FtnApp() {
         // pa ovde ostaje samo prostor za donju traku.
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            // Podešavanja obaveštenja su podekran Početne - bez donje trake, nazad vraća na Početnu.
-            if (currentDestination?.hasRoute(NotificationsRoute::class) != true) {
+            // Podekrani (podešavanja obaveštenja, izmena događaja) su bez donje trake - nazad vraća odakle se došlo.
+            val isSubscreen = currentDestination?.run { hasRoute(NotificationsRoute::class) || hasRoute(EventEditRoute::class) } == true
+            if (!isSubscreen) {
                 NavigationBar {
                     // Podrazumevano je izabrani natpis u `secondary` (cijan), što na svetloj podlozi slabo čita.
                     val itemColors = NavigationBarItemDefaults.colors(
@@ -119,25 +125,52 @@ fun FtnApp() {
             composable<HomeRoute> {
                 val now by rememberNow()
                 val timetable = scheduleViewModel.selectedTimetable
-                val upcoming = nextClass(scheduleViewModel.myClasses, now)
+                val agenda = scheduleViewModel.agenda
+                val upcoming = agenda.next(now)
                 HomeScreen(
                     scheduleSummary = timetable?.let { selectionSummary(it, scheduleViewModel.selection?.group) },
                     upcoming = upcoming,
                     now = now,
-                    nextBuilding = upcoming?.let { mapViewModel.buildingNameOf(it.entry.room) },
-                    departure = upcoming?.let { mapViewModel.departureFor(it, scheduleViewModel.myClasses) },
+                    nextBuilding = upcoming?.place?.let { mapViewModel.buildingNameOf(it) },
+                    departure = upcoming?.let { mapViewModel.departureFor(it, agenda.on(it.date)) },
                     onOpenSchedule = { navController.navigateToTopLevel(ScheduleRoute) },
                     onOpenMap = { navController.navigateToTopLevel(MapRoute) },
                     onShowRoute = {
-                        mapViewModel.selectDestination(upcoming?.entry?.room)
+                        mapViewModel.selectDestination(upcoming?.place)
                         navController.navigateToTopLevel(MapRoute)
                     },
                     onOpenNotifications = { navController.navigate(NotificationsRoute) },
                 )
             }
             composable<MapRoute> { PocRoute(mapViewModel) }
-            composable<ScheduleRoute> { ScheduleScreen(scheduleViewModel) }
+            composable<ScheduleRoute> {
+                ScheduleScreen(
+                    scheduleViewModel,
+                    onAddEvent = { navController.navigate(EventEditRoute(date = it.toString())) },
+                    onEditEvent = { navController.navigate(EventEditRoute(eventId = it)) },
+                )
+            }
             composable<NotificationsRoute> { DepartureSettingsScreen(onBack = { navController.popBackStack() }) }
+            composable<EventEditRoute> { entry ->
+                val route = entry.toRoute<EventEditRoute>()
+                val event = scheduleViewModel.event(route.eventId)
+                val date = event?.localDate ?: route.date?.let(LocalDate::parse) ?: LocalDate.now()
+                EventEditScreen(
+                    event = event,
+                    initialDate = date,
+                    defaultUntil = scheduleViewModel.semesterEnd(date) ?: date.plusMonths(3),
+                    places = mapViewModel.placeOptions,
+                    onSave = {
+                        scheduleViewModel.saveEvent(it)
+                        navController.popBackStack()
+                    },
+                    onDelete = {
+                        scheduleViewModel.deleteEvent(it)
+                        navController.popBackStack()
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
         }
     }
 }

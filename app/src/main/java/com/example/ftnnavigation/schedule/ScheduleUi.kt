@@ -31,9 +31,13 @@ import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.events.UserEvent
+import com.example.ftnnavigation.ui.theme.ServiceOutline
 import kotlinx.coroutines.delay
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
@@ -68,13 +72,13 @@ private fun classTypeColor(type: ClassType): Color = when (type) {
     else -> MaterialTheme.colorScheme.secondary
 }
 
-/** "Danas · u toku", "Danas · za 25 min", "Sutra", "Sreda", ... */
+/** "Danas · u toku", "Danas · za 25 min", "Sutra", "Sreda", ... za stavku koja počinje [date] u [start]. */
 @Composable
-fun whenLabel(upcoming: UpcomingClass, now: LocalDateTime): String {
-    val daysAhead = ChronoUnit.DAYS.between(now.toLocalDate(), upcoming.date)
+fun whenLabel(date: LocalDate, start: LocalTime, now: LocalDateTime): String {
+    val daysAhead = ChronoUnit.DAYS.between(now.toLocalDate(), date)
     return when (daysAhead) {
         0L -> {
-            val minutes = Duration.between(now.toLocalTime(), upcoming.entry.startTime).toMinutes()
+            val minutes = Duration.between(now.toLocalTime(), start).toMinutes()
             val relative = when {
                 minutes <= 0 -> stringResource(R.string.when_ongoing)
                 minutes < 60 -> stringResource(R.string.when_in_minutes, minutes)
@@ -83,12 +87,13 @@ fun whenLabel(upcoming: UpcomingClass, now: LocalDateTime): String {
             "${stringResource(R.string.when_today)} · $relative"
         }
         1L -> stringResource(R.string.when_tomorrow)
-        in 2..6 -> dayName(upcoming.date.dayOfWeek.value)
-        else -> "${dayName(upcoming.date.dayOfWeek.value)}, ${upcoming.date.format(SHORT_DATE)}"
+        in 2..6 -> dayName(date.dayOfWeek.value)
+        else -> "${dayName(date.dayOfWeek.value)}, ${date.format(SHORT_DATE)}"
     }
 }
 
 val SHORT_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d. M.")
+val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 /** Sala sa ikonicom pina (kasnije: klik vodi na mapu/rutu do sale). */
 @Composable
@@ -165,6 +170,55 @@ fun ClassCard(entry: ClassEntry, showGroups: Boolean, modifier: Modifier = Modif
                     ) {
                         badges.forEach { Badge(it) }
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Kartica sopstvenog događaja; traka levo je topli ton (kao studentske službe na mapi - nije
+ * deo FTN rasporeda). Klik otvara izmenu.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun EventCard(event: UserEvent, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(
+                Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(ServiceOutline),
+            )
+            Column(
+                Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${event.start} – ${event.end}",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        stringResource(R.string.event_label),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(event.title, style = MaterialTheme.typography.titleMedium)
+                event.place?.let { RoomLabel(it) }
+                event.note?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (event.repeatWeekly) {
+                    val until = event.untilDate?.format(SHORT_DATE).orEmpty()
+                    FlowRow(Modifier.padding(top = 2.dp)) { Badge(stringResource(R.string.event_badge_weekly, until)) }
                 }
             }
         }

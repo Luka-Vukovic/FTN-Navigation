@@ -11,7 +11,7 @@ import android.content.pm.PackageManager
 import com.example.ftnnavigation.MainActivity
 import com.example.ftnnavigation.R
 
-/** Obaveštenje "kreni na čas"; sadržaj stiže u extras alarma (vidi [DepartureScheduler]). */
+/** Obaveštenje "kreni na čas / događaj"; sadržaj stiže u extras alarma (vidi [DepartureScheduler]). */
 object DepartureNotifications {
     const val EXTRA_CLASS = "class"
     const val EXTRA_ROUTE = "route"
@@ -61,7 +61,8 @@ object DepartureNotifications {
             context.getString(R.string.departure_title, extras.getStringExtra(EXTRA_LEAVE_AT))
         }
         val classLine = extras.getStringExtra(EXTRA_CLASS)
-        val routeLine = extras.getStringExtra(EXTRA_ROUTE)
+        // Događaj bez mesta nema red sa rutom.
+        val text = listOfNotNull(classLine, extras.getStringExtra(EXTRA_ROUTE)).joinToString("\n")
         val open = PendingIntent.getActivity(
             context,
             0,
@@ -73,7 +74,7 @@ object DepartureNotifications {
             .setColor(context.getColor(R.color.ftn_teal))
             .setContentTitle(title)
             .setContentText(classLine)
-            .setStyle(Notification.BigTextStyle().bigText("$classLine\n$routeLine"))
+            .setStyle(Notification.BigTextStyle().bigText(text))
             .setCategory(Notification.CATEGORY_REMINDER)
             .setContentIntent(open)
             .setAutoCancel(true)

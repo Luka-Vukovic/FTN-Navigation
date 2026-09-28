@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,31 +34,33 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.departure.Departure
+import com.example.ftnnavigation.departure.leaveByText
+import com.example.ftnnavigation.departure.routeText
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.ClassEntry
 import com.example.ftnnavigation.schedule.ClassType
 import com.example.ftnnavigation.schedule.Groups
 import com.example.ftnnavigation.schedule.RoomLabel
-import com.example.ftnnavigation.schedule.UpcomingClass
+import com.example.ftnnavigation.schedule.TIME_FORMAT
 import com.example.ftnnavigation.schedule.classTypeLabel
 import com.example.ftnnavigation.schedule.whenLabel
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * @param scheduleSummary npr. "4. godina · grupa 3 · ..."; null dok raspored nije izabran.
- * @param upcoming sledeći čas iz izabranog rasporeda (null ako nema ili nije izabran).
- * @param nextBuilding zgrada sale sledećeg časa (null ako se ne zna).
- * @param departure polazak na sledeći čas, isti kao u obaveštenju (iz sale prethodnog časa ili
- *   od glavnog ulaza); null = prethodni čas je u istoj sali.
+ * @param upcoming sledeći čas ili sopstveni događaj (null ako nema).
+ * @param nextBuilding zgrada njegovog mesta (null ako se ne zna).
+ * @param departure polazak, isti kao u obaveštenju (sa mesta prethodne stavke ili od glavnog
+ *   ulaza); null = prethodna stavka je na istom mestu.
  */
 @Composable
 fun HomeScreen(
     scheduleSummary: String?,
-    upcoming: UpcomingClass?,
+    upcoming: AgendaItem?,
     now: LocalDateTime,
     nextBuilding: String?,
     departure: Departure?,
@@ -107,7 +110,7 @@ fun HomeScreen(
                 when {
                     scheduleSummary == null -> CardBody(stringResource(R.string.home_next_class_empty))
                     upcoming == null -> CardBody(stringResource(R.string.home_no_upcoming))
-                    else -> NextClass(upcoming, now, nextBuilding, departure, onShowRoute)
+                    else -> NextItem(upcoming, now, nextBuilding, departure, onShowRoute)
                 }
             }
             HomeCard(
@@ -124,56 +127,59 @@ fun HomeScreen(
 }
 
 @Composable
-private fun NextClass(upcoming: UpcomingClass, now: LocalDateTime, building: String?, departure: Departure?, onShowRoute: () -> Unit) {
-    val entry = upcoming.entry
+private fun NextItem(item: AgendaItem, now: LocalDateTime, building: String?, departure: Departure?, onShowRoute: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            whenLabel(upcoming, now),
+            whenLabel(item.date, item.start, now),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
         )
-        Text(entry.subject, style = MaterialTheme.typography.titleLarge)
+        Text(item.title, style = MaterialTheme.typography.titleLarge)
+        val kind = when (item) {
+            is AgendaItem.Class -> classTypeLabel(item.entry.type)
+            is AgendaItem.Event -> stringResource(R.string.event_label)
+        }
         Text(
-            "${entry.start} – ${entry.end} · ${classTypeLabel(entry.type)}",
+            "${item.start.format(TIME_FORMAT)} – ${item.end.format(TIME_FORMAT)} · $kind",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        RoomLabel(if (building != null) "${entry.room} · $building" else entry.room, Modifier.padding(top = 2.dp))
-        val route = departure?.route
-        if (route == null) {
+        // Događaj bez mesta nema ni rutu.
+        val place = item.place ?: return@Column
+        RoomLabel(if (building != null && building != place) "$place · $building" else place, Modifier.padding(top = 2.dp))
+        if (departure?.route == null) {
+            val note = when {
+                departure != null -> R.string.route_not_on_map
+                item is AgendaItem.Class -> R.string.home_same_room
+                else -> R.string.home_same_place
+            }
             Text(
-                stringResource(if (departure == null) R.string.home_same_room else R.string.route_not_on_map),
+                stringResource(note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            RouteEstimate(departure, route, now, onShowRoute)
+            RouteEstimate(departure, now, onShowRoute)
         }
     }
 }
 
 /**
- * Trajanje rute (od glavnog ulaza ili iz sale prethodnog časa) i, za današnji čas koji nije
- * počeo, najkasnije vreme polaska - isto kao u obaveštenju.
+ * Trajanje rute (od glavnog ulaza ili sa mesta prethodne stavke) i, za današnju stavku koja
+ * nije počela, najkasnije vreme polaska - isto kao u obaveštenju.
  */
 @Composable
-private fun RouteEstimate(departure: Departure, route: Route, now: LocalDateTime, onShowRoute: () -> Unit) {
-    val from = departure.fromRoom
-    val leaveAt = departure.leaveAt.format(TIME_FORMAT)
+private fun RouteEstimate(departure: Departure, now: LocalDateTime, onShowRoute: () -> Unit) {
+    val res = LocalResources.current
     val deadline = when {
-        departure.date != now.toLocalDate() || !departure.classStart.isAfter(now) -> null
+        departure.date != now.toLocalDate() || !departure.startAt.isAfter(now) -> null
         !now.isBefore(departure.leaveAt) -> stringResource(R.string.home_route_go_now)
-        from == null -> stringResource(R.string.home_route_enter_by, leaveAt)
-        else -> stringResource(R.string.home_route_leave_room_by, from, leaveAt)
+        else -> departure.leaveByText(res)
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
-                if (from == null) {
-                    stringResource(R.string.home_route_from_entrance, route.minutes)
-                } else {
-                    stringResource(R.string.home_route_from_room, from, route.minutes)
-                },
+                departure.routeText(res).orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -186,8 +192,6 @@ private fun RouteEstimate(departure: Departure, route: Route, now: LocalDateTime
         }
     }
 }
-
-private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 private fun CardBody(text: String) {
@@ -260,13 +264,12 @@ private fun HomeScreenPreview() {
     FTNNavigationTheme {
         HomeScreen(
             scheduleSummary = "4. godina · grupa 3 · Softversko inženjerstvo i informacione tehnologije",
-            upcoming = UpcomingClass(entry, date),
+            upcoming = AgendaItem.Class(entry, date),
             now = now,
             nextBuilding = "Naučno-tehnološki park",
             departure = Departure(
-                entry = entry,
-                date = date,
-                fromRoom = null,
+                item = AgendaItem.Class(entry, date),
+                from = null,
                 route = Route(emptyList(), durationSec = 240.0, lengthM = 310.0),
                 leaveAt = date.atTime(10, 11),
                 notifyAt = date.atTime(10, 6),

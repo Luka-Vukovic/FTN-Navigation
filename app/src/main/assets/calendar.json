@@ -1,0 +1,38 @@
+{
+  "year": "2026/2027",
+  "source": "Kalendar izvođenja nastave u školskoj 2026/2027, FTN (ručno prepisano)",
+  "semesters": [
+    { "kind": "ZIMSKI", "start": "2026-09-28", "end": "2027-01-17" },
+    { "kind": "LETNJI", "start": "2027-02-08", "end": "2027-06-06" }
+  ],
+  "days": [
+    { "from": "2026-11-07", "to": "2026-11-08", "type": "DODATNI_ROK", "name": "Dodatni ispitni rok" },
+    { "from": "2026-11-11", "type": "NERADNI", "name": "Dan primirja u Prvom svetskom ratu" },
+    { "from": "2026-11-14", "type": "NADOKNADA", "asDay": 3, "name": "Nadoknada za 11. 11." },
+    { "from": "2026-12-12", "to": "2026-12-13", "type": "DODATNI_ROK", "name": "Dodatni ispitni rok" },
+    { "from": "2026-12-25", "type": "BEZ_NASTAVE", "name": "Prvi dan Božića" },
+    { "from": "2026-12-28", "type": "INFO", "name": "Overa zimskog semestra" },
+    { "from": "2027-01-01", "to": "2027-01-02", "type": "NERADNI", "name": "Nova godina" },
+    { "from": "2027-01-04", "type": "NADOKNADA", "asDay": 5, "name": "Nadoknada za 25. 12." },
+    { "from": "2027-01-05", "type": "NADOKNADA", "asDay": 5, "name": "Nadoknada za 8. 1." },
+    { "from": "2027-01-06", "to": "2027-01-08", "type": "BEZ_NASTAVE", "name": "Božićni praznici" },
+    { "from": "2027-01-07", "type": "NERADNI", "name": "Božić" },
+    { "from": "2027-01-18", "to": "2027-02-07", "type": "ISPITNI_ROK", "name": "Januarsko-februarski ispitni rok" },
+    { "from": "2027-02-15", "to": "2027-02-16", "type": "NERADNI", "name": "Dan državnosti" },
+    { "from": "2027-02-20", "type": "NADOKNADA", "asDay": 1, "name": "Nadoknada za 15. 2." },
+    { "from": "2027-02-27", "type": "NADOKNADA", "asDay": 2, "name": "Nadoknada za 16. 2." },
+    { "from": "2027-03-13", "to": "2027-03-14", "type": "DODATNI_ROK", "name": "Dodatni ispitni rok" },
+    { "from": "2027-03-24", "type": "NADOKNADA", "asDay": 5, "name": "Nadoknada za 26. 3." },
+    { "from": "2027-03-25", "type": "NADOKNADA", "asDay": 1, "name": "Nadoknada za 29. 3." },
+    { "from": "2027-03-26", "to": "2027-03-29", "type": "BEZ_NASTAVE", "name": "Uskršnji praznici" },
+    { "from": "2027-04-05", "to": "2027-04-11", "type": "ISPITNI_ROK", "name": "Aprilski ispitni rok" },
+    { "from": "2027-04-30", "to": "2027-05-03", "type": "NERADNI", "name": "Vaskršnji praznici" },
+    { "from": "2027-05-01", "to": "2027-05-04", "type": "NERADNI", "name": "Praznik rada" },
+    { "from": "2027-05-15", "to": "2027-05-16", "type": "DODATNI_ROK", "name": "Dodatni ispitni rok" },
+    { "from": "2027-05-24", "type": "INFO", "name": "Overa letnjeg semestra" },
+    { "from": "2027-06-07", "to": "2027-07-04", "type": "ISPITNI_ROK", "name": "Junsko-julski ispitni rok" },
+    { "from": "2027-08-23", "to": "2027-09-12", "type": "ISPITNI_ROK", "name": "Avgustovsko-septembarski ispitni rok" },
+    { "from": "2027-09-13", "to": "2027-09-26", "type": "ISPITNI_ROK", "name": "Dodatni septembarski ispitni rokovi" },
+    { "from": "2027-09-27", "to": "2027-10-01", "type": "INFO", "name": "Rangiranje studenata za upis u više godine" }
+  ]
+}

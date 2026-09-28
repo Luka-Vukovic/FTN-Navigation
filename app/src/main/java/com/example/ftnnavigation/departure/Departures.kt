@@ -1,7 +1,7 @@
 package com.example.ftnnavigation.departure
 
 import com.example.ftnnavigation.graph.Route
-import com.example.ftnnavigation.schedule.ClassEntry
+import com.example.ftnnavigation.schedule.AgendaItem
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -9,39 +9,40 @@ import java.time.LocalDateTime
 const val DEPARTURE_MARGIN_MIN = 5L
 
 /**
- * Polazak na čas. [leaveAt] = najkasnije vreme polaska (početak časa - trajanje rute), kao na
- * Početnoj; [notifyAt] = kad stiže obaveštenje (rezerva ranije, ali ne pre kraja prethodnog
- * časa). [fromRoom] null = od glavnog ulaza, inače iz sale prethodnog časa istog dana.
- * [route] null = sala nije na mapi, pa je obaveštenje samo podsetnik pred početak.
+ * Polazak na čas ili događaj [item]. [leaveAt] = najkasnije vreme polaska (početak - trajanje
+ * rute), kao na Početnoj; [notifyAt] = kad stiže obaveštenje (rezerva ranije, ali ne pre kraja
+ * prethodne stavke). [from] = prethodna stavka istog dana odakle ide ruta (null = od glavnog
+ * ulaza). [route] null = mesto nije na mapi (ili ga nema), pa je obaveštenje samo podsetnik.
  */
 data class Departure(
-    val entry: ClassEntry,
-    val date: LocalDate,
-    val fromRoom: String?,
+    val item: AgendaItem,
+    val from: AgendaItem?,
     val route: Route?,
     val leaveAt: LocalDateTime,
     val notifyAt: LocalDateTime,
 ) {
-    val classStart: LocalDateTime get() = date.atTime(entry.startTime)
+    val date: LocalDate get() = item.date
+    val startAt: LocalDateTime get() = item.startAt
 }
 
 /**
- * Prvi polazak čije obaveštenje stiže posle [after]. [route] daje rutu između dve sale iz
- * rasporeda (fromRoom null = od glavnog ulaza), ili null ako se neka od njih ne zna.
+ * Prvi polazak čije obaveštenje stiže posle [after]. [agenda] daje stavke dana, [route] rutu
+ * između dva mesta (fromPlace null = od glavnog ulaza), ili null ako se neko od njih ne zna.
+ * Događaji sa isključenim obaveštenjem se preskaču, ali i dalje mogu biti mesto polaska.
  */
 fun nextDeparture(
-    classes: List<ClassEntry>,
+    agenda: (LocalDate) -> List<AgendaItem>,
     after: LocalDateTime,
-    route: (fromRoom: String?, toRoom: String) -> Route?,
+    route: (fromPlace: String?, toPlace: String) -> Route?,
     marginMin: Long = DEPARTURE_MARGIN_MIN,
     horizonDays: Int = 120,
 ): Departure? {
     for (offset in 0..horizonDays) {
-        val date = after.toLocalDate().plusDays(offset.toLong())
-        val day = classes.filter { it.occursOn(date) }
-        // Obaveštenja istog dana ne moraju da idu redom časova (duža ruta, kraj prethodnog časa).
+        val day = agenda(after.toLocalDate().plusDays(offset.toLong()))
+        // Obaveštenja istog dana ne moraju da idu redom (duža ruta, kraj prethodne stavke).
         val first = day
-            .mapNotNull { departureOnDay(it, date, day, route, marginMin) }
+            .filter { it.notifies }
+            .mapNotNull { departureFor(it, day, route, marginMin) }
             .filter { it.notifyAt.isAfter(after) }
             .minByOrNull { it.notifyAt }
         if (first != null) return first
@@ -50,38 +51,27 @@ fun nextDeparture(
 }
 
 /**
- * Polazak na čas [entry] dana [date] (isto računanje kao za obaveštenje - Početna ga
- * prikazuje), ili null ako je prethodni čas u istoj sali, pa nema kuda da se ide.
+ * Polazak na [item] (isto računanje kao za obaveštenje - Početna ga prikazuje), ili null ako
+ * je prethodna stavka na istom mestu, pa nema kuda da se ide. [day] = stavke tog dana.
  */
 fun departureFor(
-    entry: ClassEntry,
-    date: LocalDate,
-    classes: List<ClassEntry>,
-    route: (fromRoom: String?, toRoom: String) -> Route?,
+    item: AgendaItem,
+    day: List<AgendaItem>,
+    route: (fromPlace: String?, toPlace: String) -> Route?,
     marginMin: Long = DEPARTURE_MARGIN_MIN,
-): Departure? = departureOnDay(entry, date, classes.filter { it.occursOn(date) }, route, marginMin)
-
-/** [day] = časovi tog dana. */
-private fun departureOnDay(
-    entry: ClassEntry,
-    date: LocalDate,
-    day: List<ClassEntry>,
-    route: (fromRoom: String?, toRoom: String) -> Route?,
-    marginMin: Long,
 ): Departure? {
-    // Prethodni čas: poslednji završen do početka ovog (izborni časovi mogu da se preklapaju).
-    val previous = day.filter { it !== entry && it.endTime <= entry.startTime }.maxByOrNull { it.endTime }
-    if (previous?.room == entry.room) return null // već si u sali
+    // Prethodna stavka sa mestom: poslednja završena do početka ove (izborni časovi mogu da se preklapaju).
+    val previous = day.filter { it != item && it.place != null && it.end <= item.start }.maxByOrNull { it.end }
+    val place = item.place
+    if (place != null && previous?.place == place) return null // već si tu
 
-    // Ako se ne zna gde je prethodna sala, ruta ide od glavnog ulaza.
-    val fromRoute = previous?.let { route(it.room, entry.room) }
-    val fromRoom = if (fromRoute != null) previous?.room else null
-    val chosen = fromRoute ?: route(null, entry.room)
+    // Ako se ne zna gde je prethodno mesto, ruta ide od glavnog ulaza.
+    val fromRoute = previous?.place?.let { route(it, place ?: return@let null) }
+    val chosen = fromRoute ?: place?.let { route(null, it) }
 
-    val start = date.atTime(entry.startTime)
-    val leaveAt = start.minusMinutes(chosen?.minutes?.toLong() ?: 0)
+    val leaveAt = item.startAt.minusMinutes(chosen?.minutes?.toLong() ?: 0)
     var notifyAt = leaveAt.minusMinutes(marginMin)
-    // Obaveštenje usred prethodnog časa ne pomaže - stiže kad se čas završi.
-    if (previous != null) notifyAt = maxOf(notifyAt, date.atTime(previous.endTime))
-    return Departure(entry, date, fromRoom, chosen, leaveAt, notifyAt)
+    // Obaveštenje usred prethodne stavke ne pomaže - stiže kad se ona završi.
+    if (previous != null) notifyAt = maxOf(notifyAt, item.date.atTime(previous.end))
+    return Departure(item, if (fromRoute != null) previous else null, chosen, leaveAt, notifyAt)
 }

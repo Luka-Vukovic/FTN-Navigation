@@ -11,19 +11,17 @@ import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
 import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
+import com.example.ftnnavigation.schedule.TIME_FORMAT
 import com.example.ftnnavigation.schedule.ScheduleStore
-import com.example.ftnnavigation.schedule.classesFor
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
- * Zakazuje jedan alarm - za sledeći polazak ([nextDeparture]). Kad alarm okine,
- * [DepartureAlarmReceiver] prikaže obaveštenje i zakaže sledeći. Ponovo se zakazuje i pri
- * pokretanju aplikacije, promeni izbora rasporeda, restartu telefona i promeni vremena.
+ * Zakazuje jedan alarm - za sledeći polazak na čas ili događaj ([nextDeparture]). Kad alarm
+ * okine, [DepartureAlarmReceiver] prikaže obaveštenje i zakaže sledeći. Ponovo se zakazuje i
+ * pri pokretanju aplikacije, promeni izbora rasporeda ili događaja, restartu telefona i
+ * promeni vremena.
  */
 object DepartureScheduler {
     /** Bez dozvole za tačne alarme obaveštenje stiže u ovom prozoru pre [Departure.notifyAt]. */
@@ -62,7 +60,7 @@ object DepartureScheduler {
         }
     }
 
-    /** Polazak za koji je zakazan alarm (null ako nema časova), za prikaz u podešavanjima. */
+    /** Polazak za koji je zakazan alarm (null ako nema časova ni događaja), za prikaz u podešavanjima. */
     suspend fun upcoming(context: Context): Departure? =
         next(context.applicationContext, scheduledAfter(context))?.first
 
@@ -81,17 +79,17 @@ object DepartureScheduler {
     private fun scheduledAfter(context: Context): Long =
         maxOf(System.currentTimeMillis(), prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0))
 
-    /** Sledeći polazak posle [afterMs] i naziv zgrade njegove sale (null ako se ne zna). */
+    /** Sledeći polazak posle [afterMs] i naziv zgrade njegovog mesta (null ako se ne zna). */
     private suspend fun next(context: Context, afterMs: Long): Pair<Departure, String?>? {
         val after = LocalDateTime.ofInstant(Instant.ofEpochMilli(afterMs), ZoneId.systemDefault())
-        val store = ScheduleStore(context)
-        val classes = withContext(Dispatchers.IO) { store.loadData() }.classesFor(store.loadSelection())
+        val agenda = ScheduleStore(context).loadAgenda()
         val campus = loadCampus(context)
         val graph = loadGraph(context, campus)
-        val departure = nextDeparture(classes, after, route = { from, to -> routeBetween(graph, campus, from, to) })
+        val departure = nextDeparture(agenda::on, after, route = { from, to -> routeBetween(graph, campus, from, to) })
             ?: return null
-        val building = resolveTarget(departure.entry.room, graph, campus)?.building?.name
-            ?: buildingOfRoom(departure.entry.room)?.let { campus.building(it)?.name }
+        val building = departure.item.place?.let { place ->
+            resolveTarget(place, graph, campus)?.building?.name ?: buildingOfRoom(place)?.let { campus.building(it)?.name }
+        }
         return departure to building
     }
 
@@ -104,21 +102,13 @@ object DepartureScheduler {
 
     /** Tekst obaveštenja se sastavlja pri zakazivanju, pa receiver ne mora ponovo da računa rutu. */
     private fun content(context: Context, departure: Departure, building: String?, zone: ZoneId): Intent {
-        val entry = departure.entry
-        val room = if (building != null) "${entry.room} · $building" else entry.room
-        val route = departure.route
-        val routeLine = when {
-            route == null -> context.getString(R.string.route_not_on_map)
-            departure.fromRoom == null -> context.getString(R.string.home_route_from_entrance, route.minutes)
-            else -> context.getString(R.string.departure_from_room, departure.fromRoom, route.minutes)
-        }
         return Intent()
-            .putExtra(DepartureNotifications.EXTRA_CLASS, "${entry.subject} · ${entry.start} · $room")
-            .putExtra(DepartureNotifications.EXTRA_ROUTE, routeLine)
+            .putExtra(DepartureNotifications.EXTRA_CLASS, departure.item.summary(building))
+            .putExtra(DepartureNotifications.EXTRA_ROUTE, departure.routeText(context.resources))
             .putExtra(DepartureNotifications.EXTRA_LEAVE_AT, departure.leaveAt.format(TIME_FORMAT))
             .putExtra(DepartureNotifications.EXTRA_LEAVE_AT_MS, departure.leaveAt.toEpochMilli(zone))
             .putExtra(DepartureNotifications.EXTRA_NOTIFY_AT_MS, departure.notifyAt.toEpochMilli(zone))
-            .putExtra(DepartureNotifications.EXTRA_CLASS_START_MS, departure.classStart.toEpochMilli(zone))
+            .putExtra(DepartureNotifications.EXTRA_CLASS_START_MS, departure.startAt.toEpochMilli(zone))
     }
 
     /** Uvek isti PendingIntent (extras se ne porede), pa novi alarm zamenjuje stari. */
@@ -131,5 +121,4 @@ object DepartureScheduler {
 
     private fun LocalDateTime.toEpochMilli(zone: ZoneId): Long = atZone(zone).toInstant().toEpochMilli()
 
-    private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm")
 }
