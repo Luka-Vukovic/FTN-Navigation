@@ -29,7 +29,7 @@ class ScheduleModelsTest {
     fun siit7_matchesPdf() {
         // Strana 5 PDF-a: 30 časova, grupe 1-5.
         assertEquals(30, siit7.classes.size)
-        // Mora da se poklapa sa DEFAULT_SELECTION u ScheduleStore.
+        // Id se čuva u izboru korisnika (ScheduleStore) - promena formata briše sačuvane izbore.
         assertEquals("softversko-inzenjerstvo-i-informacione-tehnologije|OAS|7|", siit7.id)
         assertEquals(4, siit7.year)
         assertEquals(listOf(1, 2, 3, 4, 5), siit7.groupNumbers)

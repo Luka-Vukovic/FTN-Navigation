@@ -38,10 +38,19 @@ class ScheduleStore(context: Context) {
 
     private fun readAsset(name: String): String = context.assets.open(name).bufferedReader().use { it.readText() }
 
+    /** Izabrani raspored, ili null ako izbora nema (uvodni ekran preskočen ili još nije prikazan). */
     fun loadSelection(): ScheduleSelection? {
-        val id = prefs.getString(KEY_TIMETABLE, null) ?: return DEFAULT_SELECTION
+        val id = prefs.getString(KEY_TIMETABLE, null) ?: return null
         val group = if (prefs.contains(KEY_GROUP)) prefs.getInt(KEY_GROUP, 0) else null
         return ScheduleSelection(id, group)
+    }
+
+    /** Uvodni ekran se prikazuje dok raspored nije izabran ili dok se izbor ne preskoči. */
+    fun needsOnboarding(): Boolean = !prefs.contains(KEY_TIMETABLE) && !prefs.getBoolean(KEY_ONBOARDING_SKIPPED, false)
+
+    /** Izbor preskočen na uvodnom ekranu (npr. smer nije na listi); može se izabrati kasnije na Rasporedu. */
+    fun skipOnboarding() {
+        prefs.edit { putBoolean(KEY_ONBOARDING_SKIPPED, true) }
     }
 
     fun saveSelection(selection: ScheduleSelection) {
@@ -56,13 +65,8 @@ class ScheduleStore(context: Context) {
         const val CALENDAR_ASSET = "calendar.json"
         const val KEY_TIMETABLE = "timetable_id"
         const val KEY_GROUP = "group"
+        const val KEY_ONBOARDING_SKIPPED = "onboarding_skipped"
 
-        // Dok ne postoji uvodni ekran za izbor: SIIT, 4. godina (7. semestar), grupa 3.
-        // TODO: ukloniti kad se doda onboarding - tada bez izbora ide prazno stanje.
-        val DEFAULT_SELECTION = ScheduleSelection(
-            timetableId = "softversko-inzenjerstvo-i-informacione-tehnologije|OAS|7|",
-            group = 3,
-        )
         val json = Json { ignoreUnknownKeys = true }
     }
 }

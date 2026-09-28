@@ -92,12 +92,16 @@
     <string name="selection_level">Nivo studija</string>
     <string name="selection_level_oas">Osnovne</string>
     <string name="selection_level_mas">Master</string>
-    <string name="selection_program">Studijski program</string>
-    <string name="selection_year">Godina</string>
+    <string name="selection_program">Studijski program</string>    <string name="selection_year">Godina</string>
     <string name="selection_module">Modul / stručna oblast</string>
     <string name="selection_group">Grupa</string>
     <string name="selection_group_all">Sve</string>
     <string name="selection_save">Sačuvaj</string>
+    <string name="onboarding_title">Dobro došli!</string>
+    <string name="onboarding_body">Izaberi smer, godinu i grupu. Na Početnoj ćeš videti gde ti je sledeći čas, a aplikacija će ti javiti kad je vreme da kreneš.</string>
+    <string name="onboarding_start">Počni</string>
+    <string name="onboarding_skip">Preskoči</string>
+    <string name="onboarding_hint">Raspored možeš da izabereš ili promeniš i kasnije, na ekranu Raspored.</string>
 
     <!-- PoC ekran -->
     <string name="poc_title">Mapa</string>

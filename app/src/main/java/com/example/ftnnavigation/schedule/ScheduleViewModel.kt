@@ -32,6 +32,10 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
     var selection by mutableStateOf(store.loadSelection())
         private set
 
+    /** Prvo pokretanje: raspored još nije izabran, a izbor nije ni preskočen. */
+    var needsOnboarding by mutableStateOf(store.needsOnboarding())
+        private set
+
     /** Sopstveni događaji; prate bazu. */
     var events by mutableStateOf<List<UserEvent>>(emptyList())
         private set
@@ -65,6 +69,12 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
         val selection = ScheduleSelection(timetable.id, group)
         this.selection = selection
         store.saveSelection(selection)
+        needsOnboarding = false
+    }
+
+    fun skipOnboarding() {
+        store.skipOnboarding()
+        needsOnboarding = false
     }
 
     fun event(id: Long): UserEvent? = events.find { it.id == id }

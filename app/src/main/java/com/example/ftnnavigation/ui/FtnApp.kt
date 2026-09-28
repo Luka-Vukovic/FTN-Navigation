@@ -38,6 +38,7 @@ import com.example.ftnnavigation.departure.DepartureScheduler
 import com.example.ftnnavigation.departure.DepartureSettingsScreen
 import com.example.ftnnavigation.events.EventEditScreen
 import com.example.ftnnavigation.home.HomeScreen
+import com.example.ftnnavigation.onboarding.OnboardingScreen
 import com.example.ftnnavigation.poc.PocRoute
 import com.example.ftnnavigation.poc.PocViewModel
 import com.example.ftnnavigation.schedule.ScheduleScreen
@@ -86,6 +87,16 @@ fun FtnApp() {
     val scheduleViewModel: ScheduleViewModel = viewModel()
     val mapViewModel: PocViewModel = viewModel()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
+
+    // Prvo pokretanje: izbor rasporeda pre svega ostalog (i pre pitanja za obaveštenja).
+    if (scheduleViewModel.needsOnboarding) {
+        OnboardingScreen(
+            data = scheduleViewModel.data,
+            onSave = scheduleViewModel::select,
+            onSkip = scheduleViewModel::skipOnboarding,
+        )
+        return
+    }
     DepartureNotificationsEffect(scheduleViewModel.selection)
 
     Scaffold(
