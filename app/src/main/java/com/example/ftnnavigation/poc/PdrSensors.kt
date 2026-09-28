@@ -10,48 +10,60 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import kotlin.math.abs
 
 /**
  * Kači PDR senzore dok je ekran u RESUMED stanju (u pozadini se odjavljuju):
  * - TYPE_ROTATION_VECTOR uvek, da se smer vidi i pre starta,
  * - TYPE_ACCELEROMETER + [AccelStepDetector] samo kad je [trackSteps] true.
  *
- * [onAzimuth] dobija azimut u stepenima (0..360, 0 = sever, u smeru kazaljke).
+ * Oba senzora idu u [direction] (smer hoda, ne pravac telefona). [onHeading] dobija smer za
+ * prikaz, a [onStep] smer hoda koraka - azimut u stepenima (0..360, 0 = sever, u smeru kazaljke).
  */
 @Composable
 fun PdrSensorsEffect(
     trackSteps: Boolean,
-    onAzimuth: (Float) -> Unit,
-    onStep: () -> Unit,
+    direction: WalkingDirection,
+    onHeading: (Float) -> Unit,
+    onStep: (Float) -> Unit,
 ) {
     val context = LocalContext.current
     val sensorManager = remember(context) { context.getSystemService(SensorManager::class.java) }
-    val currentOnAzimuth by rememberUpdatedState(onAzimuth)
+    val currentOnHeading by rememberUpdatedState(onHeading)
     val currentOnStep by rememberUpdatedState(onStep)
 
-    LifecycleResumeEffect(sensorManager, trackSteps) {
+    LifecycleResumeEffect(sensorManager, direction, trackSteps) {
         val rotationMatrix = FloatArray(9)
-        val orientation = FloatArray(3)
-        val stepDetector = AccelStepDetector { currentOnStep() }
+        var lastHeading = Float.NaN
+        var lastAccelNs = 0L
+        val stepDetector = AccelStepDetector { direction.onStep(lastAccelNs)?.let(currentOnStep) }
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 when (event.sensor.type) {
                     Sensor.TYPE_ROTATION_VECTOR -> {
                         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                        SensorManager.getOrientation(rotationMatrix, orientation)
-                        currentOnAzimuth(normalizeDeg(Math.toDegrees(orientation[0].toDouble()).toFloat()))
+                        direction.onRotation(rotationMatrix, event.timestamp)
+                        // Senzor javlja ~50 puta u sekundi - prikaz se osvežava tek na promenu od 1°.
+                        val heading = direction.heading() ?: return
+                        if (lastHeading.isNaN() || abs(angleDiffDeg(heading, lastHeading)) >= 1f) {
+                            lastHeading = heading
+                            currentOnHeading(heading)
+                        }
                     }
-                    Sensor.TYPE_ACCELEROMETER -> stepDetector.onAccelerometer(
-                        event.values[0], event.values[1], event.values[2], event.timestamp,
-                    )
+                    Sensor.TYPE_ACCELEROMETER -> {
+                        lastAccelNs = event.timestamp
+                        direction.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
+                        stepDetector.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
+                    }
                 }
             }
 
             override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
         }
 
+        // GAME (~50 Hz) i za orijentaciju: ubrzanje se okreće u koordinate sveta uzorak po uzorak.
         sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)?.let {
-            sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME)
         }
         if (trackSteps) {
             sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
@@ -65,3 +77,6 @@ fun PdrSensorsEffect(
 
 /** Svodi ugao na opseg 0..360. */
 fun normalizeDeg(deg: Float): Float = (deg % 360f + 360f) % 360f
+
+/** Razlika uglova [a] - [b] svedena na -180..180. */
+fun angleDiffDeg(a: Float, b: Float): Float = ((a - b) % 360f + 540f) % 360f - 180f

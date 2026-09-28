@@ -111,6 +111,9 @@
     <string name="poc_stat_heading">Smer</string>
     <string name="poc_stat_distance">Pređeno</string>
     <string name="poc_heading_value">%1$d°</string>
+    <string name="poc_stat_phone_offset">Telefon</string>
+    <string name="poc_phone_offset_value">%1$+d°</string>
+    <string name="poc_phone_offset_settling">…</string>
     <string name="poc_distance_value">%1$.1f m</string>
     <string name="poc_set_start">Postavi start</string>
     <string name="poc_cancel">Otkaži</string>

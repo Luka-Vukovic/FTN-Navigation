@@ -38,6 +38,8 @@ data class PocUiState(
     /** PDR pozicija zalepljena za graf; null dok se graf učitava. */
     val match: MatchedPosition? = null,
     val headingDeg: Float = 0f,
+    /** Odstupanje telefona od pravca hoda (-180..180); null dok se premešten telefon smiruje. */
+    val phoneOffsetDeg: Float? = 0f,
     val steps: Int = 0,
     val stepLengthM: Float = 0.7f, // TODO: kalibrisati merenjem 20 m + brojanjem koraka
     val isTracking: Boolean = false,
@@ -77,6 +79,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     var mode by mutableStateOf(MapMode.ZGRADA)
         private set
+
+    /** Smer hoda iz senzora (ne pravac telefona); na Start se pretpostavlja telefon u ruci. */
+    val walkingDirection = WalkingDirection()
 
     /** Naziv sale (kao u rasporedu) ili zgrade; čuva se i dok se graf još učitava. */
     var destination by mutableStateOf<String?>(null)
@@ -157,15 +162,19 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         this.mode = mode
     }
 
-    fun onAzimuth(azimuth: Float) {
-        state = state.copy(headingDeg = normalizeDeg(azimuth - PLAN_UP_AZIMUTH_DEG))
+    /** Smer za prikaz (azimut iz [walkingDirection]). */
+    fun onHeading(azimuth: Float) {
+        state = state.copy(
+            headingDeg = normalizeDeg(azimuth - PLAN_UP_AZIMUTH_DEG),
+            phoneOffsetDeg = walkingDirection.offset.toFloat().takeIf { walkingDirection.isAnchored },
+        )
     }
 
-    /** Pomera poziciju za jedan korak u trenutnom smeru; pozicija na grafu prati korak. */
-    fun onStep() {
+    /** Pomera poziciju za jedan korak u smeru hoda [azimuth]; pozicija na grafu prati korak. */
+    fun onStep(azimuth: Float) {
         val raw = state.rawPosition ?: return
         val planScale = graph?.placement(PlaceholderGraph.BUILDING_ID)?.scale ?: return
-        val rad = Math.toRadians(state.headingDeg.toDouble())
+        val rad = Math.toRadians((azimuth - PLAN_UP_AZIMUTH_DEG).toDouble())
         val dxM = state.stepLengthM * sin(rad)
         val dyM = -state.stepLengthM * cos(rad)
         val nextRaw = Offset(
@@ -187,11 +196,14 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleTracking() {
+        // Start se pritiska sa telefonom u ruci - odstupanje od pravca hoda se uči iznova.
+        if (!state.isTracking) walkingDirection.reset()
         state = state.copy(isTracking = !state.isTracking)
     }
 
     // Smer se zadržava - dolazi sa senzora, nije deo sesije praćenja.
     fun reset() {
-        state = PocUiState(headingDeg = state.headingDeg)
+        walkingDirection.reset()
+        state = PocUiState(headingDeg = state.headingDeg, phoneOffsetDeg = 0f)
     }
 }

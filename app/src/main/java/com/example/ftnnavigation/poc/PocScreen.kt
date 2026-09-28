@@ -78,15 +78,17 @@ import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
+import kotlin.math.roundToInt
 
-/** Ekran Mapa: kači PDR senzore (akcelerometar za korake, TYPE_ROTATION_VECTOR za smer). */
+/** Ekran Mapa: kači PDR senzore (akcelerometar za korake i osu hoda, TYPE_ROTATION_VECTOR za smer). */
 @Composable
 fun PocRoute(viewModel: PocViewModel = viewModel()) {
     val state = viewModel.state
 
     PdrSensorsEffect(
         trackSteps = state.isTracking,
-        onAzimuth = viewModel::onAzimuth,
+        direction = viewModel.walkingDirection,
+        onHeading = viewModel::onHeading,
         onStep = viewModel::onStep,
     )
 
@@ -560,6 +562,11 @@ private fun ControlPanel(
                 StatItem(
                     stringResource(R.string.poc_stat_heading),
                     stringResource(R.string.poc_heading_value, state.headingDeg.toInt()),
+                )
+                StatItem(
+                    stringResource(R.string.poc_stat_phone_offset),
+                    state.phoneOffsetDeg?.let { stringResource(R.string.poc_phone_offset_value, it.roundToInt()) }
+                        ?: stringResource(R.string.poc_phone_offset_settling),
                 )
                 StatItem(
                     stringResource(R.string.poc_stat_distance),
