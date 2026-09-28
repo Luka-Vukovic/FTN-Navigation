@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
@@ -36,13 +37,18 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ftnnavigation.campus.BuildingCategory
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.CampusPoint
+import com.example.ftnnavigation.campus.LabelSide
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.PointM
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.ui.theme.OnService
+import com.example.ftnnavigation.ui.theme.ServiceFill
+import com.example.ftnnavigation.ui.theme.ServiceOutline
 
 // Širine u metrima - rastu sa zumom, kao na pravoj mapi.
 private const val STREET_WIDTH_M = 6f
@@ -50,7 +56,7 @@ private const val PATH_WIDTH_M = 1.5f
 
 /**
  * Spoljna mapa kampusa (OpenStreetMap): okolne zgrade, ulice i staze za orijentaciju, FTN
- * zgrade sa natpisima, spojni prolazi, ulazi i ruta. [position] je PDR pozicija relativno na
+ * zgrade i studentske službe (toplim tonom) sa natpisima, spojni prolazi, ulazi i ruta. [position] je PDR pozicija relativno na
  * plan Nastavnog bloka - preslikava se u kampus preko smeštaja plana.
  */
 @Composable
@@ -67,7 +73,6 @@ fun CampusMap(
     val colors = MaterialTheme.colorScheme
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium.copy(
-        color = colors.onPrimaryContainer,
         fontWeight = FontWeight.SemiBold,
         lineHeight = TextUnit.Unspecified,
     )
@@ -102,17 +107,26 @@ fun CampusMap(
                     .drawWithCache {
                         val m = size.width / campus.widthM // px po metru
                         fun CampusPoint.toPx() = Offset(this[0] * m, this[1] * m)
-                        fun polyline(points: List<CampusPoint>, close: Boolean) = Path().apply {
+                        fun Path.addLine(points: List<CampusPoint>, close: Boolean) {
                             points.forEachIndexed { i, p ->
                                 val o = p.toPx()
                                 if (i == 0) moveTo(o.x, o.y) else lineTo(o.x, o.y)
                             }
                             if (close) close()
                         }
-                        val context = campus.context.map { polyline(it, close = true) }
-                        val streets = campus.streets.map { polyline(it, close = false) }
-                        val paths = campus.paths.map { polyline(it, close = false) }
-                        val buildings = campus.buildings.map { polyline(it.outline, close = true) }
+                        fun polyline(points: List<CampusPoint>) = Path().apply { addLine(points, close = false) }
+                        // Dvorišta su rupe: EvenOdd ne boji deo unutar unutrašnjeg prstena.
+                        fun polygon(rings: List<List<CampusPoint>>) = Path().apply {
+                            fillType = PathFillType.EvenOdd
+                            rings.forEach { addLine(it, close = true) }
+                        }
+                        val context = campus.context.map(::polygon)
+                        val streets = campus.streets.map(::polyline)
+                        val paths = campus.paths.map(::polyline)
+                        val buildings = campus.buildings.filter { it.outline.isNotEmpty() }
+                            .map { polygon(listOf(it.outline) + it.holes) to it.category }
+                        // Službe koje su samo deo zgrade: tačka na mestu službe.
+                        val servicePoints = campus.buildings.filter { it.outline.isEmpty() }.mapNotNull { it.labelAt?.toPx() }
                         val streetStroke = Stroke(STREET_WIDTH_M * m, cap = StrokeCap.Round, join = StrokeJoin.Round)
                         val pathStroke = Stroke(PATH_WIDTH_M * m, cap = StrokeCap.Round, join = StrokeJoin.Round)
 
@@ -121,9 +135,17 @@ fun CampusMap(
                             context.forEach { drawPath(it, colors.surfaceDim) }
                             streets.forEach { drawPath(it, Color.White, style = streetStroke) }
                             paths.forEach { drawPath(it, colors.outlineVariant, style = pathStroke) }
-                            buildings.forEach {
-                                drawPath(it, colors.primaryContainer)
-                                drawPath(it, colors.primary, style = Stroke(1.5.dp.toPx() * k))
+                            for ((path, category) in buildings) {
+                                val (fill, outline) = when (category) {
+                                    BuildingCategory.FTN -> colors.primaryContainer to colors.primary
+                                    BuildingCategory.SLUZBA -> ServiceFill to ServiceOutline
+                                }
+                                drawPath(path, fill)
+                                drawPath(path, outline, style = Stroke(1.5.dp.toPx() * k))
+                            }
+                            for (center in servicePoints) {
+                                drawCircle(Color.White, radius = 4.dp.toPx() * k, center = center)
+                                drawCircle(ServiceOutline, radius = 2.5.dp.toPx() * k, center = center)
                             }
                             for (entrance in entrances) {
                                 val center = Offset(entrance.x * m, entrance.y * m)
@@ -163,12 +185,19 @@ fun CampusMap(
                 // Boja i stil obruba se zadaju pri crtanju: measure() kešira raspored i ne
                 // razlikuje stilove koji menjaju samo crtanje.
                 val halo = Stroke(2.5.dp.toPx() * k, join = StrokeJoin.Round)
+                val gap = 6.dp.toPx() * k // natpis sa strane ne počinje baš na tački
                 for (building in campus.namedBuildings) {
                     val (x, y) = building.labelAt ?: continue
                     val label = textMeasurer.measure(building.label ?: building.name.orEmpty(), style)
-                    val topLeft = Offset(x * m - label.size.width / 2f, y * m - label.size.height / 2f)
+                    val left = when (building.labelSide) {
+                        LabelSide.CENTER -> x * m - label.size.width / 2f
+                        LabelSide.EAST -> x * m + gap
+                        LabelSide.WEST -> x * m - gap - label.size.width
+                    }
+                    val topLeft = Offset(left, y * m - label.size.height / 2f)
+                    val color = if (building.category == BuildingCategory.SLUZBA) OnService else colors.onPrimaryContainer
                     drawText(label, color = Color.White, topLeft = topLeft, drawStyle = halo)
-                    drawText(label, topLeft = topLeft, drawStyle = Fill)
+                    drawText(label, color = color, topLeft = topLeft, drawStyle = Fill)
                 }
             }
         }

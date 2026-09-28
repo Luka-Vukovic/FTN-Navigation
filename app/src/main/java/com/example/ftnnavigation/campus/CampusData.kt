@@ -28,17 +28,22 @@ data class CampusData(
     val heightM: Float,
     /** Smeštaj unutrašnjih planova zgrada u mapu kampusa, po id-ju zgrade. */
     val plans: Map<String, PlanJson>,
-    /** FTN zgrade i spojni prolazi između njih (prolazi nemaju naziv). */
+    /**
+     * FTN zgrade, studentske službe i spojni prolazi. Bez naziva su prolazi i zgrade u kojima
+     * je samo deo neka služba (ta služba nema svoj obris).
+     */
     val buildings: List<CampusBuilding>,
-    /** Obrisi okolnih zgrada, samo za orijentaciju. */
-    val context: List<List<CampusPoint>>,
+    /** Okolne zgrade, samo za orijentaciju: svaka je lista prstenova [spoljni, dvorišta...]. */
+    val context: List<List<List<CampusPoint>>>,
     val streets: List<List<CampusPoint>>,
     val paths: List<List<CampusPoint>>,
     val nodes: List<CampusNode>,
     val edges: List<List<String>>,
 ) {
-    /** Zgrade sa nazivom (bez spojnih prolaza). */
+    /** Zgrade sa nazivom (bez spojnih prolaza), FTN i službe. */
     val namedBuildings: List<CampusBuilding> get() = buildings.filter { it.name != null }
+
+    fun named(category: BuildingCategory): List<CampusBuilding> = namedBuildings.filter { it.category == category }
 
     val placement: PlanPlacement get() = PlanPlacement(FloorScale(widthM, heightM))
 
@@ -75,6 +80,15 @@ data class PlanJson(
     fun toPlacement() = PlanPlacement(FloorScale(widthM, heightM), originX, originY, rotationDeg)
 }
 
+/** FTN zgrada ili studentska služba van FTN-a (menza, zdravstvena zaštita...); na mapi se razlikuju. */
+enum class BuildingCategory { FTN, SLUZBA }
+
+/**
+ * Gde je natpis u odnosu na [CampusBuilding.labelAt]: centriran, ili počinje od tačke ka istoku
+ * / završava se na njoj (kad bi se centriran preklapao sa susednim).
+ */
+enum class LabelSide { CENTER, EAST, WEST }
+
 @Serializable
 data class CampusBuilding(
     val id: String,
@@ -82,7 +96,12 @@ data class CampusBuilding(
     /** Kratak natpis na mapi i tačka unutar zgrade gde stoji. */
     val label: String? = null,
     val labelAt: CampusPoint? = null,
-    val outline: List<CampusPoint>,
+    /** Prazan kad je služba samo deo zgrade - obris te zgrade je poseban unos bez naziva. */
+    val outline: List<CampusPoint> = emptyList(),
+    /** Unutrašnja dvorišta. */
+    val holes: List<List<CampusPoint>> = emptyList(),
+    val category: BuildingCategory = BuildingCategory.FTN,
+    val labelSide: LabelSide = LabelSide.CENTER,
 ) {
     /** Čvor grafa koji predstavlja zgradu: ulaz ako ima unutrašnji graf, inače čvor ZGRADA. */
     val nodeId: String

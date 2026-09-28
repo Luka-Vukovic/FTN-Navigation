@@ -35,8 +35,26 @@ class CampusGraphTest {
 
     @Test
     fun everyBuildingHasNode() {
-        assertEquals(8, campus.namedBuildings.size)
+        assertEquals(8, campus.named(BuildingCategory.FTN).size)
         campus.namedBuildings.forEach { assertNotNull(it.id, graph.node(it.nodeId)) }
+    }
+
+    /** Menza, zdravstvena zaštita i službe u domu "Slobodan Bajić": svaka sa svojim ulazom, spolja. */
+    @Test
+    fun studentServices_reachableOutdoors() {
+        val services = campus.named(BuildingCategory.SLUZBA)
+        assertEquals(setOf("MENZA", "ZZZS", "SMESTAJ", "ISHRANA"), services.map { it.id }.toSet())
+        for (service in services) {
+            val route = checkNotNull(graph.route(PlaceholderGraph.ENTRANCE_ID, service.nodeId))
+            assertTrue(service.id, route.nodes.any { it.type == NodeType.STAZA })
+            assertEquals("K-U-${service.id}-1", route.nodes[route.nodes.size - 2].id)
+        }
+        // Službe u domu nemaju svoj obris - dom se crta jednom, sa dvorištem.
+        assertTrue(campus.building("SMESTAJ")!!.outline.isEmpty())
+        val dorm = campus.buildings.single { it.name == null && it.category == BuildingCategory.SLUZBA }
+        assertEquals(1, dorm.holes.size)
+        // Unutrašnji prstenovi NTP-a u OSM-u nisu dvorišta.
+        assertTrue(campus.building("NTP")!!.holes.isEmpty())
     }
 
     /** Smeštaj plana u OSM obris: glavni ulaz sa plana pada na OSM ulaz, prolaz ka Kuli na spojni deo. */

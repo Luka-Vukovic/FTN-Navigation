@@ -18,3 +18,9 @@ val FtnSurfaceLow = Color(0xFFF4F8F9)
 val FtnSurface = Color(0xFFEEF4F5)
 val FtnSurfaceHigh = Color(0xFFE8EFF0)
 val FtnSurfaceHighest = Color(0xFFE2EAEB)
+
+// Studentske službe van FTN-a (menza, zdravstvena zaštita...) na mapi kampusa: topli ton
+// nasuprot tirkiznim FTN zgradama, da se na prvi pogled vidi da nisu deo fakulteta.
+val ServiceFill = Color(0xFFFCE3C7)
+val ServiceOutline = Color(0xFFB0600F)
+val OnService = Color(0xFF5C3106)

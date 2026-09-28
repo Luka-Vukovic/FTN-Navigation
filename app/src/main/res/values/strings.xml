@@ -103,7 +103,8 @@
     <string name="route_choose_destination">Izaberi odredište</string>
     <string name="route_change_destination">Promeni odredište</string>
     <string name="route_destinations_title">Odredište</string>
-    <string name="route_destinations_buildings">Zgrade</string>
+    <string name="route_destinations_buildings">Zgrade FTN-a</string>
+    <string name="route_destinations_services">Studentske službe</string>
     <string name="route_destinations_rooms">Sale · Nastavni blok</string>
     <string name="route_in_building">Zgrada: %1$s</string>
     <string name="route_to_building">Sala nije ucrtana · ruta do zgrade %1$s</string>

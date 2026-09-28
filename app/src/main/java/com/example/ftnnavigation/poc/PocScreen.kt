@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.campus.BuildingCategory
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.graph.BuildingGraph
@@ -192,7 +193,8 @@ fun PocScreen(
     }
     if (showDestinations && graph != null && campus != null) {
         DestinationSheet(
-            buildings = campus.namedBuildings.mapNotNull { it.name },
+            buildings = campus.named(BuildingCategory.FTN).mapNotNull { it.name },
+            services = campus.named(BuildingCategory.SLUZBA).mapNotNull { it.name },
             rooms = graph.rooms.mapNotNull { it.name }.sorted(),
             selected = destination,
             onSelect = {
@@ -435,6 +437,7 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
 @Composable
 private fun DestinationSheet(
     buildings: List<String>,
+    services: List<String>,
     rooms: List<String>,
     selected: String?,
     onSelect: (String) -> Unit,
@@ -453,6 +456,10 @@ private fun DestinationSheet(
             item { SheetSectionHeader(stringResource(R.string.route_destinations_buildings)) }
             items(buildings) { building ->
                 DestinationItem(building, isSelected = building == selected, onClick = { onSelect(building) })
+            }
+            item { SheetSectionHeader(stringResource(R.string.route_destinations_services)) }
+            items(services) { service ->
+                DestinationItem(service, isSelected = service == selected, onClick = { onSelect(service) })
             }
             item { SheetSectionHeader(stringResource(R.string.route_destinations_rooms)) }
             items(rooms) { room ->

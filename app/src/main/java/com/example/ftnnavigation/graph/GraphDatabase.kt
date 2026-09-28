@@ -40,7 +40,7 @@ abstract class GraphDao {
  * grafa, šeme ili campus.json ide uz povećanje [version] - stara baza se briše i puni iznova
  * (nema korisničkih podataka).
  */
-@Database(entities = [Node::class, Edge::class], version = 6, exportSchema = false)
+@Database(entities = [Node::class, Edge::class], version = 9, exportSchema = false)
 abstract class GraphDatabase : RoomDatabase() {
     abstract fun graphDao(): GraphDao
 

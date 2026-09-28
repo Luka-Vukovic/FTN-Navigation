@@ -17,6 +17,8 @@ bude (0, 0).
 
 Šta je ručno zadato (terenski podaci, vidi images/ van gita):
   - koje OSM zgrade su FTN zgrade i kako se zovu,
+  - studentske službe van FTN-a (menza, zdravstvena zaštita...): zgrada ili tačka službe u
+    zgradi (images/službe.png),
   - spojni prolazi između zgrada (u OSM-u su zasebni delovi zgrada),
   - ulazi koji se koriste: OSM čvor entrance=* ili tačka koja se "lepi" na zid zgrade,
   - smeštaj precrtanog plana Nastavnog bloka u obris zgrade.
@@ -51,6 +53,25 @@ BUILDINGS = [
     ("DGG", "Departman za građevinarstvo i geodeziju", "Građevinarstvo", "way", 148672026),
 ]
 
+# Studentske službe (nisu FTN, na mapi su drugačije obeležene): id, naziv, natpis, OSM
+# obris zgrade i tačka službe (lat, lon) ako je služba samo deo zgrade - tu stoji natpis i
+# čvor grafa. Više službi u istoj zgradi dele obris (crta se jednom).
+SERVICES = [
+    ("MENZA", "Menza", "Menza", "way", 222835154, None),  # Studentski restoran 2 (Velika menza)
+    ("ZZZS", "Zavod za zdravstvenu zaštitu studenata", "Zdravstvena zaštita", "way", 222835153, None),
+    # U studentskom domu "Slobodan Bajić"; tačke su OSM čvorovi 6432341246 i 6432341247.
+    ("SMESTAJ", "Služba smeštaja", "Služba smeštaja", "relation", 2955597, (45.2455021, 19.8492921)),
+    ("ISHRANA", "Blagajna ishrane", "Blagajna ishrane", "relation", 2955597, (45.2454119, 19.8489912)),
+]
+
+# Natpis koji ne sme da bude centriran na tački (preklapao bi se sa susednim na početnom
+# zumu - natpisi ostaju iste veličine na ekranu): EAST = počinje od tačke ka istoku,
+# WEST = završava se na tački.
+LABEL_SIDE = {"SMESTAJ": "EAST", "ISHRANA": "WEST", "ZZZS": "WEST"}
+
+# Zgrade čiji OSM unutrašnji prstenovi nisu dvorišta (provereno na terenu) - crtaju se pune.
+NO_HOLES = {"NTP"}
+
 # Zgrade čiji unutrašnji graf postoji u aplikaciji (PlaceholderGraph): za njih se ne pravi
 # čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
 WITH_INTERIOR = {"NB"}
@@ -75,6 +96,11 @@ ENTRANCES = {
     "NTP": [13123222553, 13123222559],  # istočni (parking), zapadni (Fruškogorska)
     "F": [(45.245662, 19.851880)],  # južna strana, ~58 % dužine od zapada
     "DGG": [(45.244697, 19.850246)],  # istočna strana, gornja trećina
+    "MENZA": [13123222548],  # istočni ugao, kod Restorana 10
+    "ZZZS": [2317805668],  # istočna strana, prema Dr Sime Miloševića
+    # Službe u domu: ulaz sa severne strane, naspram tačke službe.
+    "SMESTAJ": [(45.2455021, 19.8492921)],
+    "ISHRANA": [(45.2454119, 19.8489912)],
 }
 
 # Plan prizemlja Nastavnog bloka (res/drawable/floor_plan_placeholder.xml) je u pikselima
@@ -125,16 +151,66 @@ out body geom;"""
         return json.load(response)
 
 
-def ring_of(element):
-    """Spoljni prsten obrisa (bez ponovljene poslednje tačke)."""
+def join_rings(ways):
+    """Spaja delove (liste tačaka) u zatvorene prstenove; nezatvoreni ostaci se odbacuju."""
+    parts = [list(w) for w in ways if len(w) >= 2]
+    rings = []
+    while parts:
+        ring = parts.pop()
+        while ring[0] != ring[-1]:
+            for i, part in enumerate(parts):
+                if part[0] == ring[-1]:
+                    ring += part[1:]
+                elif part[-1] == ring[-1]:
+                    ring += part[-2::-1]
+                else:
+                    continue
+                del parts[i]
+                break
+            else:
+                break  # ne zatvara se
+        if ring[0] == ring[-1] and len(ring) >= 4:
+            rings.append([to_xy(lat, lon) for lat, lon in ring[:-1]])
+    return rings
+
+
+def area(ring):
+    return abs(sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(ring, ring[1:] + ring[:1]))) / 2
+
+
+def polygons_of(element):
+    """Obris kao lista (spoljni prsten, [dvorišta]); relacija sme da ima više delova po ulozi
+    i više odvojenih spoljnih prstenova. Prstenovi su bez ponovljene poslednje tačke."""
+    def points(geometry):
+        return [(p["lat"], p["lon"]) for p in geometry]
+
     if element["type"] == "way":
-        pts = [to_xy(p["lat"], p["lon"]) for p in element["geometry"]]
-    else:
-        outer = [m for m in element["members"] if m.get("role") == "outer" and m.get("geometry")]
-        if len(outer) != 1:
-            return None
-        pts = [to_xy(p["lat"], p["lon"]) for p in outer[0]["geometry"]]
-    return pts[:-1] if pts[0] == pts[-1] else pts
+        return [(r, []) for r in join_rings([points(element["geometry"])])]
+    members = [m for m in element["members"] if m.get("geometry")]
+    outers = join_rings([points(m["geometry"]) for m in members if m.get("role") == "outer"])
+    inners = join_rings([points(m["geometry"]) for m in members if m.get("role") == "inner"])
+    polygons = [(outer, []) for outer in outers]
+    for inner in inners:
+        host = next((p for p in polygons if inside(p[0], *inner[0])), None)
+        if host:
+            host[1].append(inner)
+    return polygons
+
+
+def ring_of(element):
+    """Spoljni prsten najvećeg dela obrisa (bez ponovljene poslednje tačke), ili None."""
+    polygon = main_polygon(element)
+    return polygon[0] if polygon else None
+
+
+def main_polygon(element):
+    return max(polygons_of(element), key=lambda p: area(p[0]), default=None)
+
+
+def outline_of(bid, element):
+    """Najveći deo obrisa zgrade [bid]; bez dvorišta ako je u NO_HOLES."""
+    ring, holes = main_polygon(element)
+    return ring, [] if bid in NO_HOLES else holes
 
 
 def centroid(ring):
@@ -329,29 +405,55 @@ def main():
     warnings = []
 
     # --- Zgrade ---
-    rings = {}
+    def points(ring):
+        return [[r1(x), r1(y)] for x, y in ring]
+
+    rings = {}  # id zgrade/službe -> spoljni prsten (za lepljenje ulaza na zid)
+    anchors = {}  # id -> tačka natpisa i čvora ZGRADA
     buildings = []
     for bid, name, label, kind, osm_id in BUILDINGS:
-        ring = ring_of(elements[(kind, osm_id)])
+        ring, holes = outline_of(bid, elements[(kind, osm_id)])
         rings[bid] = ring
-        lx, ly = interior_point(ring)
+        anchors[bid] = interior_point(ring)
         buildings.append({
-            "id": bid, "name": name, "label": label, "labelAt": [r1(lx), r1(ly)],
-            "outline": [[r1(x), r1(y)] for x, y in ring],
+            "id": bid, "name": name, "label": label, "labelAt": [r1(v) for v in anchors[bid]],
+            "outline": points(ring), **({"holes": [points(h) for h in holes]} if holes else {}),
         })
+    # Službe: obris zgrade se crta jednom; služba koja je samo deo zgrade nema svoj obris.
+    drawn = set()
+    for sid, name, label, kind, osm_id, at in SERVICES:
+        ring, holes = outline_of(sid, elements[(kind, osm_id)])
+        rings[sid] = ring
+        anchors[sid] = to_xy(*at) if at else interior_point(ring)
+        if not inside(ring, *anchors[sid]):
+            warnings.append(f"služba {sid}: tačka je van obrisa zgrade")
+        service = {"id": sid, "name": name, "label": label, "labelAt": [r1(v) for v in anchors[sid]], "category": "SLUZBA"}
+        if sid in LABEL_SIDE:
+            service["labelSide"] = LABEL_SIDE[sid]
+        outline = {"outline": points(ring), **({"holes": [points(h) for h in holes]} if holes else {})}
+        if at is None:
+            service.update(outline)
+        elif (kind, osm_id) not in drawn:
+            buildings.append({"id": f"{kind}-{osm_id}", "category": "SLUZBA", **outline})
+        drawn.add((kind, osm_id))
+        buildings.append(service)
     passage_rings = {}
     for a, b, osm_id in PASSAGES:
         ring = ring_of(elements[("way", osm_id)])
         passage_rings[(a, b)] = ring
-        buildings.append({"id": f"{a}-{b}", "outline": [[r1(x), r1(y)] for x, y in ring]})
-    used = {(kind, osm_id) for *_, kind, osm_id in BUILDINGS} | {("way", osm_id) for *_, osm_id in PASSAGES}
+        buildings.append({"id": f"{a}-{b}", "outline": points(ring)})
+    used = (
+        {(kind, osm_id) for *_, kind, osm_id in BUILDINGS} | {("way", osm_id) for *_, osm_id in PASSAGES}
+        | {(kind, osm_id) for _, _, _, kind, osm_id, _ in SERVICES}
+    )
+    # Okolne zgrade: svaki deo obrisa je lista prstenova [spoljni, dvorišta...].
     context = []
     for key, e in elements.items():
         if key in used or "building" not in e.get("tags", {}):
             continue
-        ring = ring_of(e)
-        if ring and len(ring) >= 3 and any(in_area(x, y) for x, y in ring):
-            context.append([[r1(x), r1(y)] for x, y in ring])
+        for ring, holes in polygons_of(e):
+            if any(in_area(x, y) for x, y in ring):
+                context.append([points(ring)] + [points(h) for h in holes])
 
     # --- Mreža staza ---
     graph = Graph()
@@ -373,7 +475,7 @@ def main():
     for bid, entrances in ENTRANCES.items():
         building_node = None if bid in WITH_INTERIOR else f"K-Z-{bid}"
         if building_node:
-            graph.add_node(building_node, *interior_point(rings[bid]), kind="ZGRADA")
+            graph.add_node(building_node, *anchors[bid], kind="ZGRADA")
             special.add(building_node)
         for i, spec in enumerate(entrances, start=1):
             if isinstance(spec, int):
