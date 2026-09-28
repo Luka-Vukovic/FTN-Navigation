@@ -11,12 +11,13 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.style.TextOverflow
 
-/** Tirkizna gornja traka sa naslovom i opcionim podnaslovom (npr. zgrada · sprat). */
+/** Tirkizna gornja traka sa naslovom, opcionim podnaslovom (npr. zgrada · sprat) i dugmetom nazad. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FtnTopAppBar(
     title: String,
     subtitle: String? = null,
+    navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
@@ -34,10 +35,12 @@ fun FtnTopAppBar(
                 }
             }
         },
+        navigationIcon = navigationIcon,
         actions = actions,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.primary,
             titleContentColor = MaterialTheme.colorScheme.onPrimary,
+            navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
             actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
     )

@@ -20,21 +20,38 @@ object DepartureNotifications {
     const val EXTRA_NOTIFY_AT_MS = "notify_at_ms"
     const val EXTRA_CLASS_START_MS = "class_start_ms"
 
-    private const val CHANNEL_ID = "departure"
+    const val CHANNEL_ID = "departure"
 
     // Jedno obaveštenje u isto vreme: sledeći polazak zamenjuje prethodni.
     private const val NOTIFICATION_ID = 1
 
-    fun show(context: Context, extras: Intent) {
-        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
-        val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
+    /** Kanal mora da postoji da bi se otvorila njegova sistemska podešavanja; ponovno kreiranje ne menja ništa. */
+    fun createChannel(context: Context) {
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
                 context.getString(R.string.departure_channel_name),
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply { description = context.getString(R.string.departure_channel_description) },
         )
+    }
+
+    /** Da li sistem prikazuje obaveštenja o polasku (dozvola, obaveštenja aplikacije i kanal). */
+    fun areAllowed(context: Context): Boolean {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        return context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED &&
+            manager.areNotificationsEnabled() &&
+            manager.getNotificationChannel(CHANNEL_ID)?.importance != NotificationManager.IMPORTANCE_NONE
+    }
+
+    fun cancel(context: Context) {
+        context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+    }
+
+    fun show(context: Context, extras: Intent) {
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        createChannel(context)
 
         val now = System.currentTimeMillis()
         // Kad je rok već prošao (duga ruta iz prethodne sale), nema "najkasnije u".

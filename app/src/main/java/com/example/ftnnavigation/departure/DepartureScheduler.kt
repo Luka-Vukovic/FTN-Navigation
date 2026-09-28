@@ -27,24 +27,34 @@ import java.time.format.DateTimeFormatter
  */
 object DepartureScheduler {
     /** Bez dozvole za tačne alarme obaveštenje stiže u ovom prozoru pre [Departure.notifyAt]. */
-    private const val INEXACT_WINDOW_MS = 10 * 60 * 1000L
+    const val INEXACT_WINDOW_MIN = 10L
+    private const val INEXACT_WINDOW_MS = INEXACT_WINDOW_MIN * 60 * 1000
 
     private const val PREFS = "departure"
     private const val KEY_LAST_NOTIFY_AT = "last_notify_at"
+    private const val KEY_ENABLED = "enabled"
+
+    fun isEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ENABLED, true)
+
+    /** Uključuje/isključuje obaveštenja; isključivanje briše alarm i već prikazano obaveštenje. */
+    suspend fun setEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit { putBoolean(KEY_ENABLED, enabled) }
+        if (!enabled) DepartureNotifications.cancel(context)
+        reschedule(context)
+    }
 
     suspend fun reschedule(context: Context) {
         val context = context.applicationContext
-        // Neprecizan alarm okida i pre notifyAt - taj polazak se ne zakazuje ponovo.
-        val lastNotified = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_LAST_NOTIFY_AT, 0)
-        val next = next(context, afterMs = maxOf(System.currentTimeMillis(), lastNotified))
-
         val alarms = context.getSystemService(AlarmManager::class.java)
+        val next = if (isEnabled(context)) next(context, scheduledAfter(context)) else null
         if (next == null) {
             alarms.cancel(alarmIntent(context, Intent()))
             return
         }
-        val (notifyAtMs, content) = next
-        val pending = alarmIntent(context, content)
+        val (departure, building) = next
+        val zone = ZoneId.systemDefault()
+        val notifyAtMs = departure.notifyAt.toEpochMilli(zone)
+        val pending = alarmIntent(context, content(context, departure, building, zone))
         if (alarms.canScheduleExactAlarms()) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, notifyAtMs, pending)
         } else {
@@ -52,21 +62,28 @@ object DepartureScheduler {
         }
     }
 
+    /** Polazak za koji je zakazan alarm (null ako nema časova), za prikaz u podešavanjima. */
+    suspend fun upcoming(context: Context): Departure? =
+        next(context.applicationContext, scheduledAfter(context))?.first
+
     /**
      * Probno obaveštenje (samo debug build): odmah prikazuje obaveštenje za sledeći polazak,
      * a zakazani alarm i zapamćeni poslednji polazak ostaju netaknuti. false = nema polaska.
      */
     suspend fun showTest(context: Context): Boolean {
         val context = context.applicationContext
-        val (_, content) = next(context, afterMs = System.currentTimeMillis()) ?: return false
-        DepartureNotifications.show(context, content)
+        val (departure, building) = next(context, System.currentTimeMillis()) ?: return false
+        DepartureNotifications.show(context, content(context, departure, building, ZoneId.systemDefault()))
         return true
     }
 
-    /** Sledeći polazak posle [afterMs]: vreme obaveštenja i sadržaj za [DepartureNotifications]. */
-    private suspend fun next(context: Context, afterMs: Long): Pair<Long, Intent>? {
-        val zone = ZoneId.systemDefault()
-        val after = LocalDateTime.ofInstant(Instant.ofEpochMilli(afterMs), zone)
+    /** Neprecizan alarm okida i pre notifyAt - već prikazan polazak se ne zakazuje ponovo. */
+    private fun scheduledAfter(context: Context): Long =
+        maxOf(System.currentTimeMillis(), prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0))
+
+    /** Sledeći polazak posle [afterMs] i naziv zgrade njegove sale (null ako se ne zna). */
+    private suspend fun next(context: Context, afterMs: Long): Pair<Departure, String?>? {
+        val after = LocalDateTime.ofInstant(Instant.ofEpochMilli(afterMs), ZoneId.systemDefault())
         val store = ScheduleStore(context)
         val classes = withContext(Dispatchers.IO) { store.loadData() }.classesFor(store.loadSelection())
         val campus = loadCampus(context)
@@ -75,13 +92,15 @@ object DepartureScheduler {
             ?: return null
         val building = resolveTarget(departure.entry.room, graph, campus)?.building?.name
             ?: buildingOfRoom(departure.entry.room)?.let { campus.building(it)?.name }
-        return departure.notifyAt.toEpochMilli(zone) to content(context, departure, building, zone)
+        return departure to building
     }
 
     /** Pamti da je obaveštenje za polazak sa ovim notifyAt prikazano. */
     fun markNotified(context: Context, notifyAtMs: Long) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putLong(KEY_LAST_NOTIFY_AT, notifyAtMs) }
+        prefs(context).edit { putLong(KEY_LAST_NOTIFY_AT, notifyAtMs) }
     }
+
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /** Tekst obaveštenja se sastavlja pri zakazivanju, pa receiver ne mora ponovo da računa rutu. */
     private fun content(context: Context, departure: Departure, building: String?, zone: ZoneId): Intent {

@@ -11,7 +11,8 @@ import kotlinx.coroutines.launch
 /** Alarm polaska (nije izvezen - okida ga samo [DepartureScheduler]): obaveštenje, pa sledeći alarm. */
 class DepartureAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        DepartureNotifications.show(context, intent)
+        // Alarm zakazan pre isključivanja obaveštenja (setEnabled ga briše, ali za svaki slučaj).
+        if (DepartureScheduler.isEnabled(context)) DepartureNotifications.show(context, intent)
         DepartureScheduler.markNotified(context, intent.getLongExtra(DepartureNotifications.EXTRA_NOTIFY_AT_MS, 0))
         rescheduleAsync(context)
     }
