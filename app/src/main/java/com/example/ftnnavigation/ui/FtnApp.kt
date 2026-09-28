@@ -1,5 +1,9 @@
 package com.example.ftnnavigation.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.WindowInsets
@@ -13,11 +17,13 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -27,10 +33,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.departure.DepartureScheduler
 import com.example.ftnnavigation.home.HomeScreen
 import com.example.ftnnavigation.poc.PocRoute
 import com.example.ftnnavigation.poc.PocViewModel
 import com.example.ftnnavigation.schedule.ScheduleScreen
+import com.example.ftnnavigation.schedule.ScheduleSelection
 import com.example.ftnnavigation.schedule.ScheduleViewModel
 import com.example.ftnnavigation.schedule.nextClass
 import com.example.ftnnavigation.schedule.rememberNow
@@ -71,6 +79,7 @@ fun FtnApp() {
     val scheduleViewModel: ScheduleViewModel = viewModel()
     val mapViewModel: PocViewModel = viewModel()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
+    DepartureNotificationsEffect(scheduleViewModel.selection)
 
     Scaffold(
         // Svaki ekran ima svoju gornju traku koja sama rešava status bar,
@@ -125,3 +134,22 @@ fun FtnApp() {
         }
     }
 }
+
+/**
+ * Obaveštenje "kreni na čas": dozvola se traži pri prvom pokretanju, a alarm se zakazuje
+ * iznova pri svakom pokretanju i promeni izbora rasporeda (force stop briše alarme).
+ */
+@Composable
+private fun DepartureNotificationsEffect(selection: ScheduleSelection?) {
+    val context = LocalContext.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(Unit) {
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    LaunchedEffect(selection) {
+        DepartureScheduler.reschedule(context)
+    }
+}
+

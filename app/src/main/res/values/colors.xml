@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- FTN paleta. Za Compose ekrane iste vrednosti su u ui/theme/Color.kt;
-         ovde su samo za XML (ikonica, splash). -->
+         ovde su samo za XML (ikonica, splash) i obaveštenja. -->
     <color name="ftn_teal">#FF044B53</color>
     <color name="ftn_cyan">#FF41BACB</color>
     <color name="ftn_teal_dark">#FF022E33</color>

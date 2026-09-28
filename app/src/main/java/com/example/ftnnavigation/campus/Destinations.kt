@@ -2,6 +2,8 @@ package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
+import com.example.ftnnavigation.graph.PlaceholderGraph
+import com.example.ftnnavigation.graph.Route
 
 private val F_BLOCK_ROOM = Regex("""F \d+""")
 private val AMPHITHEATRE = Regex("""A\d""")
@@ -43,4 +45,14 @@ fun resolveTarget(destination: String, graph: BuildingGraph, campus: CampusData)
     }
     val building = buildingOfRoom(destination)?.let(campus::building) ?: return null
     return graph.node(building.nodeId)?.let { RouteTarget(it, building, approximate = true) }
+}
+
+/**
+ * Ruta između dve sale iz rasporeda ([fromRoom] null = od glavnog ulaza Nastavnog bloka),
+ * ili null ako se ne zna gde je neka od njih. Neucrtana sala se zamenjuje svojom zgradom.
+ */
+fun routeBetween(graph: BuildingGraph, campus: CampusData, fromRoom: String?, toRoom: String): Route? {
+    val to = resolveTarget(toRoom, graph, campus) ?: return null
+    val from = if (fromRoom == null) PlaceholderGraph.ENTRANCE_ID else resolveTarget(fromRoom, graph, campus)?.node?.id
+    return graph.route(from ?: return null, to.node.id)
 }

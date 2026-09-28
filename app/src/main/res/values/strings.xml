@@ -115,4 +115,10 @@
     <string name="home_route_enter_by">Kreni od glavnog ulaza najkasnije u %1$s</string>
     <string name="home_route_go_now">Kreni odmah</string>
     <string name="home_show_route">Prikaži rutu</string>
+
+    <!-- Obaveštenje o polasku -->
+    <string name="departure_channel_name">Polazak na čas</string>
+    <string name="departure_channel_description">Javlja kad treba da kreneš na čas, prema rasporedu i trajanju rute</string>
+    <string name="departure_title">Kreni najkasnije u %1$s</string>
+    <string name="departure_from_room">Iz sale %1$s ~%2$d min</string>
 </resources>

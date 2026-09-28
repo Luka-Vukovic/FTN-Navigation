@@ -10,16 +10,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
+import com.example.ftnnavigation.campus.loadCampus
+import com.example.ftnnavigation.campus.loadGraph
 import com.example.ftnnavigation.campus.resolveTarget
-import com.example.ftnnavigation.campus.seedGraph
+import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.graph.BuildingGraph
-import com.example.ftnnavigation.graph.GraphDatabase
-import com.example.ftnnavigation.graph.GraphRepository
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.Route
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -92,21 +90,15 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            val campus = withContext(Dispatchers.IO) {
-                CampusData.parse(application.assets.open(CampusData.ASSET).bufferedReader().use { it.readText() })
-            }
+            val campus = loadCampus(application)
             this@PocViewModel.campus = campus
-            val (nodes, edges) = seedGraph(campus)
-            val repository = GraphRepository(GraphDatabase.get(application).graphDao())
-            graph = repository.load(nodes, edges, campus.placements())
+            graph = loadGraph(application, campus)
         }
     }
 
     /** Ruta od glavnog ulaza do sale, ili null ako se ne zna gde je sala (ili se graf učitava). */
     fun routeFromEntrance(room: String): Route? {
-        val graph = graph ?: return null
-        val target = resolveTarget(room, graph, campus ?: return null) ?: return null
-        return graph.route(PlaceholderGraph.ENTRANCE_ID, target.node.id)
+        return routeBetween(graph ?: return null, campus ?: return null, fromRoom = null, toRoom = room)
     }
 
     /** Zgrada sale (za prikaz uz salu), ili null ako se ne zna. */
