@@ -260,6 +260,27 @@ class WalkingDirectionTest {
     }
 
     @Test
+    fun phoneLiftedAndTurnedBeforePocket_keepsDirectionFromBeforeLift() {
+        // Snimak 29.09. 17:49: telefon se u hodu prvo podigne i polako okrene ~25° (ispod
+        // TURN_DEG - smer odluta), pa se tek ~2 s kasnije okrene naopako u džep i to se prepozna.
+        // Nastavlja se smer od pre podizanja, ne onaj od 0,5-1 s pre prepoznavanja.
+        fun pose(yawDeg: Double, pitchDeg: Double): Pose {
+            val th = Math.toRadians(pitchDeg)
+            val f = forward(yawDeg)
+            return Pose(y = f * cos(th) + up * sin(th), z = f * -sin(th) + up * cos(th))
+        }
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        val headings = walk(10.0, 30.0, forwardAmp = 0.3, lateralAmp = 1.0) { t ->
+            val yaw = 30.0 + 25.0 * ((t - 6.0) / 2.5).coerceIn(0.0, 1.0)
+            val lift = 30.0 * ((t - 6.0) / 0.5).coerceIn(0.0, 1.0)
+            pose(yaw, lift - 120.0 * ((t - 8.5) / 1.5).coerceIn(0.0, 1.0))
+        }
+        headings.takeLast(6).forEach { assertNear(30.0, it, 10.0) }
+    }
+
+    @Test
     fun phonePutInPocketBeforeFirstStep_keepsStartDirection() {
         // Start sa telefonom u ruci (okrenut ka 120°), pa odmah u džep i tek onda hod.
         stand(1.0, inHand(120.0))

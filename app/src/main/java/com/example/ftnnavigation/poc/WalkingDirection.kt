@@ -18,9 +18,9 @@ import kotlin.math.sqrt
  * - **Premeštanje telefona** (iz ruke u džep) se prepoznaje po naglom okretu gravitacije u
  *   koordinatama telefona (u poslednjih [REPOSITION_WINDOW_NS], nezavisno od koraka - premeštanje
  *   u hodu traje više koraka). Dok se telefon ne smiri, smer se ne menja (pravo) i jednak je smeru
- *   od pre premeštanja (0,5-1 s pre nego što je prepoznato - pre početka pokreta); kad se
- *   smiri, odstupanje se postavlja tako da se taj smer nastavi (korisnik nastavlja kuda je
- *   išao, a tokom premeštanja se nije okretao).
+ *   od pre početka pokreta ([motionStartWalkDeg] - pokret ume da počne i ~3 s pre nego što je
+ *   prepoznat, a smer tada već luta); kad se smiri, odstupanje se postavlja tako da se taj smer
+ *   nastavi (korisnik nastavlja kuda je išao, a tokom premeštanja se nije okretao).
  * - **Pravac hoda iz ubrzanja** uči odstupanje (telefon u ruci ne mora da gleda kuda se ide):
  *   u svakom koraku uzdužno ubrzanje (u koordinatama sveta) prednjači vertikalnom za oko
  *   četvrt koraka (izmereno na snimcima hoda), pa korelacija horizontalnog ubrzanja sa
@@ -85,8 +85,11 @@ class WalkingDirection {
     private val upFast = DoubleArray(3)
     private val upSlow = DoubleArray(3)
 
-    // Brzo izglađeno "gore" na svakih 0,1 s u poslednjih REPOSITION_WINDOW_NS (premeštanje).
-    private val upHistory = ArrayDeque<Pair<Long, DoubleArray>>()
+    /** Brzo izglađeno "gore" i smer hoda u trenutku [timestampNs] (premeštanje). */
+    private class PoseSample(val timestampNs: Long, val up: DoubleArray, val walkDeg: Double)
+
+    // Na svakih 0,1 s u poslednjih MOTION_LOOKBACK_NS, dok je odstupanje poznato.
+    private val poseHistory = ArrayDeque<PoseSample>()
 
     // Premeštanje u toku: od kada, i sporo "gore" pri poslednjoj proveri smirivanja.
     private var unsettledSinceNs = 0L
@@ -113,10 +116,7 @@ class WalkingDirection {
     // Pravac hoda iz ubrzanja u prethodnom koraku (null ako ga nije bilo) - za velike ispravke.
     private var lastPhaseDeg: Double? = null
 
-    // Smer na svakih 0,5 s dok je odstupanje poznato; pri premeštanju važi stariji od dva.
-    private var recentWalkDeg: Double? = null
-    private var olderWalkDeg: Double? = null
-    private var recentWalkNs = 0L
+    // Smer koji važi dok se premešten telefon ne smiri.
     private var heldWalkDeg = 0.0
 
     /** Da li je odstupanje telefona poznato (false dok se premešten telefon ne smiri). */
@@ -151,17 +151,11 @@ class WalkingDirection {
             }
         }
 
-        if (anchored && timestampNs - recentWalkNs >= SETTLE_CHECK_NS) {
-            olderWalkDeg = recentWalkDeg
-            recentWalkDeg = azimuth(smoothE, smoothN) + offsetDeg
-            recentWalkNs = timestampNs
-        }
-
         when {
             anchored -> if (repositioned(timestampNs)) {
                 anchored = false
-                upHistory.clear()
-                heldWalkDeg = olderWalkDeg ?: recentWalkDeg ?: (azimuth(smoothE, smoothN) + offsetDeg)
+                heldWalkDeg = motionStartWalkDeg()
+                poseHistory.clear()
                 unsettledSinceNs = timestampNs
                 upSlow.copyInto(settleRef)
                 settleRefNs = timestampNs
@@ -181,11 +175,24 @@ class WalkingDirection {
 
     /** Da li se "gore" u koordinatama telefona u poslednjih [REPOSITION_WINDOW_NS] okrenulo > [REPOSITION_DEG]. */
     private fun repositioned(timestampNs: Long): Boolean {
-        if (upHistory.isEmpty() || timestampNs - upHistory.last().first >= UP_HISTORY_STEP_NS) {
-            upHistory.addLast(timestampNs to upFast.copyOf())
+        if (poseHistory.isEmpty() || timestampNs - poseHistory.last().timestampNs >= POSE_HISTORY_STEP_NS) {
+            poseHistory.addLast(PoseSample(timestampNs, upFast.copyOf(), azimuth(smoothE, smoothN) + offsetDeg))
         }
-        while (timestampNs - upHistory.first().first > REPOSITION_WINDOW_NS) upHistory.removeFirst()
-        return angleBetween(upFast, upHistory.first().second) > REPOSITION_DEG
+        while (timestampNs - poseHistory.first().timestampNs > MOTION_LOOKBACK_NS) poseHistory.removeFirst()
+        val windowStart = poseHistory.first { timestampNs - it.timestampNs <= REPOSITION_WINDOW_NS }
+        return angleBetween(upFast, windowStart.up) > REPOSITION_DEG
+    }
+
+    /**
+     * Smer hoda pre početka pokreta telefona: prvi trenutak (do [MOTION_LOOKBACK_NS] unazad) kad se
+     * "gore" odmaklo od najstarijeg zapamćenog za više od [MOTION_START_DEG], i smer
+     * [MOTION_START_MARGIN_NS] pre toga (izglađen smer kasni). Snimak 17:49: pokret od 7,3 s,
+     * prepoznat u 10,8 s - smer se u međuvremenu pomerio sa 93° na ~120°.
+     */
+    private fun motionStartWalkDeg(): Double {
+        val oldest = poseHistory.first()
+        val start = poseHistory.firstOrNull { angleBetween(it.up, oldest.up) > MOTION_START_DEG } ?: poseHistory.last()
+        return poseHistory.lastOrNull { it.timestampNs <= start.timestampNs - MOTION_START_MARGIN_NS }?.walkDeg ?: oldest.walkDeg
     }
 
     /** Sirovi akcelerometar (koordinate telefona); pamti se u koordinatama sveta. */
@@ -239,9 +246,7 @@ class WalkingDirection {
     fun reset() {
         offsetDeg = 0.0
         anchored = true
-        recentWalkDeg = null
-        olderWalkDeg = null
-        upHistory.clear()
+        poseHistory.clear()
         forgetTurns()
         samples.clear()
         stepTimes.clear()
@@ -261,9 +266,7 @@ class WalkingDirection {
     private fun settle() {
         offsetDeg = angleDiff(heldWalkDeg, azimuth(smoothE, smoothN))
         anchored = true
-        recentWalkDeg = null
-        olderWalkDeg = null
-        upHistory.clear()
+        poseHistory.clear()
         forgetTurns()
         // Ubrzanja iz premeštanja ne smeju u osu hoda.
         samples.clear()
@@ -433,7 +436,16 @@ class WalkingDirection {
          * a < 45° između dva koraka). Hod u ruci: do ~20° za 1,5 s.
          */
         const val REPOSITION_WINDOW_NS = 1_500_000_000L
-        private const val UP_HISTORY_STEP_NS = 100_000_000L
+        private const val POSE_HISTORY_STEP_NS = 100_000_000L
+
+        /**
+         * Početak pokreta: "gore" se odmaklo od stanja od pre [MOTION_LOOKBACK_NS] za više od
+         * ovoga. Manji prag (10-15°) na snimku 17:49 hvata okret tela sa telefonom u džepu
+         * (~15-20°) pre vađenja telefona, pa bi se okret izgubio.
+         */
+        const val MOTION_START_DEG = 20.0
+        private const val MOTION_LOOKBACK_NS = 4_000_000_000L
+        private const val MOTION_START_MARGIN_NS = 500_000_000L
 
         /** Okret pravca telefona (u odnosu na poslednji korak bez okreta) koji može biti skretanje. */
         const val TURN_DEG = 30.0
