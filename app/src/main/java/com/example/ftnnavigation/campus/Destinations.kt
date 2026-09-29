@@ -5,19 +5,41 @@ import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.Route
 
-private val F_BLOCK_ROOM = Regex("""F \d+""")
+private val F_BLOCK_ROOM = Regex("""F[ -]\d+""") // F 315, F-208 (ne "Fizika")
 private val AMPHITHEATRE = Regex("""A\d""")
 private val COMPUTER_LAB = Regex("""L\d( \(RC\))?""")
 private val NUMBERED_ROOM = Regex("""\d{3}[A-Z]?""")
+private val AR_ROOM = Regex("""AR\d""") // AR0...AR6 - korisnik: "izgleda u F-bloku", nije provereno
 
 /**
- * Zgrada sale po oznaci iz rasporeda (podaci sa terena), ili null ako nije poznata
- * (AR…, LG…, Scen-LAB, Fizika, Hemija).
+ * Privremeno u Nastavnom bloku dok se ne sazna tačno (korisnik, 29.09.2026): "neka bude nastavni
+ * blok dok ne saznam". "Hemija 2" je uz "Hemija".
+ */
+private val PROVISIONAL_NB = listOf("Fizika", "Hemija")
+
+/** Mesta van kampusa, predaleko da bi bila na mapi (korisnik): prefiks oznake sale -> naziv. */
+private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
+
+/** Deo zgrade sa svojim ulazom (build_campus.py `UNITS`): prefiks oznake sale -> čvor grafa. */
+private val UNIT_NODES = mapOf("GRID-" to "K-Z-GRID")
+
+/** Naziv mesta van kampusa za salu (MF-27 -> Medicinski fakultet), ili null. */
+fun offCampusPlaceOf(room: String): String? = OFF_CAMPUS.entries.find { room.trim().startsWith(it.key) }?.value
+
+/**
+ * Zgrada sale po oznaci iz rasporeda (podaci sa terena), ili null ako nije poznata ili je van
+ * kampusa ([offCampusPlaceOf]).
  */
 fun buildingOfRoom(room: String): String? {
     val name = room.trim()
     return when {
+        name == "Scen-LAB" || name == "O12" -> "NB" // korisnik; "O12" je u PDF-u sa slovom O
+        PROVISIONAL_NB.any { name.startsWith(it) } -> "NB"
+        name.startsWith("GRID-") -> "AMF" // u Amfiteatrima, ali sa svojim ulazom (UNIT_NODES)
+        AR_ROOM.matches(name) -> "F"
         name.startsWith("NTP") -> "NTP"
+        name.startsWith("ITC") -> "ITC" // ITC03, ITCA1, ITCS-01, ITCS-RC...
+        name.startsWith("LG ") -> "DGG" // LG 001...LG 107 - korisnik: "mislim da jeste", nije provereno
         name.startsWith("MI ") -> "MI"
         F_BLOCK_ROOM.matches(name) -> "F"
         AMPHITHEATRE.matches(name) || name.startsWith("INT") -> "AMF"
@@ -44,7 +66,9 @@ fun resolveTarget(destination: String, graph: BuildingGraph, campus: CampusData)
         return graph.node(building.nodeId)?.let { RouteTarget(it, building, approximate = false) }
     }
     val building = buildingOfRoom(destination)?.let(campus::building) ?: return null
-    return graph.node(building.nodeId)?.let { RouteTarget(it, building, approximate = true) }
+    // Deo zgrade sa svojim ulazom: ruta do tog ulaza, ne do ostatka zgrade.
+    val unitNode = UNIT_NODES.entries.find { destination.trim().startsWith(it.key) }?.let { graph.node(it.value) }
+    return (unitNode ?: graph.node(building.nodeId))?.let { RouteTarget(it, building, approximate = true) }
 }
 
 /**

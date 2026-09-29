@@ -8,6 +8,7 @@ import androidx.core.content.edit
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.buildingOfRoom
+import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
 import com.example.ftnnavigation.campus.resolveTarget
@@ -110,9 +111,11 @@ object DepartureScheduler {
         fun missed(now: LocalDateTime, notifiedUpTo: LocalDateTime): Departure? =
             missedDeparture(agenda::on, now, notifiedUpTo, ::route)
 
-        /** Naziv zgrade mesta polaska (null ako se ne zna). */
+        /** Naziv zgrade (ili mesta van kampusa) mesta polaska; null ako se ne zna. */
         fun building(departure: Departure): String? = departure.item.place?.let { place ->
-            resolveTarget(place, graph, campus)?.building?.name ?: buildingOfRoom(place)?.let { campus.building(it)?.name }
+            offCampusPlaceOf(place)
+                ?: resolveTarget(place, graph, campus)?.building?.name
+                ?: buildingOfRoom(place)?.let { campus.building(it)?.name }
         }
 
         companion object {

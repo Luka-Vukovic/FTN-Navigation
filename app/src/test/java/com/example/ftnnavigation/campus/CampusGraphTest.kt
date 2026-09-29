@@ -97,9 +97,28 @@ class CampusGraphTest {
         mapOf(
             "NTP-307" to "NTP", "NTP-A" to "NTP", "MI B4-3" to "MI", "MI Đ3-1" to "MI", "F 315" to "F",
             "A2" to "AMF", "INT 1" to "AMF", "AH4A" to "NB", "AH-CRT" to "NB", "L1" to "NB",
-            "L4 (RC)" to "NB", "108A" to "NB", "312" to "NB",
+            "L4 (RC)" to "NB", "108A" to "NB", "312" to "NB", "ITC04" to "ITC", "ITCA1" to "ITC", "ITCS-RC" to "ITC",
+            "F-208" to "F", "LG 005" to "DGG", "LG 107" to "DGG", "Scen-LAB" to "NB", "O12" to "NB",
+            "GRID-1" to "AMF", "Fizika" to "NB", "Hemija" to "NB", "Hemija 2" to "NB", "AR0" to "F", "AR6" to "F",
         ).forEach { (room, building) -> assertEquals(room, building, buildingOfRoom(room)) }
-        listOf("AR3", "LG 005", "Scen-LAB", "Fizika", "Hemija").forEach { assertNull(it, buildingOfRoom(it)) }
+        listOf("MF-27", "MF-Sala 1").forEach {
+            assertNull(it, buildingOfRoom(it))
+            assertEquals("Medicinski fakultet", offCampusPlaceOf(it))
+        }
+        assertNull(offCampusPlaceOf("F 315"))
+    }
+
+    /** GRID ima svoj ulaz na Amfiteatrima: ruta vodi do njega, ne kroz ostatak zgrade. */
+    @Test
+    fun gridRoom_routesToOwnEntrance() {
+        val target = checkNotNull(resolveTarget("GRID-1", graph, campus))
+        assertEquals("K-Z-GRID", target.node.id)
+        assertEquals("AMF", target.building?.id)
+        assertTrue(target.approximate)
+        val route = checkNotNull(graph.route(PlaceholderGraph.ENTRANCE_ID, "K-Z-GRID"))
+        assertEquals("K-U-GRID-1", route.nodes[route.nodes.size - 2].id)
+        // Ulaz GRID-a nije ulaz Amfiteatara: iz Amfiteatara se do GRID-a ide spolja.
+        assertFalse(graph.neighbors("K-Z-AMF").any { (node, _) -> node.id == "K-U-GRID-1" })
     }
 
     /** Sale podrazumevanog rasporeda (SIIT, 4. godina, grupa 3): ucrtane ili bar do zgrade. */
@@ -121,7 +140,8 @@ class CampusGraphTest {
     fun allScheduleRooms_haveBuildingOrKnownUnknown() {
         val schedule = Json { ignoreUnknownKeys = true }
             .decodeFromString<ScheduleData>(File("src/main/assets/schedule.json").readText())
-        val unknown = listOf("AR", "LG", "Scen", "Fizika", "Hemija")
+        // MF-: Medicinski fakultet, van kampusa (namerno nije na mapi). Sve ostale sale imaju zgradu.
+        val unknown = listOf("MF-")
         schedule.timetables.flatMap { it.classes }.map { it.room }.distinct()
             .filter { room -> unknown.none { room.startsWith(it) } }
             .forEach { assertNotNull(it, resolveTarget(it, graph, campus)) }

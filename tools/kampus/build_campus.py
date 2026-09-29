@@ -103,6 +103,17 @@ ENTRANCES = {
     "ISHRANA": [(45.2454119, 19.8489912)],
 }
 
+# Delovi zgrade sa svojim ulazom, do kojih se ne ide kroz ostatak zgrade: nisu zgrada na mapi, već
+# čvor grafa K-Z-<id> (ZGRADA) iza svog ulaza K-U-<id>-1, bez veze sa čvorom same zgrade. Aplikacija
+# vezuje sale za taj čvor (Destinations.kt, UNIT_NODES). id, zgrada, ulaz (lat, lon) sa terenske mape.
+UNITS = [
+    # Grafičko inženjerstvo i dizajn (sala GRID-1), zapadna strana Amfiteatara; ulaz označio korisnik
+    # na images/entrances 1.png (29.09.2026), preračunat preko poznatih ulaza i prolaza (greška 1-4 m).
+    ("GRID", "AMF", (45.246285, 19.851143)),
+]
+# Koliko je čvor dela zgrade unutra od ulaza (ka sredini zgrade), u metrima.
+UNIT_DEPTH_M = 4.0
+
 # Plan prizemlja Nastavnog bloka (res/drawable/floor_plan_placeholder.xml) je u pikselima
 # fotografije evakuacionog plana; spoljni zid je x 413..1038, y 311..504, a viewport
 # drawable-a x 305..1055, y 305..560. Orijentacija (provereno glavnim ulazom, prolazom ka
@@ -472,6 +483,19 @@ def main():
     # --- Ulazi, zgrade, prolazi ---
     special = set()
     split_count = 0
+
+    def add_entrance(entrance, x, y):
+        """Čvor ULAZ povezan sa najbližom stazom (staza se deli na tom mestu)."""
+        nonlocal split_count
+        graph.add_node(entrance, x, y, kind="ULAZ")
+        special.add(entrance)
+        split_count += 1
+        attach, distance = graph.snap(x, y, f"K-X{split_count}")
+        special.add(attach)
+        graph.add_edge(entrance, attach)
+        if distance > 15:
+            warnings.append(f"ulaz {entrance}: najbliža staza je {distance:.0f} m daleko")
+
     for bid, entrances in ENTRANCES.items():
         building_node = None if bid in WITH_INTERIOR else f"K-Z-{bid}"
         if building_node:
@@ -484,16 +508,19 @@ def main():
             else:
                 x, y = snap_to_wall(rings[bid], *to_xy(*spec))
             entrance = f"K-U-{bid}-{i}"
-            graph.add_node(entrance, x, y, kind="ULAZ")
-            special.add(entrance)
-            split_count += 1
-            attach, distance = graph.snap(x, y, f"K-X{split_count}")
-            special.add(attach)
-            graph.add_edge(entrance, attach)
-            if distance > 15:
-                warnings.append(f"ulaz {entrance}: najbliža staza je {distance:.0f} m daleko")
+            add_entrance(entrance, x, y)
             if building_node:
                 graph.add_edge(building_node, entrance)
+    for uid, bid, at in UNITS:
+        x, y = snap_to_wall(rings[bid], *to_xy(*at))
+        entrance = f"K-U-{uid}-1"
+        add_entrance(entrance, x, y)
+        ax, ay = anchors[bid]
+        k = min(1.0, UNIT_DEPTH_M / max(math.dist((x, y), (ax, ay)), 1e-6))
+        unit = f"K-Z-{uid}"
+        graph.add_node(unit, x + (ax - x) * k, y + (ay - y) * k, kind="ZGRADA")
+        special.add(unit)
+        graph.add_edge(unit, entrance)
     for (a, b), ring in passage_rings.items():
         passage = f"K-P-{a}-{b}"
         graph.add_node(passage, *centroid(ring), kind="PROLAZ")

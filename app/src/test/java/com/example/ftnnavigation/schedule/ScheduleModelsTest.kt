@@ -55,4 +55,43 @@ class ScheduleModelsTest {
         assertFalse(ep.isFor(25, master.areaGroups))
     }
 
+    /** Svaki id jednom: isti raspored iz dve verzije PDF-a (PSI -7 i -10) ostaje samo noviji. */
+    @Test
+    fun timetableIds_unique() {
+        val duplicates = data.timetables.groupBy { it.id }.filterValues { it.size > 1 }.keys
+        assertTrue(duplicates.toString(), duplicates.isEmpty())
+    }
+
+    /** Strukovne studije su poseban nivo, a u izboru idu uz akademske istog stepena. */
+    @Test
+    fun vocationalStudies_separateFromAcademic() {
+        val levels = data.timetables.map { it.level }.toSet()
+        assertEquals(setOf("OAS", "OSS", "MAS", "MSS"), levels)
+        val electrical = data.timetables.filter { it.programId == "elektrotehnika" }
+        assertEquals(setOf("OSS", "MSS"), electrical.map { it.level }.toSet())
+        assertEquals(setOf("OAS", "MAS"), electrical.map { it.degree }.toSet())
+        assertTrue(electrical.all { it.isVocational })
+        assertEquals(2, electrical.map { it.programKey }.distinct().size)
+    }
+
+    /** Oblasti mešanih slova (ТиПТ) i napomena "Групе број 1 су уписане на ... - ТиПТ". */
+    @Test
+    fun areaGroups_mixedCaseAbbreviations() {
+        val energy = data.timetables.single { it.programId == "energetika-i-procesna-tehnika" && it.semester == 7 }
+        assertEquals(mapOf("TiPT" to listOf(1), "GiNT" to listOf(11)), energy.areaGroups)
+        val tipt = energy.classes.first { it.groups.areas == listOf("TiPT") }
+        assertTrue(tipt.isFor(1, energy.areaGroups))
+        assertFalse(tipt.isFor(11, energy.areaGroups))
+    }
+
+    /** Nijedan čas ne sme da ostane bez grupe - uz izabranu grupu ga niko ne bi video. */
+    @Test
+    fun everyClass_hasRecognizedGroups() {
+        val orphans = data.timetables.flatMap { t ->
+            t.classes.filter { c -> c.groups.let { !it.all && !it.elective && it.numbers.isEmpty() && it.areas.isEmpty() } }
+                .map { "${t.id}: ${it.groups.raw}" }
+        }
+        assertTrue(orphans.toString(), orphans.isEmpty())
+    }
+
 }

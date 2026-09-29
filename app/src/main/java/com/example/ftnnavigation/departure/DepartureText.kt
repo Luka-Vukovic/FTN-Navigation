@@ -1,7 +1,9 @@
 package com.example.ftnnavigation.departure
 
 import android.content.res.Resources
+import androidx.annotation.StringRes
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.TIME_FORMAT
 
@@ -14,14 +16,19 @@ import com.example.ftnnavigation.schedule.TIME_FORMAT
  * ~3 min"); null ako stavka nema mesto (događaj bez mesta).
  */
 fun Departure.routeText(res: Resources): String? {
-    if (item.place == null) return null
-    val route = route ?: return res.getString(R.string.route_not_on_map)
+    val place = item.place ?: return null
+    val route = route ?: return res.getString(noRouteText(place))
     return when (val from = from) {
         null -> res.getString(R.string.home_route_from_entrance, route.minutes)
         is AgendaItem.Class -> res.getString(R.string.departure_from_room, from.place, route.minutes)
         is AgendaItem.Event -> res.getString(R.string.departure_from_place, from.place, route.minutes)
     }
 }
+
+/** Zašto nema rute do [place]: van kampusa (Medicinski fakultet) ili sala još nije na mapi. */
+@StringRes
+fun noRouteText(place: String): Int =
+    if (offCampusPlaceOf(place) != null) R.string.route_off_campus else R.string.route_not_on_map
 
 /** "Kreni od glavnog ulaza / iz sale X / od: X najkasnije u HH:MM"; null ako nema rute. */
 fun Departure.leaveByText(res: Resources): String? {

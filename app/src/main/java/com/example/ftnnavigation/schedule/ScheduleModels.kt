@@ -20,7 +20,7 @@ data class ScheduleData(
 data class Timetable(
     val programId: String,
     val program: String,
-    val level: String, // OAS (osnovne) ili MAS (master)
+    val level: String, // OAS / OSS (osnovne akademske / strukovne), MAS / MSS (master akademske / strukovne)
     val semester: Int,
     val year: Int,
     val module: String? = null,
@@ -34,6 +34,14 @@ data class Timetable(
     val id: String get() = listOf(programId, level, semester, module.orEmpty()).joinToString("|")
 
     val semesterKind: SemesterKind get() = SemesterKind.of(semester)
+
+    /** "OAS" (osnovne) ili "MAS" (master), bez razlike akademske / strukovne - kao u izboru. */
+    val degree: String get() = if (level.startsWith("M")) "MAS" else "OAS"
+
+    val isVocational: Boolean get() = level == "OSS" || level == "MSS"
+
+    /** Program na tom nivou: strukovne i akademske studije istog naziva su različiti programi. */
+    val programKey: String get() = "$level|$programId"
 
     /** Grupe koje se pojavljuju u rasporedu - ponuda za izbor grupe. */
     val groupNumbers: List<Int>

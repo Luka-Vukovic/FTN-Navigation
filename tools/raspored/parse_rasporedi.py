@@ -50,7 +50,12 @@ TYPES = {
     "лаб.вежбе": "LABORATORIJSKE_VEZBE",
 }
 
-LEVELS = {"Основне": "OAS", "Мастер": "MAS"}
+LEVELS = {
+    "Основне академске": "OAS", "Основне струковне": "OSS",
+    "Мастер академске": "MAS", "Мастер струковне": "MSS",
+}
+# Naslov je ponekad razmaknut ("Р А С П О Р Е Д ...", i "Н Ј" umesto "Њ") - traži se bez razmaka.
+TITLE = "РАСПОРЕДПРЕДАВА"
 
 # Zaglavlje kolone -> ključ
 COLUMNS = {
@@ -94,7 +99,8 @@ def parse_groups(raw):
     'СВИ' -> svi; 'Опредељени' -> samo oni koji su izabrali predmet;
     '1,3' -> grupe 1 i 3; '1(2)' / '1,2 (3,7)' -> smenjuju se svake druge nedelje;
     '1(1-16)' / '1(5-)' -> deo grupe 1 po spisku (opseg studenata, ne grupa);
-    '5 св.др.нед.' -> svake druge nedelje; 'ЕП, ММ' -> stručne oblasti (mastar).
+    '5 св.др.нед.' -> svake druge nedelje; 'ЕП, ММ' / 'ТиПТ' -> stručne oblasti (skraćenica sa
+    bar dva velika slova); 'Опред.(1-12)' -> opredeljeni, deo po spisku.
     """
     s = clean(raw)
     biweekly = bool(re.search(r"св\.?\s*др\.?\s*нед|парне\s+нед", s))
@@ -107,13 +113,13 @@ def parse_groups(raw):
     outside = re.sub(r"\([^()]*\)", " ", body)
     numbers |= {int(n) for n in re.findall(r"\d+", outside)}
     words = re.findall(r"[А-ЯЂЈЉЊЋЏа-яђјљњћџ]+", outside)
-    upper_words = [w for w in words if w.isupper()]
+    abbreviations = [w for w in words if sum(c.isupper() for c in w) >= 2]
     return {
         "raw": lat(s),
-        "all": "СВИ" in upper_words,
-        "elective": any(w.lower().startswith("опредељен") for w in words),
+        "all": "СВИ" in abbreviations,
+        "elective": any(w.lower().startswith("опред") for w in words),
         "numbers": sorted(numbers),
-        "areas": [lat(w) for w in upper_words if w != "СВИ"],
+        "areas": [lat(w) for w in abbreviations if w != "СВИ"],
         "biweekly": biweekly,
     }
 
@@ -138,14 +144,15 @@ def parse_header(page, first_table_top):
         m = re.search(r"Последња измена:\s*([\d.]+\s+[\d:]+)", line)
         if m:
             modified = m.group(1)
-        if "РАСПОРЕД ПРЕДАВАЊА" in line:
+        is_title = TITLE in line.replace(" ", "")
+        if is_title:
             after_title = True
             level = next((v for k, v in LEVELS.items() if k in line), None)
         if after_title:
             m = re.search(r"(\d+)\s*Семестар", line)
             if m:
                 semester = int(m.group(1))
-            if "РАСПОРЕД ПРЕДАВАЊА" in line or re.fullmatch(r"\d+\s*Семестар", line):
+            if is_title or re.fullmatch(r"\d+\s*Семестар", line):
                 continue
             line = re.sub(r"\s*\d+\s*Семестар\s*$", "", line)
             if line.startswith(("Модул:", "Стручна област:")):
@@ -167,13 +174,30 @@ def parse_notes(page, last_table_bottom):
 
 
 def parse_area_groups(notes):
-    """'Стручна област: ... (ЕП) групе број 15' -> {'EP': [15]}"""
+    """
+    Napomena sa "група/групе број <brojevi>" i skraćenicom oblasti (bar dva velika slova) ->
+    {skraćenica: brojevi}. Oblici sa rasporeda:
+      'Стручна област: ... (ЕП) групе број 11,12,13'
+      'Групе број 1 су уписане на Топлотну и процесну технику - ТиПТ'
+      'Група број 1 је стручна област - Управљачки системи ... (УС)'
+      'Група број 11 је група која је уписана на студијску групу Обрада сигнала - ОС'
+    """
     result = {}
     for note in notes:
-        m = re.search(r"\(([А-ЯЂЈЉЊЋЏ]+)\)\s*груп\w*\s*број\s*([\d,\s]+)", note)
-        if m:
-            result[lat(m.group(1))] = [int(n) for n in re.findall(r"\d+", m.group(2))]
+        m = re.search(r"груп\w*\s*број\s*([\d,\sи]+)", note, re.IGNORECASE)
+        if not m:
+            continue
+        numbers = [int(n) for n in re.findall(r"\d+", m.group(1))]
+        abbreviations = [w for w in re.findall(r"[А-ЯЂЈЉЊЋЏа-яђјљњћџ]+", note) if sum(c.isupper() for c in w) >= 2]
+        if numbers and abbreviations:
+            result[lat(abbreviations[-1])] = numbers
     return result
+
+
+def modified_key(text):
+    """'16.09.2026. 06:58' -> (2026, 9, 16, '06:58'), za poređenje verzija; None -> najstarije."""
+    m = re.match(r"(\d{2})\.(\d{2})\.(\d{4})\.?\s*([\d:]*)", text or "")
+    return (int(m.group(3)), int(m.group(2)), int(m.group(1)), m.group(4)) if m else (0, 0, 0, "")
 
 
 def parse_table(page, table, state, warnings, where):
@@ -199,12 +223,23 @@ def parse_table(page, table, state, warnings, where):
             continue  # naslov tabele blok nastave (datum), redovi imaju svoju kolonu datuma
         if "Група-е" in whole and "Од" in whole:
             columns = state["columns"] = []
+            layout = state.setdefault("layout", {})
             for cell in row.cells:
                 if not cell:
                     continue
                 name = clean(cell_text(page, cell[0], cell[2], cell[1], cell[3]))
                 if name in COLUMNS:
-                    columns.append((COLUMNS[name], cell[0], cell[2]))
+                    key = COLUMNS[name]
+                    layout[(round(cell[0]), round(cell[2]))] = key
+                else:
+                    # Zaglavlje ponekad nema teksta u ćeliji (Animacija str. 6: "Учионица") -
+                    # kolona na istom mestu kao u ranijem zaglavlju istog PDF-a.
+                    key = layout.get((round(cell[0]), round(cell[2])))
+                if key:
+                    columns.append((key, cell[0], cell[2]))
+            missing = {"groups", "start", "end", "room", "type", "subject"} - {k for k, _, _ in columns}
+            if missing:
+                warnings.append(f"{where}: zaglavlje bez kolona {sorted(missing)}")
             continue
         if columns is None:
             warnings.append(f"{where}: red pre zaglavlja tabele: {lat(whole)!r}")
@@ -250,6 +285,8 @@ def parse_table(page, table, state, warnings, where):
 
 def parse_pdf(path, warnings):
     timetables = {}
+    previous_level = None
+    layout = {}  # (x0, x1) kolone -> ključ, iz zaglavlja sa tekstom; za zaglavlja bez teksta
     with pdfplumber.open(path) as pdf:
         for index, page in enumerate(pdf.pages, start=1):
             tables = page.find_tables()
@@ -257,12 +294,14 @@ def parse_pdf(path, warnings):
                 continue  # uvodna strana ili strana bez tabela (npr. mentorska nastava)
             where = f"{path.name} str. {index}"
             level, semester, program, module, modified = parse_header(page, tables[0].bbox[1])
+            # Neki naslovi nemaju nivo studija (EET str. 10, 12) - isti je kao na prethodnoj strani.
+            level = previous_level = level or previous_level
             if not (level and semester and program):
                 warnings.append(f"{where}: nepotpuno zaglavlje ({level}, {semester}, {program})")
                 continue
 
             classes = []
-            state = {}
+            state = {"layout": layout}
             for table in tables:
                 classes += parse_table(page, table, state, warnings, where)
             notes = parse_notes(page, max(t.bbox[3] for t in tables))
@@ -285,9 +324,31 @@ def parse_pdf(path, warnings):
             tt["classes"] += classes
             tt["notes"] += [lat(n) for n in notes if lat(n) not in tt["notes"]]
             tt["areaGroups"].update(parse_area_groups(notes))
-            if modified and (tt["lastModified"] or "") < modified:
+            if modified and modified_key(tt["lastModified"]) < modified_key(modified):
                 tt["lastModified"] = modified
     return list(timetables.values())
+
+
+def timetable_key(tt):
+    return tt["programId"], tt["level"], tt["semester"], tt["module"] or ""
+
+
+def keep_newest(timetables, warnings):
+    """
+    Isti raspored iz dva PDF-a (npr. Primenjeno-softversko-inzenjerstvo-7 i -10 - novija verzija
+    istog fajla sa sajta): ostaje onaj sa kasnijom izmenom.
+    """
+    newest = {}
+    for tt in timetables:
+        key = timetable_key(tt)
+        old = newest.get(key)
+        if old is None or modified_key(old["lastModified"]) < modified_key(tt["lastModified"]):
+            newest[key] = tt
+    for key, tt in newest.items():
+        dropped = sorted({t["source"] for t in timetables if timetable_key(t) == key} - {tt["source"]})
+        if dropped:
+            warnings.append(f"{'|'.join(map(str, key))}: iz {tt['source']}, preskočen {', '.join(dropped)}")
+    return [tt for tt in timetables if newest[timetable_key(tt)] is tt]
 
 
 def main():
@@ -300,6 +361,7 @@ def main():
     timetables = []
     for path in sorted(args.pdfs):
         timetables += parse_pdf(path, warnings)
+    timetables = keep_newest(timetables, warnings)
     for tt in timetables:
         tt["classes"].sort(key=lambda c: (c["day"], c["date"] or "", c["start"], c["end"]))
 

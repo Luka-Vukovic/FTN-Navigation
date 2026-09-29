@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.departure.Departure
 import com.example.ftnnavigation.departure.leaveByText
+import com.example.ftnnavigation.departure.noRouteText
 import com.example.ftnnavigation.departure.routeText
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.AgendaItem
@@ -149,7 +150,7 @@ private fun NextItem(item: AgendaItem, now: LocalDateTime, building: String?, de
         RoomLabel(if (building != null && building != place) "$place · $building" else place, Modifier.padding(top = 2.dp))
         if (departure?.route == null) {
             val note = when {
-                departure != null -> R.string.route_not_on_map
+                departure != null -> noRouteText(place)
                 item is AgendaItem.Class -> R.string.home_same_room
                 else -> R.string.home_same_place
             }

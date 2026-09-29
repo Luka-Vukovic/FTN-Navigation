@@ -78,18 +78,20 @@ fun ScheduleSelectionForm(
     onSave: (Timetable, Int?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var level by rememberSaveable { mutableStateOf(current?.level ?: "OAS") }
-    var programId by rememberSaveable { mutableStateOf(current?.programId) }
+    // Nivo je Osnovne / Master; strukovne studije su u istoj listi programa, sa oznakom.
+    var level by rememberSaveable { mutableStateOf(current?.degree ?: "OAS") }
+    var programKey by rememberSaveable { mutableStateOf(current?.programKey) }
     var year by rememberSaveable { mutableStateOf(current?.year) }
     var timetableId by rememberSaveable { mutableStateOf(current?.id) }
     var group by rememberSaveable { mutableStateOf(currentGroup) }
 
-    val levels = data.timetables.map { it.level }.distinct().sortedBy { if (it == "OAS") 0 else 1 }
-    val forLevel = data.timetables.filter { it.level == level }
-    val programs = forLevel.distinctBy { it.programId }.sortedBy { it.program }
+    val levels = data.timetables.map { it.degree }.distinct().sortedBy { if (it == "OAS") 0 else 1 }
+    val forLevel = data.timetables.filter { it.degree == level }
+    val programs = forLevel.distinctBy { it.programKey }.sortedWith(compareBy({ it.program }, { it.isVocational }))
+    val vocationalLabel = stringResource(R.string.selection_program_vocational)
     // Program se bira svesno (nema podrazumevanog) - do tada nema godine, grupe ni čuvanja.
-    val program = programs.find { it.programId == programId }
-    val forProgram = forLevel.filter { it.programId == program?.programId }
+    val program = programs.find { it.programKey == programKey }
+    val forProgram = forLevel.filter { it.programKey == program?.programKey }
     val years = forProgram.map { it.year }.distinct().sorted()
     val selectedYear = year?.takeIf { it in years } ?: years.firstOrNull()
     val modules = forProgram.filter { it.year == selectedYear }
@@ -119,8 +121,8 @@ fun ScheduleSelectionForm(
             label = stringResource(R.string.selection_program),
             options = programs,
             selected = program,
-            optionLabel = { it.program },
-            onSelect = { programId = it.programId },
+            optionLabel = { if (it.isVocational) vocationalLabel.format(it.program) else it.program },
+            onSelect = { programKey = it.programKey },
         )
 
         if (years.size > 1) {

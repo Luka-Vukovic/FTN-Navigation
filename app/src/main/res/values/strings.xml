@@ -92,6 +92,7 @@
     <string name="selection_level">Nivo studija</string>
     <string name="selection_level_oas">Osnovne</string>
     <string name="selection_level_mas">Master</string>
+    <string name="selection_program_vocational">%1$s (strukovne)</string>
     <string name="selection_program">Studijski program</string>    <string name="selection_year">Godina</string>
     <string name="selection_module">Modul / stručna oblast</string>
     <string name="selection_group">Grupa</string>
@@ -143,6 +144,7 @@
     <string name="route_from_position">od tvoje pozicije</string>
     <string name="route_from_entrance">od glavnog ulaza</string>
     <string name="route_not_on_map">Sala još nije na mapi</string>
+    <string name="route_off_campus">Van kampusa</string>
     <string name="route_clear">Ukloni rutu</string>
     <string name="home_route_from_entrance">Od glavnog ulaza ~%1$d min</string>
     <string name="home_route_enter_by">Kreni od glavnog ulaza najkasnije u %1$s</string>

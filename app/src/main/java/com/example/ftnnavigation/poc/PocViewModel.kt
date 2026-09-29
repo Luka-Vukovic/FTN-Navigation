@@ -15,6 +15,7 @@ import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
+import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.departure.Departure
@@ -159,8 +160,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    /** Zgrada sale (za prikaz uz salu), ili null ako se ne zna. */
+    /** Zgrada sale (za prikaz uz salu) ili mesto van kampusa, ili null ako se ne zna. */
     fun buildingNameOf(room: String): String? {
+        offCampusPlaceOf(room)?.let { return it }
         val graph = graph ?: return null
         return resolveTarget(room, graph, campus ?: return null)?.building?.name
     }
