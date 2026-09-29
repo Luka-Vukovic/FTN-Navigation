@@ -1,6 +1,7 @@
 package com.example.ftnnavigation.poc
 
 import android.app.Application
+import android.hardware.SensorManager
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,8 +66,9 @@ private const val PLAN_UP_AZIMUTH_DEG = 0f
 
 /**
  * Stanje mape i rute. Vezan za aktivnost: preživljava promenu taba, a Početna preko njega
- * nudi rutu do sale sledećeg časa. Senzori ostaju vezani za ekran Mape (PdrSensorsEffect):
- * dok je drugi tab otvoren, koraci se ne broje.
+ * nudi rutu do sale sledećeg časa. Od Start do Stop drži PDR senzore ([PdrSensorSession]) i
+ * [PdrTrackingService], pa se koraci broje i sa ugašenim ekranom, na drugom tabu i dok je
+ * aplikacija u pozadini (dok aktivnost postoji).
  */
 class PocViewModel(application: Application) : AndroidViewModel(application) {
     var state by mutableStateOf(PocUiState())
@@ -90,8 +92,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     val walkingDirection = WalkingDirection()
 
     /** Snimak senzora od Start do Stop (samo debug build) - vidi [SensorRecorder]. */
-    var recorder by mutableStateOf<SensorRecorder?>(null)
-        private set
+    private var recorder: SensorRecorder? = null
+
+    /** Senzori za vreme praćenja (od Start do Stop). */
+    private var session: PdrSensorSession? = null
 
     /** Naziv sale (kao u rasporedu) ili zgrade; čuva se i dok se graf još učitava. */
     var destination by mutableStateOf<String?>(null)
@@ -232,27 +236,41 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleTracking() {
-        // Start se pritiska sa telefonom u ruci - odstupanje od pravca hoda se uči iznova.
-        if (!state.isTracking) {
-            walkingDirection.reset()
-            stepStarts.clear()
-            if (BuildConfig.DEBUG) recorder = SensorRecorder.start(getApplication<Application>().filesDir)
-        } else {
-            stopRecording()
-        }
-        state = state.copy(isTracking = !state.isTracking)
+        if (state.isTracking) stopTracking() else startTracking()
     }
 
-    private fun stopRecording() {
+    private fun startTracking() {
+        // Start se pritiska sa telefonom u ruci - odstupanje od pravca hoda se uči iznova.
+        walkingDirection.reset()
+        stepStarts.clear()
+        val app = getApplication<Application>()
+        if (BuildConfig.DEBUG) recorder = SensorRecorder.start(app.filesDir)
+        session = PdrSensorSession(
+            app.getSystemService(SensorManager::class.java),
+            walkingDirection,
+            trackSteps = true,
+            onHeading = ::onHeading,
+            onStep = ::onStep,
+            recorder = recorder,
+        ).also { it.start() }
+        PdrTrackingService.start(app)
+        state = state.copy(isTracking = true)
+    }
+
+    private fun stopTracking() {
+        session?.stop()
+        session = null
+        PdrTrackingService.stop(getApplication())
         recorder?.close()
         recorder = null
+        state = state.copy(isTracking = false)
     }
 
-    override fun onCleared() = stopRecording()
+    override fun onCleared() = stopTracking()
 
     // Smer se zadržava - dolazi sa senzora, nije deo sesije praćenja.
     fun reset() {
-        stopRecording()
+        stopTracking()
         walkingDirection.reset()
         stepStarts.clear()
         state = PocUiState(headingDeg = state.headingDeg, phoneOffsetDeg = 0f, snapToGraph = state.snapToGraph)

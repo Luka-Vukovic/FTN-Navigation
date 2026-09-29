@@ -39,7 +39,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +59,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextMeasurer
@@ -84,24 +82,19 @@ import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
 import kotlin.math.roundToInt
 
-/** Ekran Mapa: kači PDR senzore (akcelerometar za korake i osu hoda, TYPE_ROTATION_VECTOR za smer). */
+/**
+ * Ekran Mapa. Dok praćenje ne radi, kači samo orijentaciju (smer za prikaz); za vreme praćenja
+ * senzore drži [PocViewModel] nezavisno od ekrana.
+ */
 @Composable
 fun PocRoute(viewModel: PocViewModel = viewModel()) {
     val state = viewModel.state
 
-    PdrSensorsEffect(
-        trackSteps = state.isTracking,
+    PdrHeadingEffect(
+        enabled = !state.isTracking,
         direction = viewModel.walkingDirection,
         onHeading = viewModel::onHeading,
-        onStep = viewModel::onStep,
-        recorder = viewModel.recorder,
     )
-    // Senzori rade samo dok je Mapa aktivna - ekran se ne gasi dok traje praćenje (telefon u džepu).
-    val view = LocalView.current
-    DisposableEffect(view, state.isTracking) {
-        view.keepScreenOn = state.isTracking
-        onDispose { view.keepScreenOn = false }
-    }
 
     PocScreen(
         state = state,
