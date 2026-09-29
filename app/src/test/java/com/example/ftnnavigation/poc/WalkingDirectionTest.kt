@@ -239,6 +239,27 @@ class WalkingDirectionTest {
     }
 
     @Test
+    fun phoneTurnedUpsideDownSlowlyWhileWalking_keepsDirection() {
+        // Snimak 29.09. 12:42 (~45 s): telefon se u hodu za 1,5 s okrene naopako (u džep) - između
+        // dva koraka < 45°, ukupno 90° (pravac telefona se okrene za 180°). Referenca "gore" je
+        // bila poslednji korak, pa premeštanje nije prepoznato i tačka je skretala. Hod u džepu:
+        // slabo uzdužno i jako bočno ubrzanje (pravac iz ubrzanja ne pomaže - sa njim je i okret
+        // samo telefona to ispravljao).
+        fun tilted(thetaDeg: Double): Pose {
+            val th = Math.toRadians(thetaDeg)
+            val f = forward(30.0)
+            return Pose(y = f * cos(th) + up * sin(th), z = f * -sin(th) + up * cos(th))
+        }
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        val headings = walk(8.0, 30.0, forwardAmp = 0.3, lateralAmp = 1.0) { t ->
+            tilted(-90.0 * ((t - 6.0) / 1.5).coerceIn(0.0, 1.0))
+        }
+        headings.forEach { assertNear(30.0, it, 15.0) }
+    }
+
+    @Test
     fun phonePutInPocketBeforeFirstStep_keepsStartDirection() {
         // Start sa telefonom u ruci (okrenut ka 120°), pa odmah u džep i tek onda hod.
         stand(1.0, inHand(120.0))

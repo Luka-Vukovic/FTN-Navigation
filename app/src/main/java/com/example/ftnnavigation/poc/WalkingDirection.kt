@@ -16,7 +16,8 @@ import kotlin.math.sqrt
  *   Za korak se usrednjava preko poslednja dva koraka (pun ciklus noge - u džepu se levi i
  *   desni korak ne cik-cakiraju). Telefon se okreće sa telom, pa pravac prati skretanje.
  * - **Premeštanje telefona** (iz ruke u džep) se prepoznaje po naglom okretu gravitacije u
- *   koordinatama telefona. Dok se telefon ne smiri, smer se ne menja (pravo) i jednak je smeru
+ *   koordinatama telefona (u poslednjih [REPOSITION_WINDOW_NS], nezavisno od koraka - premeštanje
+ *   u hodu traje više koraka). Dok se telefon ne smiri, smer se ne menja (pravo) i jednak je smeru
  *   od pre premeštanja (0,5-1 s pre nego što je prepoznato - pre početka pokreta); kad se
  *   smiri, odstupanje se postavlja tako da se taj smer nastavi (korisnik nastavlja kuda je
  *   išao, a tokom premeštanja se nije okretao).
@@ -83,7 +84,9 @@ class WalkingDirection {
     // "Gore" u koordinatama telefona: brzo izglađen (premeštanje) i sporo (smirivanje).
     private val upFast = DoubleArray(3)
     private val upSlow = DoubleArray(3)
-    private var upRef: DoubleArray? = null
+
+    // Brzo izglađeno "gore" na svakih 0,1 s u poslednjih REPOSITION_WINDOW_NS (premeštanje).
+    private val upHistory = ArrayDeque<Pair<Long, DoubleArray>>()
 
     // Premeštanje u toku: od kada, i sporo "gore" pri poslednjoj proveri smirivanja.
     private var unsettledSinceNs = 0L
@@ -154,11 +157,10 @@ class WalkingDirection {
             recentWalkNs = timestampNs
         }
 
-        val ref = upRef
         when {
-            ref == null -> upRef = upFast.copyOf()
-            anchored -> if (angleBetween(upFast, ref) > REPOSITION_DEG) {
+            anchored -> if (repositioned(timestampNs)) {
                 anchored = false
+                upHistory.clear()
                 heldWalkDeg = olderWalkDeg ?: recentWalkDeg ?: (azimuth(smoothE, smoothN) + offsetDeg)
                 unsettledSinceNs = timestampNs
                 upSlow.copyInto(settleRef)
@@ -175,6 +177,15 @@ class WalkingDirection {
                 }
             }
         }
+    }
+
+    /** Da li se "gore" u koordinatama telefona u poslednjih [REPOSITION_WINDOW_NS] okrenulo > [REPOSITION_DEG]. */
+    private fun repositioned(timestampNs: Long): Boolean {
+        if (upHistory.isEmpty() || timestampNs - upHistory.last().first >= UP_HISTORY_STEP_NS) {
+            upHistory.addLast(timestampNs to upFast.copyOf())
+        }
+        while (timestampNs - upHistory.first().first > REPOSITION_WINDOW_NS) upHistory.removeFirst()
+        return angleBetween(upFast, upHistory.first().second) > REPOSITION_DEG
     }
 
     /** Sirovi akcelerometar (koordinate telefona); pamti se u koordinatama sveta. */
@@ -217,7 +228,6 @@ class WalkingDirection {
         }
 
         if (!anchored) return WalkStep(normalize(heldWalkDeg))
-        upRef = upFast.copyOf()
         val afterPause = stepTimes.size == 1 || timestampNs - previousStepNs > PAUSE_NS
         if (afterPause) pauseFromNs = previousStepNs
         stepPhases.addLast(StepPhase(afterPause))
@@ -231,7 +241,7 @@ class WalkingDirection {
         anchored = true
         recentWalkDeg = null
         olderWalkDeg = null
-        upRef = if (hasRotation) upFast.copyOf() else null
+        upHistory.clear()
         forgetTurns()
         samples.clear()
         stepTimes.clear()
@@ -253,7 +263,7 @@ class WalkingDirection {
         anchored = true
         recentWalkDeg = null
         olderWalkDeg = null
-        upRef = upFast.copyOf()
+        upHistory.clear()
         forgetTurns()
         // Ubrzanja iz premeštanja ne smeju u osu hoda.
         samples.clear()
@@ -416,6 +426,14 @@ class WalkingDirection {
 
         /** Okret gravitacije u koordinatama telefona koji znači da je telefon premešten. */
         const val REPOSITION_DEG = 45.0
+
+        /**
+         * Okret gravitacije se meri u odnosu na stanje od pre ovoliko. Ranije je referenca bila
+         * poslednji korak, pa se premeštanje u hodu delilo na korake (snimak 12:42: 64° za 1,5 s,
+         * a < 45° između dva koraka). Hod u ruci: do ~20° za 1,5 s.
+         */
+        const val REPOSITION_WINDOW_NS = 1_500_000_000L
+        private const val UP_HISTORY_STEP_NS = 100_000_000L
 
         /** Okret pravca telefona (u odnosu na poslednji korak bez okreta) koji može biti skretanje. */
         const val TURN_DEG = 30.0
