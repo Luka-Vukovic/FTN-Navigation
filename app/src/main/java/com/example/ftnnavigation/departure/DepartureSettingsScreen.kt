@@ -2,8 +2,10 @@ package com.example.ftnnavigation.departure
 
 import android.app.AlarmManager
 import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -157,6 +159,16 @@ fun DepartureSettingsScreen(onBack: () -> Unit) {
                         }
                     }
                 }
+                // Stanje "Automatskog pokretanja" se ne može pouzdano pročitati - kartica je uputstvo.
+                if (IS_XIAOMI) {
+                    SettingsCard {
+                        Text(stringResource(R.string.notifications_autostart_title), style = MaterialTheme.typography.titleMedium)
+                        CardBody(stringResource(R.string.notifications_autostart_body, stringResource(R.string.app_name)))
+                        FilledTonalButton(onClick = { openAutostartSettings(context) }, modifier = Modifier.align(Alignment.End)) {
+                            Text(stringResource(R.string.notifications_open_settings))
+                        }
+                    }
+                }
                 SettingsCard {
                     Text(stringResource(R.string.notifications_next_title), style = MaterialTheme.typography.titleMedium)
                     val departure = upcoming
@@ -218,6 +230,21 @@ private fun openNotificationSettings(context: Context) {
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
     }
     context.startActivity(intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+}
+
+/**
+ * Xiaomi (MIUI/HyperOS): bez "Automatskog pokretanja" sistem posle restarta ne isporučuje
+ * BOOT_COMPLETED, pa se alarm ne zakazuje dok korisnik ne otvori aplikaciju.
+ */
+private val IS_XIAOMI = Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true)
+
+/** Lista "Automatsko pokretanje u pozadini" (MIUI/HyperOS); ako je nema - informacije o aplikaciji. */
+private fun openAutostartSettings(context: Context) {
+    try {
+        context.startActivity(Intent("miui.intent.action.OP_AUTO_START"))
+    } catch (_: ActivityNotFoundException) {
+        context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${context.packageName}".toUri()))
+    }
 }
 
 /** Probno obaveštenje za sledeći polazak (debug); Toast kad nije prikazano. */

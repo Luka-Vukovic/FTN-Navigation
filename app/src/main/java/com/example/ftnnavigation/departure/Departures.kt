@@ -51,6 +51,26 @@ fun nextDeparture(
 }
 
 /**
+ * Propušten polazak: obaveštenje je trebalo da stigne posle [notifiedUpTo], a do [now] nije
+ * stiglo (telefon ugašen, sistem nije pokrenuo aplikaciju posle restarta), a stavka još nije
+ * počela - pa obaveštenje stiže odmah. Od više propuštenih, onaj koji najpre počinje.
+ */
+fun missedDeparture(
+    agenda: (LocalDate) -> List<AgendaItem>,
+    now: LocalDateTime,
+    notifiedUpTo: LocalDateTime,
+    route: (fromPlace: String?, toPlace: String) -> Route?,
+    marginMin: Long = DEPARTURE_MARGIN_MIN,
+): Departure? {
+    val day = agenda(now.toLocalDate())
+    return day
+        .filter { it.notifies && it.startAt.isAfter(now) }
+        .mapNotNull { departureFor(it, day, route, marginMin) }
+        .filter { it.notifyAt.isAfter(notifiedUpTo) && !it.notifyAt.isAfter(now) }
+        .minByOrNull { it.startAt }
+}
+
+/**
  * Polazak na [item] (isto računanje kao za obaveštenje - Početna ga prikazuje), ili null ako
  * je prethodna stavka na istom mestu, pa nema kuda da se ide. [day] = stavke tog dana.
  */

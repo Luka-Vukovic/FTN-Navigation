@@ -163,6 +163,8 @@
     <string name="notifications_exact_on">Obaveštenje stiže tačno u predviđeno vreme.</string>
     <string name="notifications_exact_off">Obaveštenje može da stigne do %1$d min ranije. Za tačno vreme dozvoli „Alarmi i podsetnici“.</string>
     <string name="notifications_exact_allow">Dozvoli</string>
+    <string name="notifications_autostart_title">Automatsko pokretanje</string>
+    <string name="notifications_autostart_body">Xiaomi telefon posle restarta ne pokreće aplikaciju sam, pa obaveštenja ne stižu dok je ne otvoriš. Uključi %1$s pod „Automatsko pokretanje u pozadini“.</string>
     <string name="notifications_next_title">Sledeće obaveštenje</string>
     <string name="notifications_next_at">%1$s u %2$s</string>
     <string name="notifications_next_window">%1$s između %2$s i %3$s</string>

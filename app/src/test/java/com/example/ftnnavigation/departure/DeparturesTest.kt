@@ -163,4 +163,32 @@ class DeparturesTest {
     fun noItems_noDeparture() {
         assertNull(next(emptyList(), "07:00"))
     }
+
+    private fun missed(classes: List<ClassEntry>, now: String, notifiedUpTo: LocalDateTime, events: List<UserEvent> = emptyList()) =
+        missedDeparture(agenda(classes, events), at(now), notifiedUpTo, routes)
+
+    /** Restart u 6:30 bez ponovnog zakazivanja; aplikacija se pokrene tek posle vremena obaveštenja. */
+    @Test
+    fun missed_shownUntilItemStarts() {
+        val classes = listOf(entry("09:15", "11:00", "101"))
+        val yesterday = monday.minusDays(1).atTime(12, 0)
+        assertNull(missed(classes, "09:05", yesterday)) // obaveštenje (09:07) još nije na redu
+        assertEquals(at("09:07"), missed(classes, "09:10", yesterday)!!.notifyAt)
+        assertNull(missed(classes, "09:15", yesterday)) // čas je počeo
+    }
+
+    @Test
+    fun missed_alreadyNotified_orSilent_none() {
+        val classes = listOf(entry("09:15", "11:00", "101"))
+        assertNull(missed(classes, "09:10", at("09:07")))
+        val silent = event("09:15", "10:00", place = "Menza", notify = false)
+        assertNull(missed(emptyList(), "09:10", at("07:00"), listOf(silent)))
+    }
+
+    @Test
+    fun missed_several_earliestStart() {
+        // Čas 08:15 (obaveštenje 08:07) i događaj 08:16 (obaveštenje 08:08): prvi počinje čas.
+        val d = missed(listOf(entry("08:15", "10:00", "101")), "08:10", at("07:00"), listOf(event("08:16", "09:00", "Menza")))!!
+        assertEquals("101", d.item.place)
+    }
 }

@@ -6,11 +6,15 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.edit
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.buildingOfRoom
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
 import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
+import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.schedule.Agenda
 import com.example.ftnnavigation.schedule.TIME_FORMAT
 import com.example.ftnnavigation.schedule.ScheduleStore
 import java.time.Instant
@@ -21,7 +25,7 @@ import java.time.ZoneId
  * Zakazuje jedan alarm - za sledeći polazak na čas ili događaj ([nextDeparture]). Kad alarm
  * okine, [DepartureAlarmReceiver] prikaže obaveštenje i zakaže sledeći. Ponovo se zakazuje i
  * pri pokretanju aplikacije, promeni izbora rasporeda ili događaja, restartu telefona i
- * promeni vremena.
+ * promeni vremena; tada stiže i obaveštenje koje je u međuvremenu propušteno.
  */
 object DepartureScheduler {
     /** Bez dozvole za tačne alarme obaveštenje stiže u ovom prozoru pre [Departure.notifyAt]. */
@@ -44,15 +48,18 @@ object DepartureScheduler {
     suspend fun reschedule(context: Context) {
         val context = context.applicationContext
         val alarms = context.getSystemService(AlarmManager::class.java)
-        val next = if (isEnabled(context)) next(context, scheduledAfter(context)) else null
-        if (next == null) {
+        val zone = ZoneId.systemDefault()
+        val planner = if (isEnabled(context)) Planner.load(context) else null
+        val departure = planner?.run {
+            showMissed(context, this, zone)
+            next(scheduledAfter(context).toLocalDateTime(zone))
+        }
+        if (planner == null || departure == null) {
             alarms.cancel(alarmIntent(context, Intent()))
             return
         }
-        val (departure, building) = next
-        val zone = ZoneId.systemDefault()
         val notifyAtMs = departure.notifyAt.toEpochMilli(zone)
-        val pending = alarmIntent(context, content(context, departure, building, zone))
+        val pending = alarmIntent(context, content(context, departure, planner.building(departure), zone))
         if (alarms.canScheduleExactAlarms()) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, notifyAtMs, pending)
         } else {
@@ -62,7 +69,7 @@ object DepartureScheduler {
 
     /** Polazak za koji je zakazan alarm (null ako nema časova ni događaja), za prikaz u podešavanjima. */
     suspend fun upcoming(context: Context): Departure? =
-        next(context.applicationContext, scheduledAfter(context))?.first
+        Planner.load(context.applicationContext).next(scheduledAfter(context).toLocalDateTime(ZoneId.systemDefault()))
 
     /**
      * Probno obaveštenje (samo debug build): odmah prikazuje obaveštenje za sledeći polazak,
@@ -70,27 +77,50 @@ object DepartureScheduler {
      */
     suspend fun showTest(context: Context): Boolean {
         val context = context.applicationContext
-        val (departure, building) = next(context, System.currentTimeMillis()) ?: return false
-        DepartureNotifications.show(context, content(context, departure, building, ZoneId.systemDefault()))
+        val zone = ZoneId.systemDefault()
+        val planner = Planner.load(context)
+        val departure = planner.next(LocalDateTime.now(zone)) ?: return false
+        DepartureNotifications.show(context, content(context, departure, planner.building(departure), zone))
         return true
+    }
+
+    /**
+     * Obaveštenje koje nije stiglo na vreme (alarm se nije zakazao - telefon ugašen, Xiaomi bez
+     * "Automatskog pokretanja" posle restarta), a stavka još nije počela: prikazuje se odmah.
+     * Posle toga se sva obaveštenja do sada računaju kao obrađena (ne stiže još jedno zakasnelo).
+     */
+    private fun showMissed(context: Context, planner: Planner, zone: ZoneId) {
+        val now = System.currentTimeMillis()
+        val notifiedUpTo = prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0).toLocalDateTime(zone)
+        val missed = planner.missed(now.toLocalDateTime(zone), notifiedUpTo) ?: return
+        DepartureNotifications.show(context, content(context, missed, planner.building(missed), zone))
+        markNotified(context, now)
     }
 
     /** Neprecizan alarm okida i pre notifyAt - već prikazan polazak se ne zakazuje ponovo. */
     private fun scheduledAfter(context: Context): Long =
         maxOf(System.currentTimeMillis(), prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0))
 
-    /** Sledeći polazak posle [afterMs] i naziv zgrade njegovog mesta (null ako se ne zna). */
-    private suspend fun next(context: Context, afterMs: Long): Pair<Departure, String?>? {
-        val after = LocalDateTime.ofInstant(Instant.ofEpochMilli(afterMs), ZoneId.systemDefault())
-        val agenda = ScheduleStore(context).loadAgenda()
-        val campus = loadCampus(context)
-        val graph = loadGraph(context, campus)
-        val departure = nextDeparture(agenda::on, after, route = { from, to -> routeBetween(graph, campus, from, to) })
-            ?: return null
-        val building = departure.item.place?.let { place ->
+    /** Raspored, kampus i graf za računanje polazaka; učitavanje traje, pa jednom po zakazivanju. */
+    private class Planner(private val agenda: Agenda, private val campus: CampusData, private val graph: BuildingGraph) {
+        private fun route(from: String?, to: String): Route? = routeBetween(graph, campus, from, to)
+
+        fun next(after: LocalDateTime): Departure? = nextDeparture(agenda::on, after, ::route)
+
+        fun missed(now: LocalDateTime, notifiedUpTo: LocalDateTime): Departure? =
+            missedDeparture(agenda::on, now, notifiedUpTo, ::route)
+
+        /** Naziv zgrade mesta polaska (null ako se ne zna). */
+        fun building(departure: Departure): String? = departure.item.place?.let { place ->
             resolveTarget(place, graph, campus)?.building?.name ?: buildingOfRoom(place)?.let { campus.building(it)?.name }
         }
-        return departure to building
+
+        companion object {
+            suspend fun load(context: Context): Planner {
+                val campus = loadCampus(context)
+                return Planner(ScheduleStore(context).loadAgenda(), campus, loadGraph(context, campus))
+            }
+        }
     }
 
     /** Pamti da je obaveštenje za polazak sa ovim notifyAt prikazano. */
@@ -120,5 +150,7 @@ object DepartureScheduler {
     )
 
     private fun LocalDateTime.toEpochMilli(zone: ZoneId): Long = atZone(zone).toInstant().toEpochMilli()
+
+    private fun Long.toLocalDateTime(zone: ZoneId): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(this), zone)
 
 }
