@@ -132,6 +132,8 @@ fun PocScreen(
     onSnapToggle: () -> Unit,
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
+    // Zgrada čiji je natpis držan na mapi kampusa - pop-up sa opisom.
+    var infoBuildingId by rememberSaveable { mutableStateOf<String?>(null) }
     Scaffold(
         topBar = {
             FtnTopAppBar(
@@ -151,6 +153,7 @@ fun PocScreen(
                         route = route,
                         position = state.position,
                         headingDeg = state.headingDeg,
+                        onBuildingLongPress = { infoBuildingId = it.id },
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
@@ -219,6 +222,19 @@ fun PocScreen(
                 showDestinations = false
             },
             onDismiss = { showDestinations = false },
+        )
+    }
+    val infoBuilding = infoBuildingId?.let { campus?.building(it) }
+    if (infoBuilding != null) {
+        BuildingInfoDialog(
+            building = infoBuilding,
+            onRoute = infoBuilding.name?.takeIf { graph != null }?.let { name ->
+                {
+                    onDestinationChange(name)
+                    infoBuildingId = null
+                }
+            },
+            onDismiss = { infoBuildingId = null },
         )
     }
 }

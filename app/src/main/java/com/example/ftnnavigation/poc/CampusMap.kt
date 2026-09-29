@@ -2,6 +2,7 @@ package com.example.ftnnavigation.poc
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -16,12 +17,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
@@ -30,14 +34,22 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
 import com.example.ftnnavigation.campus.BuildingCategory
+import com.example.ftnnavigation.campus.CampusBuilding
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.CampusPoint
 import com.example.ftnnavigation.campus.LabelSide
@@ -54,6 +66,34 @@ import com.example.ftnnavigation.ui.theme.ServiceOutline
 private const val STREET_WIDTH_M = 6f
 private const val PATH_WIDTH_M = 1.5f
 
+/** Koliko oko natpisa se još računa kao držanje natpisa (natpisi su sitni). */
+private val LABEL_TOUCH_SLOP = 8.dp
+
+/** Natpis zgrade izmeren i smešten u px mape (pre zuma), za crtanje i za držanje prstom. */
+private data class PlacedLabel(val building: CampusBuilding, val layout: TextLayoutResult, val topLeft: Offset)
+
+/** [m] = px po metru, [k] = 1 / zum (natpisi ostaju iste veličine na ekranu). */
+private fun Density.placeLabels(
+    campus: CampusData,
+    textMeasurer: TextMeasurer,
+    baseStyle: TextStyle,
+    m: Float,
+    k: Float,
+): List<PlacedLabel> {
+    val style = baseStyle.copy(fontSize = (11.sp.toPx() * k).toSp())
+    val gap = 6.dp.toPx() * k // natpis sa strane ne počinje baš na tački
+    return campus.namedBuildings.mapNotNull { building ->
+        val (x, y) = building.labelAt ?: return@mapNotNull null
+        val label = textMeasurer.measure(building.label ?: building.name.orEmpty(), style)
+        val left = when (building.labelSide) {
+            LabelSide.CENTER -> x * m - label.size.width / 2f
+            LabelSide.EAST -> x * m + gap
+            LabelSide.WEST -> x * m - gap - label.size.width
+        }
+        PlacedLabel(building, label, Offset(left, y * m - label.size.height / 2f))
+    }
+}
+
 /**
  * Spoljna mapa kampusa (OpenStreetMap): okolne zgrade, ulice i staze za orijentaciju, FTN
  * zgrade i studentske službe (toplim tonom) sa natpisima, spojni prolazi, ulazi i ruta. [position] je PDR pozicija relativno na
@@ -66,11 +106,14 @@ fun CampusMap(
     route: Route?,
     position: Offset?,
     headingDeg: Float,
+    onBuildingLongPress: (CampusBuilding) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     val colors = MaterialTheme.colorScheme
+    val haptics = LocalHapticFeedback.current
+    val currentOnBuildingLongPress by rememberUpdatedState(onBuildingLongPress)
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium.copy(
         fontWeight = FontWeight.SemiBold,
@@ -98,6 +141,24 @@ fun CampusMap(
                     scaleY = scale
                     translationX = pan.x
                     translationY = pan.y
+                }
+                // Posle graphicsLayer: dodir stiže u koordinatama mape (zum i pomeraj već skinuti).
+                // Pomeranje mape troši događaje, pa prekida i držanje.
+                .pointerInput(campus) {
+                    detectTapGestures(
+                        onLongPress = { at ->
+                            val k = 1f / scale
+                            val m = size.width / campus.widthM
+                            val slop = LABEL_TOUCH_SLOP.toPx() * k
+                            val hit = placeLabels(campus, textMeasurer, labelStyle, m, k)
+                                .filter { Rect(it.topLeft, it.layout.size.toSize()).inflate(slop).contains(at) }
+                                .minByOrNull { (it.topLeft + it.layout.size.toSize().center - at).getDistanceSquared() }
+                            if (hit != null) {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                currentOnBuildingLongPress(hit.building)
+                            }
+                        },
+                    )
                 },
         ) {
             // Nepromenljiv deo mape: putanje se prave jednom (zavise samo od veličine).
@@ -181,20 +242,10 @@ fun CampusMap(
             Canvas(Modifier.fillMaxSize()) {
                 val k = 1f / scale
                 val m = size.width / campus.widthM
-                val style = labelStyle.copy(fontSize = (11.sp.toPx() * k).toSp())
                 // Boja i stil obruba se zadaju pri crtanju: measure() kešira raspored i ne
                 // razlikuje stilove koji menjaju samo crtanje.
                 val halo = Stroke(2.5.dp.toPx() * k, join = StrokeJoin.Round)
-                val gap = 6.dp.toPx() * k // natpis sa strane ne počinje baš na tački
-                for (building in campus.namedBuildings) {
-                    val (x, y) = building.labelAt ?: continue
-                    val label = textMeasurer.measure(building.label ?: building.name.orEmpty(), style)
-                    val left = when (building.labelSide) {
-                        LabelSide.CENTER -> x * m - label.size.width / 2f
-                        LabelSide.EAST -> x * m + gap
-                        LabelSide.WEST -> x * m - gap - label.size.width
-                    }
-                    val topLeft = Offset(left, y * m - label.size.height / 2f)
+                for ((building, label, topLeft) in placeLabels(campus, textMeasurer, labelStyle, m, k)) {
                     val color = if (building.category == BuildingCategory.SLUZBA) OnService else colors.onPrimaryContainer
                     drawText(label, color = Color.White, topLeft = topLeft, drawStyle = halo)
                     drawText(label, color = color, topLeft = topLeft, drawStyle = Fill)

@@ -39,6 +39,12 @@ class CampusGraphTest {
         campus.namedBuildings.forEach { assertNotNull(it.id, graph.node(it.nodeId)) }
     }
 
+    /** Pop-up na mapi: svaka zgrada i služba sa nazivom ima opis, i nema opisa za nepostojeći id. */
+    @Test
+    fun everyNamedBuildingHasInfo() {
+        assertEquals(campus.namedBuildings.map { it.id }.toSet(), BUILDING_INFO.keys)
+    }
+
     /** Menza, zdravstvena zaštita i službe u domu "Slobodan Bajić": svaka sa svojim ulazom, spolja. */
     @Test
     fun studentServices_reachableOutdoors() {
