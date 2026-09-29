@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.ftnnavigation.BuildConfig
 import com.example.ftnnavigation.campus.BuildingCategory
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
@@ -44,11 +45,16 @@ data class PocUiState(
     val stepLengthM: Float = 0.7f, // TODO: kalibrisati merenjem 20 m + brojanjem koraka
     val isTracking: Boolean = false,
     val isPickingStart: Boolean = false,
+    /** Prikaz i ruta sa grafa (map-matching); isključeno = čist PDR (provera smera hoda). */
+    val snapToGraph: Boolean = true,
 ) {
     val distanceM: Float get() = steps * stepLengthM
 
-    /** Pozicija za prikaz i rutu: sa grafa, a dok ga nema čist PDR. */
-    val position: Offset? get() = match?.point?.let { Offset(it.x, it.y) } ?: rawPosition
+    /** Pozicija na grafu ako je lepljenje uključeno (map-matching se računa i kad nije). */
+    val shownMatch: MatchedPosition? get() = match.takeIf { snapToGraph }
+
+    /** Pozicija za prikaz i rutu: sa grafa, a dok ga nema (ili je lepljenje isključeno) čist PDR. */
+    val position: Offset? get() = shownMatch?.point?.let { Offset(it.x, it.y) } ?: rawPosition
 }
 
 /** Šta Mapa prikazuje: spoljnu mapu kampusa ili plan prizemlja Nastavnog bloka. */
@@ -83,6 +89,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Smer hoda iz senzora (ne pravac telefona); na Start se pretpostavlja telefon u ruci. */
     val walkingDirection = WalkingDirection()
 
+    /** Snimak senzora od Start do Stop (samo debug build) - vidi [SensorRecorder]. */
+    var recorder by mutableStateOf<SensorRecorder?>(null)
+        private set
+
     /** Naziv sale (kao u rasporedu) ili zgrade; čuva se i dok se graf još učitava. */
     var destination by mutableStateOf<String?>(null)
         private set
@@ -101,7 +111,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     val route: Route? by derivedStateOf {
         val graph = graph ?: return@derivedStateOf null
         val target = target ?: return@derivedStateOf null
-        val match = state.match
+        val match = state.shownMatch
         val raw = state.rawPosition
         when {
             match != null -> graph.routeFrom(match.point, target.node.id)
@@ -217,19 +227,34 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         state = state.copy(rawPosition = point, match = matcher?.start(point.x, point.y), isPickingStart = false)
     }
 
+    fun toggleSnapToGraph() {
+        state = state.copy(snapToGraph = !state.snapToGraph)
+    }
+
     fun toggleTracking() {
         // Start se pritiska sa telefonom u ruci - odstupanje od pravca hoda se uči iznova.
         if (!state.isTracking) {
             walkingDirection.reset()
             stepStarts.clear()
+            if (BuildConfig.DEBUG) recorder = SensorRecorder.start(getApplication<Application>().filesDir)
+        } else {
+            stopRecording()
         }
         state = state.copy(isTracking = !state.isTracking)
     }
 
+    private fun stopRecording() {
+        recorder?.close()
+        recorder = null
+    }
+
+    override fun onCleared() = stopRecording()
+
     // Smer se zadržava - dolazi sa senzora, nije deo sesije praćenja.
     fun reset() {
+        stopRecording()
         walkingDirection.reset()
         stepStarts.clear()
-        state = PocUiState(headingDeg = state.headingDeg, phoneOffsetDeg = 0f)
+        state = PocUiState(headingDeg = state.headingDeg, phoneOffsetDeg = 0f, snapToGraph = state.snapToGraph)
     }
 }

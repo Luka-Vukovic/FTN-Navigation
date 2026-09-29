@@ -3,9 +3,7 @@ package com.example.ftnnavigation.poc
 import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.atan2
-import kotlin.math.cos
 import kotlin.math.hypot
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -22,23 +20,29 @@ import kotlin.math.sqrt
  *   od pre premeštanja (0,5-1 s pre nego što je prepoznato - pre početka pokreta); kad se
  *   smiri, odstupanje se postavlja tako da se taj smer nastavi (korisnik nastavlja kuda je
  *   išao, a tokom premeštanja se nije okretao).
- * - **Osa hoda** samo fino ispravlja odstupanje: pri hodu je horizontalno ubrzanje (u
- *   koordinatama sveta) najjače napred-nazad, pa glavna komponenta (PCA) ubrzanja u poslednja
- *   dva koraka daje pravac hoda bez znaka. Prihvata se samo ako je najviše
- *   [MAX_CORRECTION_DEG] od trenutne procene i ako se korisnik u tim koracima nije okretao -
- *   bočno ljuljanje (u ruci) i njihanje noge (u džepu) umeju da daju pogrešnu osu.
+ * - **Pravac hoda iz ubrzanja** uči odstupanje (telefon u ruci ne mora da gleda kuda se ide):
+ *   u svakom koraku uzdužno ubrzanje (u koordinatama sveta) prednjači vertikalnom za oko
+ *   četvrt koraka (izmereno na snimcima hoda), pa korelacija horizontalnog ubrzanja sa
+ *   vertikalnim kasnije minus ranije daje pravac hoda **sa znakom** ([phaseDirection]). Bočno
+ *   ljuljanje (jednom po dva koraka) se u tome poništava. Odstupanje se pomera ka njemu posle
+ *   svakog koraka, ali samo ako je signal jak ([MIN_PHASE_STRENGTH]) i telefon se u tim
+ *   koracima nije okretao; ispravka veća od [MAX_CORRECTION_DEG] tek kad se dva poslednja
+ *   jaka merenja slože. Tada se i prethodni koraci koji su već išli novim pravcem (slabo
+ *   izmereni, prvi korak posle stajanja) ponavljaju u novom smeru ([WalkStep.redoSteps]) -
+ *   bočni hod iz stajanja se vidi tek na 3.-5. koraku. Posle skretanja, ako je izmereni
+ *   pravac daleko od procene (telefon se sada drži drugačije), odstupanje se odmah postavlja
+ *   prema merenju.
  * - **Okret telefona bez okreta tela** (telefon u ruci okrenut na stranu, pogled u stranu dok
  *   se ide pravo): nagli okret pravca telefona je prvo skretanje (tačka odmah prati). Kad se
- *   telefon smiri (dva koraka), osa hoda kaže šta je bilo - ona je u koordinatama sveta, pa je
- *   posle okreta samo telefona ista kao pre. Ako je osa ostala na starom smeru, odstupanje se
- *   ispravlja za okret telefona, a koraci od početka okreta se ponavljaju u starom smeru
- *   ([WalkStep.redoSteps]). Isto i kad se telefon posle kratkog okreta vrati (osa cele epizode).
- *   Osi se veruje samo ako se pre okreta slagala sa smerom hoda (inače je verovatno bočna), a
- *   okret mora biti bar [MIN_SEPARATION_DEG] od pravca (okret za ~180° osa ne razlikuje).
+ *   telefon smiri (dva koraka), pravac hoda iz ubrzanja kaže šta je bilo - on je u koordinatama
+ *   sveta, pa je posle okreta samo telefona isti kao pre. Ako je ostao na starom smeru,
+ *   odstupanje se ispravlja za okret telefona, a koraci od početka okreta se ponavljaju u starom
+ *   smeru ([WalkStep.redoSteps]). Isto i kad se telefon posle kratkog okreta vrati (pravac cele
+ *   epizode). Veruje mu se samo ako se pre okreta slagao sa smerom hoda, a okret mora biti bar
+ *   [MIN_SEPARATION_DEG].
  *
  * Pretpostavka: na početku ([reset], dugme Start) telefon je u ruci, okrenut napred.
- * Ograničenja: okret tela dok se telefon premešta (do [MAX_UNSETTLED_NS]) se ne vidi; hod
- * bočno ili dijagonalno pod uglom većim od [MAX_CORRECTION_DEG] od pravca telefona se ne ispravlja.
+ * Ograničenje: okret tela dok se telefon premešta (do [MAX_UNSETTLED_NS]) se ne vidi.
  *
  * Uglovi su azimuti u stepenima (0 = sever, u smeru kazaljke). Filteri su podešeni za
  * ~50 Hz (SENSOR_DELAY_GAME) za oba senzora.
@@ -46,11 +50,18 @@ import kotlin.math.sqrt
 class WalkingDirection {
     /**
      * Smer hoda koraka (azimut 0..360). [redoSteps] prethodnih koraka treba ponoviti u istom
-     * smeru - pokazalo se da je okret bio samo okret telefona, ne skretanje.
+     * smeru - pokazalo se da je okret bio samo okret telefona, ne skretanje, ili je velika
+     * ispravka pokazala da su i ti koraci išli novim pravcem.
      */
     data class WalkStep(val headingDeg: Float, val redoSteps: Int = 0)
 
-    private class Sample(val timestampNs: Long, val east: Double, val north: Double)
+    /** Korak (za ponavljanje posle velike ispravke): jak pravac iz ubrzanja, null ako ga nije bilo. */
+    private class StepPhase(val afterPause: Boolean) {
+        var strongDeg: Double? = null
+        var turning = false
+    }
+
+    private class Sample(val timestampNs: Long, val east: Double, val north: Double, val up: Double)
 
     /** Okret telefona u toku: od kada (za osu), i pravac telefona i smer hoda pre okreta. */
     private class Turn(val fromNs: Long, val phoneDeg: Double, val walkDeg: Double, val axisTrusted: Boolean) {
@@ -82,15 +93,22 @@ class WalkingDirection {
     private val samples = ArrayDeque<Sample>()
     private val stepTimes = ArrayDeque<Long>()
     private val stepPhoneDegs = ArrayDeque<Double>()
+    private val stepPhases = ArrayDeque<StepPhase>()
+
+    // Poslednji korak pre stajanja: pravac iz ubrzanja se ne meri preko koraka pre njega (stari pravac).
+    private var pauseFromNs = 0L
 
     private var offsetDeg = 0.0
     private var anchored = true
 
-    // Pravac telefona i smer hoda u poslednjem koraku bez okreta; da li se osa hoda slagala.
+    // Pravac telefona i smer hoda u poslednjem koraku bez okreta; da li se pravac iz ubrzanja slagao.
     private var steadyPhoneDeg: Double? = null
     private var steadyWalkDeg = 0.0
     private var axisAgrees = false
     private var turn: Turn? = null
+
+    // Pravac hoda iz ubrzanja u prethodnom koraku (null ako ga nije bilo) - za velike ispravke.
+    private var lastPhaseDeg: Double? = null
 
     // Smer na svakih 0,5 s dok je odstupanje poznato; pri premeštanju važi stariji od dva.
     private var recentWalkDeg: Double? = null
@@ -159,7 +177,7 @@ class WalkingDirection {
         }
     }
 
-    /** Sirovi akcelerometar (koordinate telefona); pamti se horizontalni deo u koordinatama sveta. */
+    /** Sirovi akcelerometar (koordinate telefona); pamti se u koordinatama sveta. */
     fun onAccelerometer(x: Float, y: Float, z: Float, timestampNs: Long) {
         if (!hasRotation) return
         val r = rotation
@@ -168,6 +186,7 @@ class WalkingDirection {
                 timestampNs,
                 east = (r[0] * x + r[1] * y + r[2] * z).toDouble(),
                 north = (r[3] * x + r[4] * y + r[5] * z).toDouble(),
+                up = (r[6] * x + r[7] * y + r[8] * z).toDouble(),
             ),
         )
         while (timestampNs - samples.first().timestampNs > SAMPLE_WINDOW_NS) samples.removeFirst()
@@ -199,6 +218,10 @@ class WalkingDirection {
 
         if (!anchored) return WalkStep(normalize(heldWalkDeg))
         upRef = upFast.copyOf()
+        val afterPause = stepTimes.size == 1 || timestampNs - previousStepNs > PAUSE_NS
+        if (afterPause) pauseFromNs = previousStepNs
+        stepPhases.addLast(StepPhase(afterPause))
+        if (stepPhases.size > MAX_TURN_STEPS + 1) stepPhases.removeFirst()
         return steer(phone, previousStepNs)
     }
 
@@ -213,6 +236,8 @@ class WalkingDirection {
         samples.clear()
         stepTimes.clear()
         stepPhoneDegs.clear()
+        stepPhases.clear()
+        pauseFromNs = 0L
         stepSumE = 0.0
         stepSumN = 0.0
         prevStepSumE = 0.0
@@ -234,12 +259,14 @@ class WalkingDirection {
         samples.clear()
         stepTimes.clear()
         stepPhoneDegs.clear()
+        stepPhases.clear()
     }
 
     private fun forgetTurns() {
         turn = null
         steadyPhoneDeg = null
         axisAgrees = false
+        lastPhaseDeg = null
     }
 
     /** Smer koraka sa pravcem telefona [phone]: fina ispravka, ili praćenje okreta (vidi opis klase). */
@@ -247,25 +274,33 @@ class WalkingDirection {
         val steady = steadyPhoneDeg
         if (turn == null && steady != null && abs(angleDiff(phone, steady)) > TURN_DEG) {
             turn = Turn(previousStepNs, steady, steadyWalkDeg, axisAgrees)
+            lastPhaseDeg = null
         }
         val turn = turn
         if (turn == null) {
-            correctOffset(phone)
+            val redo = correctOffset(phone)
             steadyPhoneDeg = phone
             steadyWalkDeg = phone + offsetDeg
-            return WalkStep(normalize(phone + offsetDeg))
+            return WalkStep(normalize(phone + offsetDeg), redo)
         }
 
+        stepPhases.last().turning = true
         turn.steps++
-        turn.maxDeg = maxOf(turn.maxDeg, axisDiff(phone, turn.phoneDeg))
+        turn.maxDeg = maxOf(turn.maxDeg, abs(angleDiff(phone, turn.phoneDeg)))
         val settled = phoneSteady()
         // Dok se telefon okreće - kao skretanje.
         if (!settled && turn.steps < MAX_TURN_STEPS) return WalkStep(normalize(phone + offsetDeg))
 
         this.turn = null
         steadyPhoneDeg = phone
-        val phoneOnly = settled && turn.axisTrusted && onlyPhoneTurned(turn, phone)
-        if (phoneOnly) offsetDeg = angleDiff(turn.walkDeg, phone)
+        val walk = if (settled) walkAfterTurn(turn, phone) else null
+        val phoneOnly = walk != null && turn.axisTrusted && abs(angleDiff(walk, turn.walkDeg)) <= AXIS_MATCH_DEG
+        when {
+            phoneOnly -> offsetDeg = angleDiff(turn.walkDeg, phone)
+            // Skretanje, a hod posle njega je daleko od procene: telefon se sada drži drugačije.
+            walk != null && abs(angleDiff(walk, phone + offsetDeg)) > MAX_CORRECTION_DEG -> offsetDeg = angleDiff(walk, phone)
+        }
+        lastPhaseDeg = walk
         steadyWalkDeg = phone + offsetDeg
         return if (phoneOnly) {
             WalkStep(normalize(turn.walkDeg), redoSteps = turn.steps - 1)
@@ -274,18 +309,19 @@ class WalkingDirection {
         }
     }
 
-    /** Da li osa hoda kaže da se u [turn] okrenuo samo telefon (sada ka [phone]), a ne telo. */
-    private fun onlyPhoneTurned(turn: Turn, phone: Double): Boolean {
-        // Telefon ostao okrenut: osa posle okreta je ili stari smer (samo telefon) ili nov (telo).
-        // Telefon se vratio: ako je bio dovoljno okrenut, osa cele epizode je stari smer samo ako
-        // telo nije skretalo.
+    /**
+     * Pravac hoda iz ubrzanja posle okreta [turn] (telefon sada ka [phone]): ako je jednak smeru
+     * od pre okreta, okrenuo se samo telefon. Null ako se ne zna.
+     */
+    private fun walkAfterTurn(turn: Turn, phone: Double): Double? {
+        // Telefon ostao okrenut: poslednja dva koraka. Telefon se vratio: ako je bio dovoljno
+        // okrenut, cela epizoda - stari smer je samo ako telo nije skretalo.
         val fromNs = when {
-            axisDiff(phone, turn.phoneDeg) >= MIN_SEPARATION_DEG -> stepTimes.first()
+            abs(angleDiff(phone, turn.phoneDeg)) >= MIN_SEPARATION_DEG -> stepTimes.first()
             turn.maxDeg >= MIN_SEPARATION_DEG -> turn.fromNs
-            else -> return false
+            else -> return null
         }
-        val axis = walkingAxis(fromNs) ?: return false
-        return axisDiff(axis, turn.walkDeg) <= AXIS_MATCH_DEG
+        return phaseDirection(fromNs)
     }
 
     /** Pravac telefona se u poslednja dva koraka nije menjao (nema okretanja). */
@@ -295,55 +331,87 @@ class WalkingDirection {
         return stepPhoneDegs.all { abs(angleDiff(it, first)) <= MAX_TURN_DEG }
     }
 
-    /** Fina ispravka odstupanja iz ose hoda (vidi opis klase). */
-    private fun correctOffset(phone: Double) {
-        // Okretanje u tim koracima: osa bi bila mešavina dva pravca.
-        if (!phoneSteady()) return
-        val axis = walkingAxis(stepTimes.first()) ?: return
-        var diff = angleDiff(axis, phone + offsetDeg)
-        if (diff > 90.0) diff -= 180.0
-        if (diff < -90.0) diff += 180.0
+    /**
+     * Odstupanje se pomera ka pravcu hoda iz ubrzanja (vidi opis klase); vraća koliko prethodnih
+     * koraka treba ponoviti u novom smeru (samo posle velike ispravke).
+     */
+    private fun correctOffset(phone: Double): Int {
+        // Okretanje u tim koracima: pravac bi bio mešavina dva.
+        if (!phoneSteady()) return 0
+        // Prvi korak posle stajanja: bez koraka pre stajanja (inače jako merenje starog pravca -
+        // snimak 17:24, bočni hod na drugu stranu posle 2,9 s stajanja).
+        val walk = phaseDirection(maxOf(stepTimes.first(), pauseFromNs)) ?: return 0
+        val previous = lastPhaseDeg
+        lastPhaseDeg = walk
+        stepPhases.last().strongDeg = walk
+        val diff = angleDiff(walk, phone + offsetDeg)
         axisAgrees = abs(diff) <= AXIS_MATCH_DEG
-        if (abs(diff) > MAX_CORRECTION_DEG) return
+        // Jedan prozor ume da prevari (zastoj, sudar) - velika ispravka tek kad se slože dva
+        // poslednja jaka merenja (ne moraju biti u uzastopnim koracima), i tada odmah cela
+        // (bočni hod, telefon se drži drugačije) - postepeno je tačka kasnila 5-8 koraka.
+        if (abs(diff) > MAX_CORRECTION_DEG) {
+            if (previous == null || abs(angleDiff(walk, previous)) > AXIS_MATCH_DEG) return 0
+            offsetDeg = angleDiff(walk, phone)
+            return stepsWalkedToward(walk)
+        }
         offsetDeg = angleDiff(offsetDeg + OFFSET_GAIN * diff, 0.0)
+        return 0
     }
 
     /**
-     * Pravac glavne ose horizontalnog ubrzanja od [fromNs] (azimut, jedan od dva smera),
-     * ili null ako ubrzanja nema ili nije izraženo u jednom pravcu.
+     * Koliko je koraka pre tekućeg verovatno već išlo pravcem [walk]: unazad dok se ne naiđe na
+     * jako merenje drugog pravca ili na okret telefona. Prvi korak posle stajanja je poslednji
+     * (bočni hod iz stajanja: merenje prvog koraka je skoro sve stajanje, pa je slabo).
      */
-    private fun walkingAxis(fromNs: Long): Double? {
-        val window = samples.filter { it.timestampNs >= fromNs }
-        if (window.size < MIN_AXIS_SAMPLES) return null
-        val meanE = window.sumOf { it.east } / window.size
-        val meanN = window.sumOf { it.north } / window.size
-        var see = 0.0
-        var snn = 0.0
-        var sen = 0.0
-        for (s in window) {
-            val de = s.east - meanE
-            val dn = s.north - meanN
-            see += de * de
-            snn += dn * dn
-            sen += de * dn
+    private fun stepsWalkedToward(walk: Double): Int {
+        var redo = 0
+        for (i in stepPhases.size - 2 downTo 0) {
+            val step = stepPhases[i]
+            val deg = step.strongDeg
+            if (step.turning || (deg != null && abs(angleDiff(deg, walk)) > AXIS_MATCH_DEG)) break
+            redo++
+            if (step.afterPause) break
         }
-        see /= window.size
-        snn /= window.size
-        sen /= window.size
-        val half = (see + snn) / 2
-        val spread = sqrt(((see - snn) / 2) * ((see - snn) / 2) + sen * sen)
-        val major = half + spread
-        val minor = half - spread
-        if (major < MIN_AXIS_VARIANCE || minor / major > MAX_AXIS_RATIO) return null
-        val angle = 0.5 * atan2(2 * sen, see - snn) // od istoka, suprotno kazaljci
-        return azimuth(cos(angle), sin(angle))
+        return redo
+    }
+
+    /**
+     * Pravac hoda (azimut, sa znakom) iz ubrzanja od [fromNs]: vektor korelacije horizontalnog
+     * ubrzanja h(t) sa vertikalnim v(t + τ) - v(t - τ) za τ do [MAX_LAG_SAMPLES] uzoraka. Uzdužno
+     * ubrzanje prednjači vertikalnom, pa vektor pokazuje napred. Null ako ubrzanja nema ili je
+     * veza slaba (stajanje, okretanje, udarci).
+     */
+    private fun phaseDirection(fromNs: Long): Double? {
+        val window = samples.filter { it.timestampNs >= fromNs }
+        val n = window.size
+        if (n < MIN_AXIS_SAMPLES) return null
+        val meanE = window.sumOf { it.east } / n
+        val meanN = window.sumOf { it.north } / n
+        val meanU = window.sumOf { it.up } / n
+        val east = DoubleArray(n) { window[it].east - meanE }
+        val north = DoubleArray(n) { window[it].north - meanN }
+        val up = DoubleArray(n) { window[it].up - meanU }
+        var ce = 0.0
+        var cn = 0.0
+        for (lag in 1..MAX_LAG_SAMPLES) {
+            for (i in 0 until n - lag) {
+                ce += east[i] * up[i + lag] - east[i + lag] * up[i]
+                cn += north[i] * up[i + lag] - north[i + lag] * up[i]
+            }
+        }
+        val horizontal = (0 until n).sumOf { east[it] * east[it] + north[it] * north[it] } / n
+        val vertical = (0 until n).sumOf { up[it] * up[it] } / n
+        if (horizontal < MIN_AXIS_VARIANCE || vertical == 0.0) return null
+        val strength = hypot(ce, cn) / (n * MAX_LAG_SAMPLES) / sqrt(horizontal * vertical)
+        if (strength < MIN_PHASE_STRENGTH) return null
+        return azimuth(ce, cn)
     }
 
     companion object {
-        /** Koliko se odstupanje pomera ka izmerenoj osi hoda posle svakog koraka. */
-        const val OFFSET_GAIN = 0.15
+        /** Koliko se odstupanje pomera ka pravcu hoda iz ubrzanja posle svakog koraka. */
+        const val OFFSET_GAIN = 0.3
 
-        /** Najveća razlika ose hoda od procene koja se prihvata kao ispravka. */
+        /** Veća ispravka od ove traži da se i prethodni korak slaže (vidi [correctOffset]). */
         const val MAX_CORRECTION_DEG = 45.0
 
         /** Okret gravitacije u koordinatama telefona koji znači da je telefon premešten. */
@@ -352,10 +420,10 @@ class WalkingDirection {
         /** Okret pravca telefona (u odnosu na poslednji korak bez okreta) koji može biti skretanje. */
         const val TURN_DEG = 30.0
 
-        /** Osa hoda "je" neki smer ako je od njega najviše ovoliko (bez znaka). */
-        const val AXIS_MATCH_DEG = 15.0
+        /** Pravac hoda iz ubrzanja "je" neki smer ako je od njega najviše ovoliko. */
+        const val AXIS_MATCH_DEG = 20.0
 
-        /** Okret telefona manji od ovoga (ili blizu 180°) se po osi hoda ne razlikuje od skretanja. */
+        /** Okret telefona manji od ovoga se po pravcu hoda iz ubrzanja ne razlikuje od skretanja. */
         const val MIN_SEPARATION_DEG = 30.0
 
         /** Najviše koraka od početka okreta do odluke; toliko se koraka može ponoviti. */
@@ -367,13 +435,19 @@ class WalkingDirection {
         private const val SETTLE_CHECK_NS = 500_000_000L
         private const val MAX_UNSETTLED_NS = 4_000_000_000L
 
-        /** Osa hoda se računa iz poslednja dva koraka (pun ciklus: levi + desni). */
+        /** Pravac hoda se računa iz poslednja dva koraka (pun ciklus: levi + desni). */
         private const val AXIS_STEPS = 2
         private const val MAX_TURN_DEG = 20.0
 
         private const val MIN_AXIS_SAMPLES = 20
         private const val MIN_AXIS_VARIANCE = 0.05 // (m/s²)² - ispod toga korisnik stoji
-        private const val MAX_AXIS_RATIO = 0.4 // sporedna/glavna varijansa: hod je napred-nazad
+
+        /** Normalizovana korelacija (0..1) ispod koje se pravac iz ubrzanja ne uzima (snimci: hod uglavnom 0,45-0,9). */
+        const val MIN_PHASE_STRENGTH = 0.35
+        private const val MAX_LAG_SAMPLES = 15 // 0,3 s na 50 Hz: do pola koraka
+
+        /** Razmak koraka duži od ovoga je stajanje (bočni hod: do ~2 s po koraku, stajanje od 2,9 s). */
+        private const val PAUSE_NS = 2_500_000_000L
 
         private const val SAMPLE_WINDOW_NS = 5_000_000_000L // okret: do MAX_TURN_STEPS koraka
         private const val SMOOTH_ALPHA = 0.1 // prikaz: bez njihanja telefona u džepu
@@ -389,9 +463,6 @@ class WalkingDirection {
 
         /** Razlika uglova [a] - [b] svedena na -180..180. */
         private fun angleDiff(a: Double, b: Double) = ((a - b) % 360.0 + 540.0) % 360.0 - 180.0
-
-        /** Ugao između pravaca [a] i [b] bez znaka (0..90): osa hoda ne zna napred od nazad. */
-        private fun axisDiff(a: Double, b: Double) = abs(angleDiff(a, b)).let { minOf(it, 180.0 - it) }
 
         private fun angleBetween(a: DoubleArray, b: DoubleArray): Double {
             val dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]

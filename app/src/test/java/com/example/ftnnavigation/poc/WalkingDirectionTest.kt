@@ -65,15 +65,18 @@ class WalkingDirectionTest {
     /**
      * Hod [seconds] sekundi u pravcu [walkDeg] sa položajem telefona [pose] (u trenutku t, s);
      * vraća smer hoda za svaki korak (ponavljanje koraka iz kasnijeg hoda se vidi samo u [allHeadings]).
+     * [stepEveryNs]: razmak detektovanih koraka (bočni hod: ~1,2 s), računa se od početka hoda.
      */
     private fun walk(
         seconds: Double,
         walkDeg: Double,
         forwardAmp: Double = 1.5,
         lateralAmp: Double = 0.5,
+        stepEveryNs: Long = stepNs,
         pose: (Double) -> Pose,
     ): List<Float> {
         val start = allHeadings.size
+        val stepOriginNs = if (stepEveryNs == stepNs) 0L else timeNs
         val f = forward(walkDeg)
         val side = f cross up
         val end = timeNs + (seconds * 1e9).toLong()
@@ -82,15 +85,16 @@ class WalkingDirectionTest {
             val p = pose(t)
             direction.onRotation(matrix(p), timeNs)
             // Napred-nazad i gore-dole sa svakim korakom, bočno ljuljanje sa svakim drugim.
+            // Vertikalno kasni za uzdužnim oko četvrt koraka (izmereno na snimcima hoda).
             val world = f * (forwardAmp * sin(2 * PI * 2 * t)) +
                 side * (lateralAmp * sin(2 * PI * t)) +
-                up * (9.81 + 2.0 * sin(2 * PI * 2 * t + 1.0)) +
+                up * (9.81 + 2.0 * sin(2 * PI * 2 * t - PI / 2)) +
                 Vec(random.nextDouble(-0.2, 0.2), random.nextDouble(-0.2, 0.2), random.nextDouble(-0.2, 0.2))
             direction.onAccelerometer(
                 (world dot p.x).toFloat(), (world dot p.y).toFloat(), (world dot p.z).toFloat(), timeNs,
             )
             timeNs += sampleNs
-            if (timeNs % stepNs == 0L) direction.onStep(timeNs)?.let { step ->
+            if ((timeNs - stepOriginNs) % stepEveryNs == 0L) direction.onStep(timeNs)?.let { step ->
                 for (i in allHeadings.size - minOf(step.redoSteps, allHeadings.size) until allHeadings.size) {
                     allHeadings[i] = step.headingDeg
                 }
@@ -132,6 +136,58 @@ class WalkingDirectionTest {
         val headings = walk(10.0, 30.0) { inHand(60.0) }
         assertNear(60.0, headings.first(), 5.0, "prvi korak")
         headings.takeLast(5).forEach { assertNear(30.0, it, 5.0) }
+    }
+
+    @Test
+    fun phoneInHand_heldFarFromWalkingDirection_learnsIt() {
+        // Snimak 29.09.: telefon ~65° od pravca hoda od samog Start-a (više od MAX_CORRECTION_DEG).
+        stand(1.0, inHand(100.0))
+        direction.reset()
+        val headings = walk(10.0, 30.0) { inHand(100.0) }
+        // Prvi koraci su išli kuda gleda telefon, pa se posle velike ispravke ponavljaju.
+        headings.forEach { assertNear(30.0, it, 5.0) }
+    }
+
+    @Test
+    fun sidestep_followedWithinFewSteps() {
+        // Snimci 29.09. (13:23, 13:25): bočni hod, telefon i dalje gleda napred. Tačka je
+        // postepeno (30 %/korak) kasnila 5-8 koraka; kad se dva merenja slože - odmah.
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        val sideways = walk(5.0, 120.0) { inHand(30.0) }
+        sideways.drop(4).forEach { assertNear(120.0, it, 10.0) }
+    }
+
+    @Test
+    fun sidestepFromStanding_earlyStepsRedone() {
+        // Snimci 29.09. (16:38, 16:41): hod, stajanje, pa bočni hod. Prvi korak posle stajanja
+        // se ne može izmeriti, pa tačka prelazi tek na 3.-5. koraku - ti koraci se ponavljaju.
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        val straight = walk(5.0, 30.0) { inHand(30.0) }
+        stand(5.0, inHand(30.0))
+        val sideways = walk(5.0, 120.0) { inHand(30.0) }
+        sideways.forEach { assertNear(120.0, it, 10.0) }
+        // Koraci pre stajanja ostaju napred.
+        allHeadings.take(straight.size).forEach { assertNear(30.0, it, 10.0) }
+    }
+
+    @Test
+    fun sidestepBackAfterShortStop_allStepsRedone() {
+        // Snimak 29.09. 17:24: bočno na jednu stranu, 2,9 s stajanja, pa na drugu. Prvi korak
+        // posle stajanja je merio i dva koraka pre njega (jak stari pravac) i ostajao na staroj
+        // strani. Koraci bočnog hoda su na ~1,2 s kao na snimku, a stari hod je jači od novog
+        // (na snimku je to merenje bilo 0,38 - tik iznad praga; sa 0,5 s i istom jačinom se ne vidi).
+        val sidestepNs = 1_200_000_000L
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        val first = walk(5.0, 120.0, forwardAmp = 2.5, stepEveryNs = sidestepNs) { inHand(30.0) }
+        stand(1.4, inHand(30.0)) // poslednji korak u 10,8 s, sledeći u 13,6 s: razmak 2,8 s
+        val back = walk(6.0, 300.0, forwardAmp = 1.0, stepEveryNs = sidestepNs) { inHand(30.0) }
+        first.takeLast(2).forEach { assertNear(120.0, it, 10.0) }
+        back.forEach { assertNear(300.0, it, 10.0) }
     }
 
     @Test

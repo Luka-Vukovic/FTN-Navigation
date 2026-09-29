@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -37,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +60,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextMeasurer
@@ -90,7 +94,14 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
         direction = viewModel.walkingDirection,
         onHeading = viewModel::onHeading,
         onStep = viewModel::onStep,
+        recorder = viewModel.recorder,
     )
+    // Senzori rade samo dok je Mapa aktivna - ekran se ne gasi dok traje praćenje (telefon u džepu).
+    val view = LocalView.current
+    DisposableEffect(view, state.isTracking) {
+        view.keepScreenOn = state.isTracking
+        onDispose { view.keepScreenOn = false }
+    }
 
     PocScreen(
         state = state,
@@ -106,6 +117,7 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
         onMapTap = viewModel::setStart,
         onTrackingToggle = viewModel::toggleTracking,
         onReset = viewModel::reset,
+        onSnapToggle = viewModel::toggleSnapToGraph,
     )
 }
 
@@ -124,6 +136,7 @@ fun PocScreen(
     onMapTap: (Offset) -> Unit,
     onTrackingToggle: () -> Unit,
     onReset: () -> Unit,
+    onSnapToggle: () -> Unit,
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     Scaffold(
@@ -181,6 +194,15 @@ fun PocScreen(
                         )
                     }
                     if (hint != null) HintBanner(stringResource(hint))
+                }
+                if (mode == MapMode.ZGRADA) {
+                    FilterChip(
+                        selected = state.snapToGraph,
+                        onClick = onSnapToggle,
+                        label = { Text(stringResource(R.string.poc_snap_to_graph)) },
+                        colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+                    )
                 }
             }
             ControlPanel(
@@ -648,6 +670,7 @@ private fun PocScreenPreview() {
             onMapTap = {},
             onTrackingToggle = {},
             onReset = {},
+            onSnapToggle = {},
         )
     }
 }

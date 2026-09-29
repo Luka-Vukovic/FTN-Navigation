@@ -4,6 +4,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -19,7 +20,7 @@ import kotlin.math.abs
  *
  * Oba senzora idu u [direction] (smer hoda, ne pravac telefona). [onHeading] dobija smer za
  * prikaz (azimut u stepenima, 0..360, 0 = sever, u smeru kazaljke), a [onStep] smer hoda koraka
- * (uz broj prethodnih koraka koje treba ponoviti).
+ * (uz broj prethodnih koraka koje treba ponoviti). [recorder] (debug) snima sve događaje.
  */
 @Composable
 fun PdrSensorsEffect(
@@ -27,22 +28,30 @@ fun PdrSensorsEffect(
     direction: WalkingDirection,
     onHeading: (Float) -> Unit,
     onStep: (WalkingDirection.WalkStep) -> Unit,
+    recorder: SensorRecorder? = null,
 ) {
     val context = LocalContext.current
     val sensorManager = remember(context) { context.getSystemService(SensorManager::class.java) }
     val currentOnHeading by rememberUpdatedState(onHeading)
     val currentOnStep by rememberUpdatedState(onStep)
+    val currentRecorder by rememberUpdatedState(recorder)
 
     LifecycleResumeEffect(sensorManager, direction, trackSteps) {
         val rotationMatrix = FloatArray(9)
         var lastHeading = Float.NaN
         var lastAccelNs = 0L
-        val stepDetector = AccelStepDetector { direction.onStep(lastAccelNs)?.let(currentOnStep) }
+        val stepDetector = AccelStepDetector {
+            direction.onStep(lastAccelNs)?.let { step ->
+                currentRecorder?.step(lastAccelNs, step, direction)
+                currentOnStep(step)
+            }
+        }
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 when (event.sensor.type) {
                     Sensor.TYPE_ROTATION_VECTOR -> {
                         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                        currentRecorder?.rotation(event.timestamp, rotationMatrix)
                         direction.onRotation(rotationMatrix, event.timestamp)
                         // Senzor javlja ~50 puta u sekundi - prikaz se osvežava tek na promenu od 1°.
                         val heading = direction.heading() ?: return
@@ -53,6 +62,7 @@ fun PdrSensorsEffect(
                     }
                     Sensor.TYPE_ACCELEROMETER -> {
                         lastAccelNs = event.timestamp
+                        currentRecorder?.accelerometer(event.timestamp, event.values[0], event.values[1], event.values[2])
                         direction.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
                         stepDetector.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
                     }
@@ -72,7 +82,11 @@ fun PdrSensorsEffect(
             }
         }
 
-        onPauseOrDispose { sensorManager.unregisterListener(listener) }
+        currentRecorder?.resume(SystemClock.elapsedRealtimeNanos())
+        onPauseOrDispose {
+            sensorManager.unregisterListener(listener)
+            currentRecorder?.pause(SystemClock.elapsedRealtimeNanos())
+        }
     }
 }
 

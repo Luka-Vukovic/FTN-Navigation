@@ -36,6 +36,8 @@ __pycache__/
 # generisani app/src/main/assets/schedule.json
 /rasporedi/
 /images/
+# Snimci PDR senzora sa telefona (SensorRecorder) - za WalkingDirectionReplayTest
+/pdr/
 
 # --- Claude Code ---
 CLAUDE.md

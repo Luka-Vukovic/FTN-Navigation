@@ -124,6 +124,7 @@
     <string name="poc_start">Start</string>
     <string name="poc_stop">Stop</string>
     <string name="poc_reset">Reset</string>
+    <string name="poc_snap_to_graph">Lepljenje na graf</string>
 
     <!-- Ruta -->
     <string name="route_choose_destination">Izaberi odredište</string>
