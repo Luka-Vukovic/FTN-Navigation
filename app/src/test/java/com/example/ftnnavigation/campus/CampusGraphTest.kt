@@ -2,6 +2,7 @@ package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.PointM
 import com.example.ftnnavigation.schedule.ScheduleData
@@ -15,12 +16,14 @@ import org.junit.Test
 import java.io.File
 import kotlin.math.hypot
 
-/** Graf kampusa iz pravog assets/campus.json, spojen sa grafom Nastavnog bloka kao u aplikaciji. */
+/** Graf kampusa iz pravog assets/campus.json, spojen sa grafovima NB-a i NTP-a kao u aplikaciji. */
 class CampusGraphTest {
 
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
 
-    private val graph = seedGraph(campus).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
+    private val ntp = NtpPlan.parse(File("src/main/assets/ntp.json").readText())
+
+    private val graph = seedGraph(campus, ntp).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private fun distance(a: PointM, b: PointM) = hypot(a.x - b.x, a.y - b.y)
 
@@ -125,8 +128,9 @@ class CampusGraphTest {
     @Test
     fun defaultScheduleRooms_resolve() {
         val ntp = checkNotNull(resolveTarget("NTP-001", graph, campus))
-        assertTrue(ntp.approximate)
+        assertFalse(ntp.approximate)
         assertEquals("NTP", ntp.building?.id)
+        assertEquals(NodeType.PROSTORIJA, ntp.node.type)
         val lab = checkNotNull(resolveTarget("L4 (RC)", graph, campus))
         assertFalse(lab.approximate)
         assertEquals(NodeType.PROSTORIJA, lab.node.type)

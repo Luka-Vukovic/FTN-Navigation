@@ -4,6 +4,8 @@ import android.content.Context
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.GraphDatabase
 import com.example.ftnnavigation.graph.GraphRepository
+import com.example.ftnnavigation.graph.IndoorPlan
+import com.example.ftnnavigation.graph.NtpPlan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -17,9 +19,14 @@ suspend fun loadCampus(context: Context): CampusData = withContext(Dispatchers.I
     CampusData.parse(context.assets.open(CampusData.ASSET).bufferedReader().use { it.readText() })
 }
 
+/** Unutrašnji graf NTP-a iz assets/ntp.json. */
+suspend fun loadNtp(context: Context): IndoorPlan = withContext(Dispatchers.IO) {
+    NtpPlan.parse(context.assets.open(NtpPlan.ASSET).bufferedReader().use { it.readText() })
+}
+
 /** Graf kampusa i zgrada iz baze; prazna baza se prvo puni ([seedGraph]). */
 suspend fun loadGraph(context: Context, campus: CampusData): BuildingGraph {
-    val (nodes, edges) = seedGraph(campus)
+    val (nodes, edges) = seedGraph(campus, loadNtp(context))
     val repository = GraphRepository(GraphDatabase.get(context).graphDao())
     return repository.load(nodes, edges, campus.placements())
 }

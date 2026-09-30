@@ -110,6 +110,15 @@
     <string name="map_campus_location">Kampus FTN-a</string>
     <string name="map_mode_campus">Kampus</string>
     <string name="map_mode_building">Nastavni blok</string>
+    <string name="map_mode_ntp">NTP</string>
+    <string name="ntp_location">Naučno-tehnološki park · %1$s</string>
+    <string name="floor_ground">prizemlje</string>
+    <string name="floor_number">%1$d. sprat</string>
+    <string name="floor_ground_short">P</string>
+    <string name="floor_select">Sprat: %1$s</string>
+    <string name="route_floor_change_up">↑ %1$s</string>
+    <string name="route_floor_change_down">↓ %1$s</string>
+    <string name="building_with_floor">%1$s · %2$s</string>
     <string name="poc_hint_no_start">Postavi početnu poziciju da bi pokrenuo praćenje</string>
     <string name="poc_hint_pick_start">Dodirni plan na mestu gde stojiš</string>
     <string name="poc_stat_steps">Koraci</string>
@@ -137,7 +146,7 @@
     <string name="route_destinations_title">Odredište</string>
     <string name="route_destinations_buildings">Zgrade FTN-a</string>
     <string name="route_destinations_services">Studentske službe</string>
-    <string name="route_destinations_rooms">Sale · Nastavni blok</string>
+    <string name="route_destinations_rooms">Sale</string>
     <string name="route_in_building">Zgrada: %1$s</string>
     <string name="route_to_building">Sala nije ucrtana · ruta do zgrade %1$s</string>
     <string name="route_summary">~%1$d min · %2$d m</string>

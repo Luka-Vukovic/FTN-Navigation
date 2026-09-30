@@ -21,7 +21,8 @@ bude (0, 0).
     zgradi (images/službe.png),
   - spojni prolazi između zgrada (u OSM-u su zasebni delovi zgrada),
   - ulazi koji se koriste: OSM čvor entrance=* ili tačka koja se "lepi" na zid zgrade,
-  - smeštaj precrtanog plana Nastavnog bloka u obris zgrade.
+  - smeštaj precrtanog plana Nastavnog bloka u obris zgrade,
+  - smeštaj plana NTP-a (tools/ntp/build_ntp.py) i njegovi ulazi.
 Zgrade bez unutrašnjeg plana u grafu su jedan čvor (ZGRADA) povezan sa ulazima i prolazima.
 """
 
@@ -33,6 +34,9 @@ import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ntp"))
+import build_ntp  # noqa: E402 - plan NTP-a: viewport i ulazi
 
 REF_LAT, REF_LON = 45.2455, 19.8500
 M_PER_DEG_LAT = 110540.0
@@ -72,9 +76,9 @@ LABEL_SIDE = {"SMESTAJ": "EAST", "ISHRANA": "WEST", "ZZZS": "WEST"}
 # Zgrade čiji OSM unutrašnji prstenovi nisu dvorišta (provereno na terenu) - crtaju se pune.
 NO_HOLES = {"NTP"}
 
-# Zgrade čiji unutrašnji graf postoji u aplikaciji (PlaceholderGraph): za njih se ne pravi
-# čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
-WITH_INTERIOR = {"NB"}
+# Zgrade čiji unutrašnji graf postoji u aplikaciji (PlaceholderGraph, assets/ntp.json): za njih se
+# ne pravi čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
+WITH_INTERIOR = {"NB", "NTP"}
 
 # Spojni prolazi (unutrašnje veze), OSM way zasebnog dela zgrade između njih.
 PASSAGES = [
@@ -93,7 +97,10 @@ ENTRANCES = {
     "KULA": [2317759457],
     "AMF": [11691291594],
     "MI": [2317759407],
-    "NTP": [13123222553, 13123222559],  # istočni (parking), zapadni (Fruškogorska)
+    # NTP: ulazi FTN dela sa plana prizemlja (build_ntp.ENTRANCES), preko smeštaja plana - bez lepljenja
+    # na zid. OSM ulazi 13123222553 (istok) i 13123222559 (Fruškogorska) su 9-20 m od krajeva PASAŽA
+    # (verovatno poslovni deo NTP-a) i ne koriste se.
+    "NTP": [("plan", x, y) for (x, y), _ in build_ntp.ENTRANCES.values()],
     "F": [(45.245662, 19.851880)],  # južna strana, ~58 % dužine od zapada
     "DGG": [(45.244697, 19.850246)],  # istočna strana, gornja trećina
     "MENZA": [13123222548],  # istočni ugao, kod Restorana 10
@@ -121,6 +128,19 @@ UNIT_DEPTH_M = 4.0
 # strana (glavni ulaz), levo = južni kraj (spojni prolaz ka Kuli).
 NB_PLAN_WALL = (413.0, 311.0, 1038.0, 504.0)
 NB_PLAN_VIEWPORT = (305.0, 305.0, 750.0, 255.0)
+
+# Plan NTP-a (FTN deo, tools/ntp/build_ntp.py) u px ispravljenih fotografija evakuacionih planova.
+# Zgrada NTP-a u OSM-u je ceo NTP: FTN deo je severni, suženi kraj, a južno od njega je poslovni deo
+# (korisnik: "sastoji se od FTN dela i poslovnog dela za kompanije"). Smeštaj: severni vrh plana (donji
+# desni ugao) -> severni vrh OSM obrisa, dole na planu (red kancelarija) uz istočni zid (vrh -> jugoistočni
+# ugao). Razmera nije na planu: sa 0,042 m/px "ULAZ - FTN" (gornji levi ugao plana prizemlja) pada tačno na
+# jugozapadni ugao OSM obrisa (Fruškogorska / Dr Ilije Đuričića), a južno od FTN dela ostaje traka za
+# poslovni deo. Mere su tada realne (kancelarija ~5 m, hodnik ~4,2 m, lift ~2,2 m). Probano i odbačeno:
+# 0,061 (red kancelarija = ceo istočni zid - prizemlje prelazi preko Fruškogorske), 0,052 (FTN deo
+# zauzima ceo obris, "ULAZ - FTN" 29 m van zida). Dijagonalna fasada sa plana je do ~11 m zapadnije od
+# OSM zida (ugao dijagonale 34° naspram 30,5° u OSM-u). PRETPOSTAVKA - izmeriti na terenu.
+NTP_PLAN_TIP = (2092.0, 1830.0)
+NTP_M_PER_PX = 0.042
 
 WALKABLE = {
     "footway", "path", "pedestrian", "steps", "service", "living_street", "residential",
@@ -313,6 +333,29 @@ def nb_plan_placement(ring):
     }, abs(z), residual
 
 
+def ntp_plan_placement(ring):
+    """Plan NTP-a u kampus: vrh plana -> najseverniji teme obrisa, levo na planu -> ka jugoistočnom uglu."""
+    tip = min(ring, key=lambda p: p[1])
+    southeast = max(ring, key=lambda p: p[0])
+    d = complex(*southeast) - complex(*tip)
+    z = -d / abs(d) * NTP_M_PER_PX  # (-1, 0) na planu -> ka jugoistoku
+    t0, c0 = complex(*NTP_PLAN_TIP), complex(*tip)
+
+    def transform(p):
+        q = c0 + z * (complex(*p) - t0)
+        return q.real, q.imag
+
+    vx, vy, vw, vh = build_ntp.VX, build_ntp.VY, build_ntp.VW, build_ntp.VH
+    origin = transform((vx, vy))
+    return transform, {
+        "originX": round(origin[0], 2),
+        "originY": round(origin[1], 2),
+        "rotationDeg": round(math.degrees(math.atan2(z.imag, z.real)), 2),
+        "widthM": round(abs(z) * vw, 2),
+        "heightM": round(abs(z) * vh, 2),
+    }
+
+
 class Graph:
     def __init__(self):
         self.nodes = {}  # id -> (x, y, tip)
@@ -481,6 +524,7 @@ def main():
                 graph.add_edge(f"K-{i1}", f"K-{i2}")
 
     # --- Ulazi, zgrade, prolazi ---
+    checks = {}
     special = set()
     split_count = 0
 
@@ -496,6 +540,7 @@ def main():
         if distance > 15:
             warnings.append(f"ulaz {entrance}: najbliža staza je {distance:.0f} m daleko")
 
+    ntp_to_campus, ntp_placement = ntp_plan_placement(rings["NTP"])
     for bid, entrances in ENTRANCES.items():
         building_node = None if bid in WITH_INTERIOR else f"K-Z-{bid}"
         if building_node:
@@ -505,6 +550,10 @@ def main():
             if isinstance(spec, int):
                 node = elements[("node", spec)]
                 x, y = to_xy(node["lat"], node["lon"])
+            elif spec[0] == "plan":
+                x, y = ntp_to_campus(spec[1:])
+                wall = math.dist((x, y), snap_to_wall(rings[bid], x, y))
+                checks[f"ulaz K-U-{bid}-{i} {spec[1:]} -> OSM zid"] = wall
             else:
                 x, y = snap_to_wall(rings[bid], *to_xy(*spec))
             entrance = f"K-U-{bid}-{i}"
@@ -541,10 +590,10 @@ def main():
 
     # --- Plan Nastavnog bloka u koordinatama kampusa ---
     to_campus, placement, m_per_px, residual = nb_plan_placement(rings["NB"])
-    checks = {
+    checks.update({
         "glavni ulaz (677, 515) -> OSM ulaz": math.dist(to_campus((677, 515)), graph.xy("K-U-NB-1")),
         "spojni prolaz (322, 414) -> prolaz NB-KULA": math.dist(to_campus((322, 414)), graph.xy("K-P-NB-KULA")),
-    }
+    })
 
     # --- Crtež: ulice i staze ---
     streets, paths = [], []
@@ -565,7 +614,7 @@ def main():
         "generated": dt.date.today().isoformat(),
         "widthM": X_MAX - X_MIN,
         "heightM": Y_MAX - Y_MIN,
-        "plans": {"NB": placement},
+        "plans": {"NB": placement, "NTP": ntp_placement},
         "buildings": buildings,
         "context": context,
         "streets": streets,
@@ -578,6 +627,7 @@ def main():
     print(f"zgrade: {len(buildings)} (+{len(context)} okolnih), ulice: {len(streets)}, staze: {len(paths)}")
     print(f"graf: {len(data['nodes'])} čvorova, {len(data['edges'])} ivica")
     print(f"plan NB: {m_per_px:.4f} m/px, {placement}, odstupanje uglova {residual:.2f} m")
+    print(f"plan NTP: {NTP_M_PER_PX} m/px, {ntp_placement}")
     for label, d in checks.items():
         print(f"  provera {label}: {d:.1f} m")
     for w in warnings:

@@ -1,7 +1,9 @@
 package com.example.ftnnavigation.poc
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -47,7 +50,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -61,9 +66,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.TextUnit
@@ -76,6 +84,7 @@ import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
@@ -101,10 +110,12 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
         campus = viewModel.campus,
         graph = viewModel.graph,
         mode = viewModel.mode,
+        ntpFloor = viewModel.ntpFloor,
         destination = viewModel.destination,
         target = viewModel.target,
         route = viewModel.route,
         onModeChange = viewModel::selectMode,
+        onNtpFloorChange = viewModel::selectNtpFloor,
         onDestinationChange = viewModel::selectDestination,
         onPickStartToggle = viewModel::togglePickStart,
         onMapTap = viewModel::setStart,
@@ -120,10 +131,12 @@ fun PocScreen(
     campus: CampusData?,
     graph: BuildingGraph?,
     mode: MapMode,
+    ntpFloor: Int,
     destination: String?,
     target: RouteTarget?,
     route: Route?,
     onModeChange: (MapMode) -> Unit,
+    onNtpFloorChange: (Int) -> Unit,
     onDestinationChange: (String?) -> Unit,
     onPickStartToggle: () -> Unit,
     onMapTap: (Offset) -> Unit,
@@ -138,7 +151,11 @@ fun PocScreen(
         topBar = {
             FtnTopAppBar(
                 title = stringResource(R.string.poc_title),
-                subtitle = stringResource(if (mode == MapMode.KAMPUS) R.string.map_campus_location else R.string.poc_location),
+                subtitle = when (mode) {
+                    MapMode.KAMPUS -> stringResource(R.string.map_campus_location)
+                    MapMode.NB -> stringResource(R.string.poc_location)
+                    MapMode.NTP -> stringResource(R.string.ntp_location, floorName(ntpFloor))
+                },
             )
         },
     ) { innerPadding ->
@@ -146,8 +163,8 @@ fun PocScreen(
         Column(Modifier.padding(top = innerPadding.calculateTopPadding()).fillMaxSize()) {
             MapModeSelector(mode, onModeChange)
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (mode == MapMode.KAMPUS && campus != null) {
-                    CampusMap(
+                when {
+                    mode == MapMode.KAMPUS && campus != null -> CampusMap(
                         campus = campus,
                         graph = graph,
                         route = route,
@@ -156,8 +173,34 @@ fun PocScreen(
                         onBuildingLongPress = { infoBuildingId = it.id },
                         modifier = Modifier.fillMaxSize(),
                     )
-                } else {
-                    FloorPlan(
+                    mode == MapMode.NTP -> {
+                        // PDR je samo u Nastavnom bloku - na NTP-u nema pozicije.
+                        FloorPlan(
+                            planRes = NtpPlan.floorDrawable(ntpFloor),
+                            buildingId = NtpPlan.BUILDING_ID,
+                            floor = ntpFloor,
+                            labelHeight = NTP_LABEL_HEIGHT,
+                            graph = graph,
+                            route = route,
+                            position = null,
+                            rawPosition = null,
+                            headingDeg = state.headingDeg,
+                            isPickingStart = false,
+                            onTap = {},
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        FloorSelector(
+                            selected = ntpFloor,
+                            routeFloors = route?.nodes.orEmpty().filter { it.buildingId == NtpPlan.BUILDING_ID }.map { it.floor }.toSet(),
+                            onSelect = onNtpFloorChange,
+                            modifier = Modifier.align(Alignment.CenterEnd).padding(12.dp),
+                        )
+                    }
+                    else -> FloorPlan(
+                        planRes = R.drawable.floor_plan_placeholder,
+                        buildingId = PlaceholderGraph.BUILDING_ID,
+                        floor = 0,
+                        labelHeight = NB_LABEL_HEIGHT,
                         graph = graph,
                         route = route,
                         position = state.position,
@@ -170,7 +213,7 @@ fun PocScreen(
                 }
                 // Start se postavlja samo na planu zgrade (PDR je za sada samo u Nastavnom bloku).
                 val hint = when {
-                    mode == MapMode.KAMPUS -> null
+                    mode != MapMode.NB -> null
                     state.isPickingStart -> R.string.poc_hint_pick_start
                     state.position == null -> R.string.poc_hint_no_start
                     else -> null
@@ -191,7 +234,7 @@ fun PocScreen(
                     }
                     if (hint != null) HintBanner(stringResource(hint))
                 }
-                if (mode == MapMode.ZGRADA) {
+                if (mode == MapMode.NB) {
                     FilterChip(
                         selected = state.snapToGraph,
                         onClick = onSnapToggle,
@@ -240,11 +283,16 @@ fun PocScreen(
 }
 
 /**
- * Slika sprata sa pan/zoom gestovima, grafom prizemlja, rutom i markerom korisnika. [position]
- * je pozicija na grafu; [rawPosition] (čist PDR, bez map-matching-a) je bleda tačka za poređenje.
+ * Slika sprata [floor] zgrade [buildingId] sa pan/zoom gestovima, grafom tog sprata, rutom i
+ * markerom korisnika. [position] je pozicija na grafu; [rawPosition] (čist PDR, bez
+ * map-matching-a) je bleda tačka za poređenje. Zum ostaje pri promeni sprata iste zgrade.
  */
 @Composable
 private fun FloorPlan(
+    @DrawableRes planRes: Int,
+    buildingId: String,
+    floor: Int,
+    labelHeight: Float,
     graph: BuildingGraph?,
     route: Route?,
     position: Offset?,
@@ -254,9 +302,10 @@ private fun FloorPlan(
     onTap: (Offset) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val painter = painterResource(R.drawable.floor_plan_placeholder)
-    var scale by remember { mutableFloatStateOf(1f) }
-    var pan by remember { mutableStateOf(Offset.Zero) }
+    val painter = painterResource(planRes)
+    var scale by remember(buildingId) { mutableFloatStateOf(1f) }
+    var pan by remember(buildingId) { mutableStateOf(Offset.Zero) }
+    val floorNames = FLOORS.associateWith { floorName(it) }
 
     Box(
         modifier = modifier
@@ -292,18 +341,27 @@ private fun FloorPlan(
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize(),
             )
+            val colors = MaterialTheme.colorScheme
+            val textMeasurer = rememberTextMeasurer()
             if (graph != null) {
-                val colors = MaterialTheme.colorScheme
-                val textMeasurer = rememberTextMeasurer()
                 val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface, lineHeight = TextUnit.Unspecified)
                 Canvas(Modifier.fillMaxSize()) {
-                    drawGraph(graph, PlaceholderGraph.BUILDING_ID, floor = 0, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / scale)
+                    drawGraph(graph, buildingId, floor, labelHeight, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / scale)
                 }
             }
             if (route != null) {
-                val colors = MaterialTheme.colorScheme
+                val changeStyle = MaterialTheme.typography.labelMedium.copy(
+                    color = colors.onPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = TextUnit.Unspecified,
+                )
+                val up = stringResource(R.string.route_floor_change_up, "%s")
+                val down = stringResource(R.string.route_floor_change_down, "%s")
                 Canvas(Modifier.fillMaxSize()) {
-                    drawRoute(route, PlaceholderGraph.BUILDING_ID, position, colors.primary, colors.secondary, 1f / scale)
+                    drawRoute(route, buildingId, floor, position, colors.primary, colors.secondary, 1f / scale)
+                    drawFloorChanges(route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / scale) { from, to ->
+                        (if (to > from) up else down).format(floorNames.getValue(to))
+                    }
                 }
             }
             if (position != null) {
@@ -322,14 +380,24 @@ private fun FloorPlan(
     }
 }
 
-/** Visina natpisa sale kao deo visine plana. */
-private const val LABEL_HEIGHT = 0.03f
+/** Visina natpisa sale kao deo visine plana (NB je nizak i širok, NTP skoro kvadratan). */
+private const val NB_LABEL_HEIGHT = 0.03f
+private const val NTP_LABEL_HEIGHT = 0.014f
+
+/** Spratovi NTP-a (0 = prizemlje). */
+private val FLOORS = 0..5
+
+/** "prizemlje" / "3. sprat". */
+@Composable
+private fun floorName(floor: Int): String =
+    if (floor == 0) stringResource(R.string.floor_ground) else stringResource(R.string.floor_number, floor)
 
 /** Ivice i čvorovi jednog sprata zgrade; sale imaju natpis sa nazivom iz rasporeda. */
 private fun DrawScope.drawGraph(
     graph: BuildingGraph,
     buildingId: String,
     floor: Int,
+    labelHeight: Float,
     edgeColor: Color,
     roomColor: Color,
     textMeasurer: TextMeasurer,
@@ -350,10 +418,10 @@ private fun DrawScope.drawGraph(
             NodeType.PROSTORIJA -> {
                 drawCircle(roomColor, radius = 5.dp.toPx() * k, center = center)
                 // Natpis je deo plana (raste sa zumom, kao tekst na pravom planu) da bi stao u sobu.
-                val style = labelStyle.copy(fontSize = (size.height * LABEL_HEIGHT).toSp())
+                val style = labelStyle.copy(fontSize = (size.height * labelHeight).toSp())
                 val label = textMeasurer.measure(node.name.orEmpty(), style)
                 // Natpis na strani sobe dalje od hodnika, da ga ivica ka hodniku ne preseca.
-                val gap = size.height * LABEL_HEIGHT / 2
+                val gap = size.height * labelHeight / 2
                 val dy = if (node.y < 0.5f) -gap - label.size.height else gap
                 drawText(label, topLeft = center + Offset(-label.size.width / 2f, dy))
             }
@@ -365,11 +433,20 @@ private fun DrawScope.drawGraph(
 }
 
 /**
- * Deo rute u prizemlju zgrade [buildingId] kao debela linija (od pozicije, ako je postavljena);
- * delovi van zgrade se preskaču. Odredište se obeležava ako je u zgradi.
+ * Deo rute na spratu [floor] zgrade [buildingId] kao debela linija (od pozicije, ako je
+ * postavljena); delovi van zgrade i na drugim spratovima se preskaču. Odredište se obeležava ako
+ * je na tom spratu.
  */
-private fun DrawScope.drawRoute(route: Route, buildingId: String, position: Offset?, color: Color, targetColor: Color, k: Float) {
-    fun Node.isHere() = this.buildingId == buildingId && floor == 0
+private fun DrawScope.drawRoute(
+    route: Route,
+    buildingId: String,
+    floor: Int,
+    position: Offset?,
+    color: Color,
+    targetColor: Color,
+    k: Float,
+) {
+    fun Node.isHere() = this.buildingId == buildingId && this.floor == floor
     fun Node.toOffset() = Offset(x * size.width, y * size.height)
     val path = Path()
     var drawing = false
@@ -389,6 +466,42 @@ private fun DrawScope.drawRoute(route: Route, buildingId: String, position: Offs
     drawPath(path, color, style = Stroke(5.dp.toPx() * k, cap = StrokeCap.Round, join = StrokeJoin.Round))
     val target = route.nodes.last()
     if (target.isHere()) drawTargetMarker(target.toOffset(), color, targetColor, k)
+}
+
+/**
+ * Gde ruta napušta sprat [floor] stepenicama ili liftom: oblačić sa spratom na kome se silazi sa
+ * stepeništa/lifta ([label] od, do). Isto i na spratu kroz koji ruta samo prolazi.
+ */
+private fun DrawScope.drawFloorChanges(
+    route: Route,
+    buildingId: String,
+    floor: Int,
+    color: Color,
+    textMeasurer: TextMeasurer,
+    style: TextStyle,
+    k: Float,
+    label: (from: Int, to: Int) -> String,
+) {
+    val nodes = route.nodes
+    for (i in 0 until nodes.size - 1) {
+        val here = nodes[i]
+        if (here.buildingId != buildingId || here.floor != floor || nodes[i + 1].floor == floor) continue
+        // Kraj vertikalnog dela: dok se sprat menja istim stepeništem/liftom.
+        var j = i + 1
+        while (j + 1 < nodes.size && nodes[j + 1].buildingId == buildingId && nodes[j + 1].floor != nodes[j].floor) j++
+        if (nodes[j].buildingId != buildingId) continue
+        val text = textMeasurer.measure(label(floor, nodes[j].floor), style.copy(fontSize = (style.fontSize.toPx() * k).toSp()))
+        val pad = 6.dp.toPx() * k
+        val center = Offset(here.x * size.width, here.y * size.height)
+        val topLeft = center + Offset(-text.size.width / 2f - pad, -text.size.height - 2 * pad - 14.dp.toPx() * k)
+        drawRoundRect(
+            color,
+            topLeft = topLeft,
+            size = Size(text.size.width + 2 * pad, text.size.height + 2 * pad),
+            cornerRadius = CornerRadius(8.dp.toPx() * k),
+        )
+        drawText(text, topLeft = topLeft + Offset(pad, pad))
+    }
 }
 
 /** Odredište: prsten u boji rute sa tačkom u sredini. */
@@ -452,8 +565,14 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
                 )
                 val building = target?.building?.name
                 if (route != null && building != null && building != destination) {
+                    // Sala u zgradi sa spratovima: i sprat (NB je za sada samo prizemlje).
+                    val where = if (!target.approximate && target.node.buildingId == NtpPlan.BUILDING_ID) {
+                        stringResource(R.string.building_with_floor, building, floorName(target.node.floor))
+                    } else {
+                        building
+                    }
                     Text(
-                        stringResource(if (target.approximate) R.string.route_to_building else R.string.route_in_building, building),
+                        stringResource(if (target.approximate) R.string.route_to_building else R.string.route_in_building, where),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -539,10 +658,14 @@ private fun DestinationItem(name: String, isSelected: Boolean, onClick: () -> Un
     )
 }
 
-/** Prekidač prikaza Mape: kampus (spolja) ili plan Nastavnog bloka. */
+/** Prekidač prikaza Mape: kampus (spolja), plan Nastavnog bloka ili NTP. */
 @Composable
 private fun MapModeSelector(mode: MapMode, onModeChange: (MapMode) -> Unit) {
-    val options = listOf(MapMode.KAMPUS to R.string.map_mode_campus, MapMode.ZGRADA to R.string.map_mode_building)
+    val options = listOf(
+        MapMode.KAMPUS to R.string.map_mode_campus,
+        MapMode.NB to R.string.map_mode_building,
+        MapMode.NTP to R.string.map_mode_ntp,
+    )
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         options.forEachIndexed { index, (option, label) ->
             SegmentedButton(
@@ -551,6 +674,48 @@ private fun MapModeSelector(mode: MapMode, onModeChange: (MapMode) -> Unit) {
                 shape = SegmentedButtonDefaults.itemShape(index, options.size),
             ) {
                 Text(stringResource(label))
+            }
+        }
+    }
+}
+
+/**
+ * Izbor sprata (odozgo V ... I, P). Spratovi kroz koje prolazi ruta imaju tačku, da se vidi gde
+ * ruta nastavlja.
+ */
+@Composable
+private fun FloorSelector(selected: Int, routeFloors: Set<Int>, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = MaterialTheme.shapes.large, shadowElevation = 3.dp, modifier = modifier) {
+        Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            for (floor in FLOORS.reversed()) {
+                val isSelected = floor == selected
+                val name = floorName(floor)
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) colors.primary else Color.Transparent)
+                        .clickable(onClickLabel = stringResource(R.string.floor_select, name)) { onSelect(floor) }
+                        .semantics { contentDescription = name },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (floor == 0) stringResource(R.string.floor_ground_short) else floor.toString(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isSelected) colors.onPrimary else colors.onSurface,
+                    )
+                    if (floor in routeFloors) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 4.dp)
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) colors.onPrimary else colors.primary),
+                        )
+                    }
+                }
             }
         }
     }
@@ -669,11 +834,13 @@ private fun PocScreenPreview() {
             ),
             campus = null,
             graph = null,
-            mode = MapMode.ZGRADA,
+            mode = MapMode.NB,
+            ntpFloor = 0,
             destination = "NTP-307",
             target = null,
             route = null,
             onModeChange = {},
+            onNtpFloorChange = {},
             onDestinationChange = {},
             onPickStartToggle = {},
             onMapTap = {},

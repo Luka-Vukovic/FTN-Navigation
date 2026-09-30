@@ -25,6 +25,7 @@ import com.example.ftnnavigation.events.PlaceOptions
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.MapMatcher
 import com.example.ftnnavigation.graph.MatchedPosition
+import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.PlanPlacement
 import com.example.ftnnavigation.graph.Route
@@ -61,8 +62,8 @@ data class PocUiState(
     val position: Offset? get() = shownMatch?.point?.let { Offset(it.x, it.y) } ?: rawPosition
 }
 
-/** Šta Mapa prikazuje: spoljnu mapu kampusa ili plan prizemlja Nastavnog bloka. */
-enum class MapMode { KAMPUS, ZGRADA }
+/** Šta Mapa prikazuje: spoljnu mapu kampusa, plan prizemlja Nastavnog bloka ili sprat NTP-a. */
+enum class MapMode { KAMPUS, NB, NTP }
 
 // Gde je kampus - za magnetsku deklinaciju (ista tačka kao projekcija u build_campus.py).
 private const val CAMPUS_LAT = 45.2455f
@@ -92,7 +93,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     var campus by mutableStateOf<CampusData?>(null)
         private set
 
-    /** Graf kampusa i zgrada (null dok se učitava iz baze). Zgrade su za sada samo prizemlje. */
+    /** Graf kampusa i zgrada (null dok se učitava iz baze). NB je samo prizemlje, NTP ima 6 nivoa. */
     var graph by mutableStateOf<BuildingGraph?>(null)
         private set
 
@@ -102,7 +103,11 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Map-matching PDR pozicije na graf prizemlja Nastavnog bloka (kad se graf učita). */
     private var matcher: MapMatcher? = null
 
-    var mode by mutableStateOf(MapMode.ZGRADA)
+    var mode by mutableStateOf(MapMode.NB)
+        private set
+
+    /** Sprat NTP-a koji Mapa prikazuje (0 = prizemlje). */
+    var ntpFloor by mutableStateOf(0)
         private set
 
     /** Smer hoda iz senzora (ne pravac telefona); na Start se pretpostavlja telefon u ruci. */
@@ -187,11 +192,25 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         return resolveTarget(room, graph, campus ?: return null)?.building?.name
     }
 
-    /** Menja odredište; ako je van Nastavnog bloka, Mapa prelazi na kampus. */
+    /**
+     * Menja odredište. Sala u NTP-u -> Mapa prelazi na njen sprat NTP-a; drugo van Nastavnog bloka ->
+     * kampus.
+     */
     fun selectDestination(room: String?) {
         destination = room
-        val building = target?.node?.buildingId ?: return
-        if (building != PlaceholderGraph.BUILDING_ID) mode = MapMode.KAMPUS
+        val node = target?.node ?: return
+        when (node.buildingId) {
+            PlaceholderGraph.BUILDING_ID -> Unit
+            NtpPlan.BUILDING_ID -> {
+                mode = MapMode.NTP
+                ntpFloor = node.floor
+            }
+            else -> mode = MapMode.KAMPUS
+        }
+    }
+
+    fun selectNtpFloor(floor: Int) {
+        ntpFloor = floor
     }
 
     fun selectMode(mode: MapMode) {
@@ -245,7 +264,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Start se postavlja na planu zgrade, pa Mapa prelazi na njega. */
     fun togglePickStart() {
         state = state.copy(isPickingStart = !state.isPickingStart)
-        if (state.isPickingStart) mode = MapMode.ZGRADA
+        if (state.isPickingStart) mode = MapMode.NB
     }
 
     fun setStart(point: Offset) {

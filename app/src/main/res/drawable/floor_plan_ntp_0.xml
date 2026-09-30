@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Prizemlje - Naučno-tehnološki park (FTN deo). GENERISANO skriptom tools/ntp/build_ntp.py
+    (ne menjati ručno). Šematski precrtano sa ispravljenih fotografija evakuacionih planova;
+    koordinate su u zajedničkom sistemu spratova, grupa ih pomera u viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="1220dp"
+    android:height="930dp"
+    android:viewportWidth="2440"
+    android:viewportHeight="1860">
+
+    <group
+        android:translateX="300"
+        android:translateY="0">
+
+        <!-- Unutrašnjost -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M125,0 L160,0 L704,338 L1100,610 L1747,1090 L2075,1378 L2092,1830 L300,1830 L300,1557 L-156,1557 L-156,1276 L125,1276 Z" />
+
+        <!-- Hodnici -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M125,0 L160,0 L447,178 L450,1830 L350,1830 L350,1300 L125,1300 Z M-275,50 L125,50 L125,190 L-275,190 Z M-156,1300 L125,1300 L125,1395 L-156,1395 Z M447,551 L707,551 L707,646 L447,646 Z M654,646 L719,646 L719,905 L654,905 Z M719,829 L1096,829 L1096,905 L719,905 Z M1143,642 L1403,835 L1403,1830 L1299,1830 L1299,1272 L1096,1272 L1096,829 L1143,829 Z M1403,1297 L1780,1297 L1780,1394 L1403,1394 Z M450,1740 L812,1740 L812,1830 L450,1830 Z" />
+
+        <!-- Rampa -->
+        <path
+            android:fillColor="#FFEEEEEE"
+            android:pathData="M812,1283 L1043,1283 L1043,1830 L812,1830 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="2"
+            android:pathData="M812,1790 L852,1830 M812,1750 L892,1830 M812,1710 L932,1830 M812,1670 L972,1830 M812,1630 L1012,1830 M812,1590 L1043,1821 M812,1550 L1043,1781 M812,1510 L1043,1741 M812,1470 L1043,1701 M812,1430 L1043,1661 M812,1390 L1043,1621 M812,1350 L1043,1581 M812,1310 L1043,1541 M825,1283 L1043,1501 M865,1283 L1043,1461 M905,1283 L1043,1421 M945,1283 L1043,1381 M985,1283 L1043,1341 M1025,1283 L1043,1301" />
+
+        <!-- Ulazi -->
+        <path
+            android:fillColor="#FFC8E6C9"
+            android:pathData="M-290,50 L-270,50 L-270,190 L-290,190 Z M1299,1830 L1403,1830 L1403,1846 L1299,1846 Z M300,1830 L450,1830 L450,1846 L300,1846 Z" />
+
+        <!-- Stepeništa -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M445,343 L616,343 L616,547 L445,547 Z M512,1395 L700,1395 L700,1551 L512,1551 Z M1586,1394 L1769,1394 L1769,1541 L1586,1541 Z M447,705 L640,705 L640,810 L447,810 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="2"
+            android:pathData="M445,365 H616 M445,387 H616 M445,409 H616 M445,431 H616 M445,453 H616 M445,475 H616 M445,497 H616 M445,519 H616 M445,541 H616 M534,1395 V1551 M556,1395 V1551 M578,1395 V1551 M600,1395 V1551 M622,1395 V1551 M644,1395 V1551 M666,1395 V1551 M688,1395 V1551 M1608,1394 V1541 M1630,1394 V1541 M1652,1394 V1541 M1674,1394 V1541 M1696,1394 V1541 M1718,1394 V1541 M1740,1394 V1541 M1762,1394 V1541 M469,705 V810 M491,705 V810 M513,705 V810 M535,705 V810 M557,705 V810 M579,705 V810 M601,705 V810 M623,705 V810" />
+
+        <!-- Šahtovi -->
+        <path
+            android:fillColor="#FFB0BEC5"
+            android:pathData="M658,338 L707,338 L707,551 L658,551 Z" />
+
+        <!-- Liftovi -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="4"
+            android:fillColor="#FFFFCC80"
+            android:pathData="M460,651 L512,651 L512,701 L460,701 Z M515,651 L567,651 L567,701 L515,701 Z M270,1470 L335,1470 L335,1545 L270,1545 Z M1463,1491 L1524,1491 L1524,1547 L1463,1547 Z" />
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="2"
+            android:pathData="M460,651 L512,701 M512,651 L460,701 M515,651 L567,701 M567,651 L515,701 M270,1470 L335,1545 M335,1470 L270,1545 M1463,1491 L1524,1547 M1524,1491 L1463,1547" />
+
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="4"
+            android:pathData="M719,348 L1143,642 L1143,829 L719,829 Z M450,905 L654,905 L654,1283 L450,1283 Z M654,905 L1096,905 L1096,1283 L654,1283 Z M1043,1272 L1299,1272 L1299,1547 L1043,1547 Z M1043,1553 L1299,1553 L1299,1830 L1043,1830 Z M1403,835 L1747,1090 L1756,1097 L1756,1297 L1403,1297 Z M1780,1115 L2075,1378 L2080,1547 L1780,1547 Z M1403,1559 L1573,1559 L1573,1830 L1403,1830 Z M1573,1559 L1628,1559 L1628,1830 L1573,1830 Z M1634,1559 L2085,1559 L2085,1687 L1634,1687 Z M1634,1687 L2085,1687 L2085,1830 L1634,1830 Z M450,1295 L700,1295 L700,1395 L450,1395 Z M450,1551 L570,1551 L570,1740 L450,1740 Z M570,1551 L690,1551 L690,1740 L570,1740 Z M690,1551 L812,1551 L812,1740 L690,1740 Z M81,1407 L206,1407 L206,1551 L81,1551 Z M-50,1407 L81,1407 L81,1551 L-50,1551 Z M-156,1407 L-50,1407 L-50,1551 L-156,1551 Z M447,646 L660,646 L660,817 L447,817 Z" />
+
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="9"
+            android:pathData="M125,0 L160,0 L704,338 L1100,610 L1747,1090 L2075,1378 L2092,1830 L300,1830 L300,1557 L-156,1557 L-156,1276 L125,1276 Z" />
+
+    </group>
+</vector>

@@ -36,11 +36,11 @@ abstract class GraphDao {
 }
 
 /**
- * Graf kampusa i zgrada. Puni se iz [PlaceholderGraph] i assets/campus.json; svaka izmena
- * grafa, šeme ili campus.json ide uz povećanje [version] - stara baza se briše i puni iznova
+ * Graf kampusa i zgrada. Puni se iz [PlaceholderGraph], assets/campus.json i assets/ntp.json; svaka
+ * izmena grafa, šeme, campus.json ili ntp.json ide uz povećanje [version] - stara baza se briše i puni iznova
  * (nema korisničkih podataka).
  */
-@Database(entities = [Node::class, Edge::class], version = 10, exportSchema = false)
+@Database(entities = [Node::class, Edge::class], version = 11, exportSchema = false)
 abstract class GraphDatabase : RoomDatabase() {
     abstract fun graphDao(): GraphDao
 

@@ -3,8 +3,10 @@ package com.example.ftnnavigation.campus
 import com.example.ftnnavigation.graph.Edge
 import com.example.ftnnavigation.graph.EdgeType
 import com.example.ftnnavigation.graph.FloorScale
+import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.PlanPlacement
 import kotlinx.serialization.Serializable
@@ -103,16 +105,20 @@ data class CampusBuilding(
     val category: BuildingCategory = BuildingCategory.FTN,
     val labelSide: LabelSide = LabelSide.CENTER,
 ) {
-    /** Čvor grafa koji predstavlja zgradu: ulaz ako ima unutrašnji graf, inače čvor ZGRADA. */
+    /** Čvor grafa koji predstavlja zgradu: glavni ulaz ako ima unutrašnji graf, inače čvor ZGRADA. */
     val nodeId: String
-        get() = if (id == PlaceholderGraph.BUILDING_ID) PlaceholderGraph.ENTRANCE_ID else "K-Z-$id"
+        get() = when (id) {
+            PlaceholderGraph.BUILDING_ID -> PlaceholderGraph.ENTRANCE_ID
+            NtpPlan.BUILDING_ID -> NtpPlan.ENTRANCE_ID
+            else -> "K-Z-$id"
+        }
 }
 
 @Serializable
 data class CampusNode(val id: String, val x: Float, val y: Float, val type: NodeType)
 
-/** Čvorovi i ivice za punjenje baze: unutrašnji graf Nastavnog bloka + kampus + veze. */
-fun seedGraph(campus: CampusData): Pair<List<Node>, List<Edge>> = Pair(
-    PlaceholderGraph.nodes + campus.graphNodes(),
-    PlaceholderGraph.edges + campus.graphEdges() + PlaceholderGraph.campusLinks,
+/** Čvorovi i ivice za punjenje baze: unutrašnji grafovi Nastavnog bloka i NTP-a + kampus + veze. */
+fun seedGraph(campus: CampusData, ntp: IndoorPlan): Pair<List<Node>, List<Edge>> = Pair(
+    PlaceholderGraph.nodes + ntp.graphNodes() + campus.graphNodes(),
+    PlaceholderGraph.edges + ntp.graphEdges() + campus.graphEdges() + PlaceholderGraph.campusLinks,
 )
