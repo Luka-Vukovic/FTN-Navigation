@@ -1,6 +1,7 @@
 package com.example.ftnnavigation.poc
 
 import android.app.Application
+import android.hardware.GeomagneticField
 import android.hardware.SensorManager
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -25,6 +26,7 @@ import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.MapMatcher
 import com.example.ftnnavigation.graph.MatchedPosition
 import com.example.ftnnavigation.graph.PlaceholderGraph
+import com.example.ftnnavigation.graph.PlanPlacement
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.AgendaItem
 import kotlinx.coroutines.launch
@@ -62,8 +64,19 @@ data class PocUiState(
 /** Šta Mapa prikazuje: spoljnu mapu kampusa ili plan prizemlja Nastavnog bloka. */
 enum class MapMode { KAMPUS, ZGRADA }
 
-// Azimut (od severa) pravca koji je "gore" na planu. TODO: izmeriti kompasom u hodniku.
-private const val PLAN_UP_AZIMUTH_DEG = 0f
+// Gde je kampus - za magnetsku deklinaciju (ista tačka kao projekcija u build_campus.py).
+private const val CAMPUS_LAT = 45.2455f
+private const val CAMPUS_LON = 19.85f
+private const val CAMPUS_ALT_M = 80f
+
+/**
+ * Magnetski azimut pravca "gore" na planu. Plan je u mapi kampusa (x istok, y jug, sever gore)
+ * zarotiran za [PlanPlacement.rotationDeg] u smeru kazaljke, pa je i "gore" (sever pre rotacije)
+ * okrenuto za toliko: geografski azimut = rotationDeg. Senzor rotacije meri od magnetskog
+ * severa - oduzima se deklinacija (istočna +).
+ */
+internal fun planUpMagneticAzimuthDeg(placement: PlanPlacement, declinationDeg: Float): Float =
+    normalizeDeg(placement.rotationDeg.toFloat() - declinationDeg)
 
 /**
  * Stanje mape i rute. Vezan za aktivnost: preživljava promenu taba, a Početna preko njega
@@ -82,6 +95,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Graf kampusa i zgrada (null dok se učitava iz baze). Zgrade su za sada samo prizemlje. */
     var graph by mutableStateOf<BuildingGraph?>(null)
         private set
+
+    /** Magnetski azimut pravca "gore" na planu NB; 0 dok se kampus učitava. */
+    private var planUpAzimuthDeg = 0f
 
     /** Map-matching PDR pozicije na graf prizemlja Nastavnog bloka (kad se graf učita). */
     private var matcher: MapMatcher? = null
@@ -129,6 +145,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val campus = loadCampus(application)
             this@PocViewModel.campus = campus
+            campus.placements()[PlaceholderGraph.BUILDING_ID]?.let {
+                val declination = GeomagneticField(CAMPUS_LAT, CAMPUS_LON, CAMPUS_ALT_M, System.currentTimeMillis()).declination
+                planUpAzimuthDeg = planUpMagneticAzimuthDeg(it, declination)
+            }
             val graph = loadGraph(application, campus)
             matcher = MapMatcher(graph, PlaceholderGraph.BUILDING_ID, floor = 0)
             this@PocViewModel.graph = graph
@@ -181,7 +201,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Smer za prikaz (azimut iz [walkingDirection]). */
     fun onHeading(azimuth: Float) {
         state = state.copy(
-            headingDeg = normalizeDeg(azimuth - PLAN_UP_AZIMUTH_DEG),
+            headingDeg = normalizeDeg(azimuth - planUpAzimuthDeg),
             phoneOffsetDeg = walkingDirection.offset.toFloat().takeIf { walkingDirection.isAnchored },
         )
     }
@@ -207,7 +227,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             match = from.match
         }
 
-        val rad = Math.toRadians((step.headingDeg - PLAN_UP_AZIMUTH_DEG).toDouble())
+        val rad = Math.toRadians((step.headingDeg - planUpAzimuthDeg).toDouble())
         val dxM = state.stepLengthM * sin(rad)
         val dyM = -state.stepLengthM * cos(rad)
         repeat(redo + 1) {
