@@ -83,10 +83,14 @@ class NbGraphTest {
         notDrawn.forEach { assertTrue(it, checkNotNull(resolveTarget(it, graph, campus)).approximate) }
     }
 
-    /** "L1" iz rasporeda je ista sala kao "L1 (RC)". */
+    /** "L1" iz rasporeda NIJE "L1 (RC)": to je sala iznad hodnika iza amfiteatara (stepenice naviše iz prolaza). */
     @Test
-    fun l1Alias_resolvesToComputerLab() {
-        assertEquals(graph.room("L1 (RC)"), resolveTarget("L1", graph, campus)?.node)
+    fun l1_isNotComputerCentre() {
+        val l1 = checkNotNull(resolveTarget("L1", graph, campus)).node
+        assertEquals("AMF", l1.buildingId)
+        assertEquals(1, l1.floor)
+        val route = checkNotNull(graph.route(NbPlan.AMF_PASSAGE_ID, l1.id))
+        assertTrue(route.lengthM < 40)
     }
 
     /** 204/204A, 205/205A, 208/208A: jedna učionica sa dva ulaza; oznaka sa A vodi u istu salu. */

@@ -6,7 +6,7 @@ Upotreba (iz korena projekta):
     tools/raspored/.venv/Scripts/python tools/zgrade/prepare_screens.py <nb|amf|kula> <izlazni folder>
 
 Ulaz (images/, van gita) - 3D pogled pod uglom, isti smer kao naš plan (gore = zapad, dole = istok,
-levo = jug, desno = sever): nb-1.png, nb0..nb5.png; amf-1.png, amf0.png; kula0..kula9.png. Izlaz:
+levo = jug, desno = sever): nb-1.png, nb0..nb5.png; amf-1.png, amf0.png, amf1.png; kula0..kula9.png. Izlaz:
 w<sprat>.png - svaki sprat u koordinatama plana (common.py: zajednički sistem NB, AMF i Kule, px plana,
 1 px = M_PER_PX m), platno = viewport zgrade uvećan ZOOM puta.
 
@@ -20,7 +20,7 @@ severni zid); y tačke nije merljiv na nb5, pa je uzet sa spratova 0 -> 3 (ista 
 NB_FIXED_Y (x je tamo 727, ovde 732 - kamere su slične). Greška od 50 px u NB_FIXED_Y pomera ploču za ~5 px.
 
 AMF: -1 je uži od prizemlja samo zbog perspektive (niža ravan); levo od zida ide Skriptarnica ka F-bloku.
-AMF 1 u FtnGO-u je skoro isti crtež kao prizemlje (gornji deo amfiteatara) i ne crta se.
+AMF 1 u FtnGO-u je skoro isti crtež kao prizemlje (gornji deo amfiteatara); crta se samo L1.
 Kula: -1 je prazna prostorija (samo stepenište) i ne crta se.
 """
 
@@ -56,6 +56,7 @@ BUILDINGS = {
         "corners": {
             -1: [(409, 296), (1640, 295), (323, 827), (1750, 826)],
             0: [(368, 261), (1692, 264), (270, 838), (1815, 838)],
+            1: [(373, 259), (1692, 264), (271, 839), (1812, 838)],  # skoro isti kao prizemlje
         },
     },
     "kula": {

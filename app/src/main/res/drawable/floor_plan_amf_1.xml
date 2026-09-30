@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Nivo 1 (L1, iznad hodnika iza amfiteatara) - Amfiteatri. GENERISANO skriptom tools/zgrade/build_amf.py (ne menjati ručno).
+    Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
+    (zajednički sistem NB, AMF i Kule, 1 px = 0.1014 m), grupa ih pomera u viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="820dp"
+    android:height="310dp"
+    android:viewportWidth="820"
+    android:viewportHeight="310">
+
+    <group
+        android:translateX="-30"
+        android:translateY="80">
+
+        <!-- Krov (niži spratovi) -->
+        <path
+            android:strokeColor="#FFBDBDBD"
+            android:strokeWidth="1"
+            android:fillColor="#FFF0F0F0"
+            android:pathData="M168,-65 L835,-65 L835,210 L168,210 Z" />
+
+        <!-- Unutrašnjost -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M553,168 L711,168 L711,207 L553,207 Z" />
+
+        <!-- Hodnici -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M664,190 L711,190 L711,240 L664,240 Z" />
+
+        <!-- Stepeništa -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M693,212 L711,212 L711,240 L693,240 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:pathData="M693,218 H711 M693,224 H711 M693,230 H711 M693,236 H711" />
+
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M553,168 L664,168 L664,207 L553,207 Z" />
+
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="3"
+            android:pathData="M553,168 L711,168 L711,207 L553,207 Z" />
+
+    </group>
+</vector>

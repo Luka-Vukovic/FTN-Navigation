@@ -20,12 +20,8 @@ private val PROVISIONAL_NB = listOf("Fizika", "Hemija")
 /** Mesta van kampusa, predaleko da bi bila na mapi (korisnik): prefiks oznake sale -> naziv. */
 private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
 
-/**
- * Oznake koje su druga oznaka ucrtane sale: "L1" je računarska učionica L1 (301) u Nastavnom bloku,
- * kao i "L1 (RC)" (jedina L1 na FTN-u van NTP-a). 204A, 205A i 208A su drugi ulazi velikih učionica
- * 204, 205 i 208 (korisnik).
- */
-private val ROOM_ALIASES = mapOf("L1" to "L1 (RC)", "204A" to "204", "205A" to "205", "208A" to "208")
+/** Oznake koje su druga oznaka ucrtane sale: 204A, 205A i 208A su drugi ulazi učionica 204, 205 i 208 (korisnik). */
+private val ROOM_ALIASES = mapOf("204A" to "204", "205A" to "205", "208A" to "208")
 
 /** Naziv mesta van kampusa za salu (MF-27 -> Medicinski fakultet), ili null. */
 fun offCampusPlaceOf(room: String): String? = OFF_CAMPUS.entries.find { room.trim().startsWith(it.key) }?.value
@@ -38,6 +34,9 @@ fun buildingOfRoom(room: String): String? {
     val name = room.trim()
     return when {
         name == "O12" -> "NB" // korisnik; u PDF-u sa slovom O
+        // "L1" (bez "(RC)") nije računarski centar NB-a: stepenice naviše sa kraja prolaza iz NB-a vode u L1
+        // (korisnik, po oznaci na vratima) - iznad hodnika iza amfiteatara.
+        name == "L1" -> "AMF"
         name == "Scen-LAB" -> "AMF" // FtnGO: suteren Amfiteatara (ranije NB - korisnik prihvatio ispravku)
         PROVISIONAL_NB.any { name.startsWith(it) } -> "NB"
         name.startsWith("GRID-") -> "AMF" // suteren Amfiteatara, sa svojim ulazom sa zapada

@@ -70,6 +70,9 @@ SERVICES = [
     # U studentskom domu "Slobodan Bajić"; tačke su OSM čvorovi 6432341246 i 6432341247.
     ("SMESTAJ", "Služba smeštaja", "Služba smeštaja", "relation", 2955597, (45.2455021, 19.8492921)),
     ("ISHRANA", "Blagajna ishrane", "Blagajna ishrane", "relation", 2955597, (45.2454119, 19.8489912)),
+    # Pošta Srbije 21125, OSM čvor 9945489639 (amenity=post_office) u zgradi Amfiteatara, ulaz spolja
+    # (korisnik, 30.09.2026). Nije u snimku OSM-a (snimak ima samo zgrade, staze i ulaze) - tačka je upisana.
+    ("POSTA", "Pošta", "Pošta", "way", 250277314, (45.2460477, 19.8513347)),
 ]
 
 # Natpis koji ne sme da bude centriran na tački (preklapao bi se sa susednim na početnom
@@ -115,6 +118,7 @@ ENTRANCES = {
     # Službe u domu: ulaz sa severne strane, naspram tačke službe.
     "SMESTAJ": [(45.2455021, 19.8492921)],
     "ISHRANA": [(45.2454119, 19.8489912)],
+    "POSTA": [(45.2460477, 19.8513347)],  # zalepljeno za najbliži (zapadni) zid Amfiteatara
 }
 
 
@@ -482,8 +486,9 @@ def main():
             "id": bid, "name": name, "label": label, "labelAt": [r1(v) for v in anchors[bid]],
             "outline": points(ring), **({"holes": [points(h) for h in holes]} if holes else {}),
         })
-    # Službe: obris zgrade se crta jednom; služba koja je samo deo zgrade nema svoj obris.
-    drawn = set()
+    # Službe: obris zgrade se crta jednom; služba koja je samo deo zgrade nema svoj obris. Obrisi FTN zgrada
+    # (Pošta je u Amfiteatrima) su već nacrtani kao zgrade.
+    drawn = {(kind, osm_id) for *_, kind, osm_id in BUILDINGS}
     for sid, name, label, kind, osm_id, at in SERVICES:
         ring, holes = outline_of(sid, elements[(kind, osm_id)])
         rings[sid] = ring

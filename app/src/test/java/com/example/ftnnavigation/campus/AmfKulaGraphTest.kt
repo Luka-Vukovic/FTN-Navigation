@@ -70,14 +70,25 @@ class AmfKulaGraphTest {
     /** Sale Amfiteatara iz rasporeda su ucrtane (ne "ruta do zgrade"). */
     @Test
     fun amfScheduleRooms_drawn() {
-        val drawn = listOf("A1", "A2", "A3", "A4", "AR0", "AR3", "AR6", "Scen-LAB", "GRID-1")
+        val drawn = listOf("A1", "A2", "A3", "A4", "AR0", "AR3", "AR6", "Scen-LAB", "GRID-1", "INT 1", "L1")
         for (name in drawn) {
             val target = checkNotNull(resolveTarget(name, graph, campus)) { name }
             assertFalse(name, target.approximate)
             assertEquals(name, AmfPlan.BUILDING_ID, target.node.buildingId)
         }
-        // INT 1 nije nađena ni na FtnGO-u - ruta do zgrade.
-        assertTrue(checkNotNull(resolveTarget("INT 1", graph, campus)).approximate)
+    }
+
+    /** INT 1: suteren, odmah pored GRID-1, ali bez direktne veze - oboje na hodnik svojim vratima. */
+    @Test
+    fun int1_nextToGridButSeparate() {
+        val int1 = room("INT 1")
+        val grid = room("GRID-1")
+        assertEquals(-1, int1.floor)
+        val doors = { id: String -> graph.neighbors(id).map { it.first.id }.toSet() }
+        assertTrue(doors(int1.id).intersect(doors(grid.id)).isEmpty())
+        val route = checkNotNull(graph.route(int1.id, grid.id))
+        assertTrue(route.nodes.any { it.type == NodeType.HODNIK })
+        assertTrue("${route.lengthM} m", route.lengthM < 20)
     }
 
     /** Prolaz iz NB-a vodi stepenicama naniže do zadnjih vrata A1, A2 i A4 ("Amphitheaters A1 A2 A4"). */

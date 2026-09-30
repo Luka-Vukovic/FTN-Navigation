@@ -111,13 +111,13 @@ object NbPlan : IndoorBuilding {
 }
 
 /**
- * Amfiteatri: suteren (-1: glavni ulaz, Skriptarnica, Biblioteka, GRID) i prizemlje (AR0-AR6, A0-A4),
- * sa snimaka FtnGO-a i fotografija virtuelne ture FTN-a (tools/zgrade/build_amf.py).
+ * Amfiteatri: suteren (-1: glavni ulaz, Skriptarnica, Biblioteka, GRID), prizemlje (AR0-AR6, A0-A4, INT 1)
+ * i nivo 1 (samo L1), sa snimaka FtnGO-a i fotografija virtuelne ture FTN-a (tools/zgrade/build_amf.py).
  */
 object AmfPlan : IndoorBuilding {
     const val BUILDING_ID = "AMF"
     const val ENTRANCE_ID = "AMF-m1-ULAZ"
-    val FLOORS = -1..0
+    val FLOORS = -1..1
 
     override val buildingId get() = BUILDING_ID
     override val asset get() = "amf.json"
@@ -126,8 +126,11 @@ object AmfPlan : IndoorBuilding {
     override val labelHeight get() = 0.03f
 
     @DrawableRes
-    override fun floorDrawable(floor: Int): Int =
-        if (floor < 0) R.drawable.floor_plan_amf_m1 else R.drawable.floor_plan_amf_0
+    override fun floorDrawable(floor: Int): Int = when {
+        floor < 0 -> R.drawable.floor_plan_amf_m1
+        floor > 0 -> R.drawable.floor_plan_amf_1
+        else -> R.drawable.floor_plan_amf_0
+    }
 }
 
 /** Kula: prizemlje ... IX sprat, uglavnom kancelarije; sale su "Kula 101" (brojevi se ponavljaju u NB). */

@@ -91,4 +91,10 @@ val BUILDING_INFO: Map<String, BuildingInfo> = mapOf(
     ),
     "SMESTAJ" to BuildingInfo(R.string.building_info_smestaj, R.drawable.building_smestaj, OFFICE_HOURS),
     "ISHRANA" to BuildingInfo(R.string.building_info_ishrana, R.drawable.building_ishrana, OFFICE_HOURS),
+    // Radno vreme iz OSM-a (Pošta Srbije 21125, opening_hours "Mo-Fr 07:30-14:00; PH off").
+    "POSTA" to BuildingInfo(
+        R.string.building_info_posta,
+        null,
+        OpeningHours(weekday = hours("07:30-14:00"), saturday = emptyList(), sunday = emptyList()),
+    ),
 )

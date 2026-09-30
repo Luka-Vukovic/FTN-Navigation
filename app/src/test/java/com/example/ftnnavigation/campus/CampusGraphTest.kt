@@ -58,7 +58,7 @@ class CampusGraphTest {
     @Test
     fun studentServices_reachableOutdoors() {
         val services = campus.named(BuildingCategory.SLUZBA)
-        assertEquals(setOf("MENZA", "ZZZS", "SMESTAJ", "ISHRANA"), services.map { it.id }.toSet())
+        assertEquals(setOf("MENZA", "ZZZS", "SMESTAJ", "ISHRANA", "POSTA"), services.map { it.id }.toSet())
         for (service in services) {
             val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, service.nodeId))
             assertTrue(service.id, route.nodes.any { it.type == NodeType.STAZA })
@@ -108,7 +108,7 @@ class CampusGraphTest {
     fun buildingOfRoom_rules() {
         mapOf(
             "NTP-307" to "NTP", "NTP-A" to "NTP", "MI B4-3" to "MI", "MI Đ3-1" to "MI", "F 315" to "F",
-            "A2" to "AMF", "INT 1" to "AMF", "AH4A" to "NB", "AH-CRT" to "NB", "L1" to "NB",
+            "A2" to "AMF", "INT 1" to "AMF", "AH4A" to "NB", "AH-CRT" to "NB", "L1" to "AMF", "L1 (RC)" to "NB",
             "L4 (RC)" to "NB", "108A" to "NB", "312" to "NB", "ITC04" to "ITC", "ITCA1" to "ITC", "ITCS-RC" to "ITC",
             "F-208" to "F", "LG 005" to "DGG", "LG 107" to "DGG", "Scen-LAB" to "AMF", "O12" to "NB",
             "GRID-1" to "AMF", "Fizika" to "NB", "Hemija" to "NB", "Hemija 2" to "NB", "AR0" to "AMF", "AR6" to "AMF",

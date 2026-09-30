@@ -186,7 +186,7 @@
     <string name="building_info_opens_day">Sada zatvoreno · otvara u %1$s u %2$s</string>
     <string name="building_info_never_open">Ne radi</string>
     <string name="building_info_nb">Glavna zgrada fakulteta, sa glavnim ulazom sa Trga Dositeja Obradovića. Ovde su učionice 101–312, računarske laboratorije L1–L6 i sale AH, kao i Svečana sala, Studentska služba i portirnica. Iznutra je povezana sa Kulom i Amfiteatrima.</string>
-    <string name="building_info_amf">Zgrada sa velikim salama A1–A4 za predavanja i salom INT. Iznutra je povezana sa Nastavnim blokom, Kulom, F-blokom i ITC-om, pa se do njih ne mora napolje.</string>
+    <string name="building_info_amf">Zgrada sa velikim salama A1–A4 za predavanja, salama AR0–AR6, Bibliotekom i Skriptarnicom. Iznutra je povezana sa Nastavnim blokom, Kulom, F-blokom i ITC-om, pa se do njih ne mora napolje. U zgradi je i pošta, sa ulazom spolja sa zapadne strane.</string>
     <string name="building_info_f">Ovde su sale F 3xx. Do F-bloka se iznutra stiže kroz Amfiteatre.</string>
     <string name="building_info_kula">Najviša zgrada fakulteta. Iznutra je povezana sa Nastavnim blokom i Amfiteatrima.</string>
     <string name="building_info_itc">Istraživačko-tehnološki centar. Iznutra je povezan sa Amfiteatrima.</string>
@@ -195,6 +195,7 @@
     <string name="building_info_dgg">Departman za građevinarstvo i geodeziju, sa laboratorijama. Do njega se ide spolja.</string>
     <string name="building_info_menza">Studentski restoran (Velika menza), preko puta Mašinskog instituta.</string>
     <string name="building_info_zzzs">Zavod za zdravstvenu zaštitu studenata, zdravstvena zaštita za studente. U prizemlju je apoteka.</string>
+    <string name="building_info_posta">Pošta Srbije (21125 Novi Sad) u zgradi Amfiteatara. Ulazi se spolja, sa zapadne strane zgrade.</string>
     <string name="building_info_smestaj">Služba smeštaja u studentske domove. Nalazi se u prizemlju doma „Slobodan Bajić”.</string>
     <string name="building_info_ishrana">Blagajna ishrane, za uplatu obroka u menzi. Nalazi se u prizemlju doma „Slobodan Bajić”.</string>
 
