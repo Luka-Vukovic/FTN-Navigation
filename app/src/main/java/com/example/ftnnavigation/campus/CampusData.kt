@@ -6,8 +6,7 @@ import com.example.ftnnavigation.graph.FloorScale
 import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
-import com.example.ftnnavigation.graph.NbPlan
-import com.example.ftnnavigation.graph.NtpPlan
+import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.PlanPlacement
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -107,18 +106,14 @@ data class CampusBuilding(
 ) {
     /** Čvor grafa koji predstavlja zgradu: glavni ulaz ako ima unutrašnji graf, inače čvor ZGRADA. */
     val nodeId: String
-        get() = when (id) {
-            NbPlan.BUILDING_ID -> NbPlan.ENTRANCE_ID
-            NtpPlan.BUILDING_ID -> NtpPlan.ENTRANCE_ID
-            else -> "K-Z-$id"
-        }
+        get() = indoorBuilding(id)?.entranceId ?: "K-Z-$id"
 }
 
 @Serializable
 data class CampusNode(val id: String, val x: Float, val y: Float, val type: NodeType)
 
-/** Čvorovi i ivice za punjenje baze: unutrašnji grafovi Nastavnog bloka i NTP-a + kampus + veze. */
-fun seedGraph(campus: CampusData, nb: IndoorPlan, ntp: IndoorPlan): Pair<List<Node>, List<Edge>> = Pair(
-    nb.graphNodes() + ntp.graphNodes() + campus.graphNodes(),
-    nb.graphEdges() + ntp.graphEdges() + campus.graphEdges(),
+/** Čvorovi i ivice za punjenje baze: unutrašnji grafovi zgrada ([plans]) + kampus + veze. */
+fun seedGraph(campus: CampusData, plans: List<IndoorPlan>): Pair<List<Node>, List<Edge>> = Pair(
+    plans.flatMap { it.graphNodes() } + campus.graphNodes(),
+    plans.flatMap { it.graphEdges() } + campus.graphEdges(),
 )

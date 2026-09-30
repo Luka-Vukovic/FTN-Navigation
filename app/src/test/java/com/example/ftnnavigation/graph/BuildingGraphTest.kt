@@ -146,6 +146,8 @@ class BuildingGraphTest {
         while (queue.isNotEmpty()) {
             val (d, id) = queue.poll()!!
             if (d > dist.getValue(id)) continue
+            // Kao u A*: sala nije usputni čvor.
+            if (g.node(id)!!.type == NodeType.PROSTORIJA && id != fromId) continue
             for ((next, type) in g.neighbors(id)) {
                 val nd = d + (g.cost(g.node(id)!!, next, type, profile) ?: continue)
                 if (nd < (dist[next.id] ?: Double.POSITIVE_INFINITY)) {

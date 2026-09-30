@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Suteren (-1) - Amfiteatri. GENERISANO skriptom tools/zgrade/build_amf.py (ne menjati ručno).
+    Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
+    (zajednički sistem NB, AMF i Kule, 1 px = 0.1014 m), grupa ih pomera u viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="820dp"
+    android:height="310dp"
+    android:viewportWidth="820"
+    android:viewportHeight="310">
+
+    <group
+        android:translateX="-30"
+        android:translateY="80">
+
+        <!-- Unutrašnjost -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M168,-65 L835,-65 L835,210 L732,210 L732,3 L402,3 L402,210 L168,210 Z M30,-30 L168,-30 L168,0 L30,0 Z" />
+
+        <!-- Hodnici -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M170,-17 L832,-17 L832,3 L170,3 Z M203,-65 L283,-65 L283,-17 L203,-17 Z M230,3 L285,3 L285,207 L230,207 Z" />
+
+        <!-- Stepeništa -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M232,177 L262,177 L262,207 L232,207 Z M518,-65 L587,-65 L587,-40 L518,-40 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:pathData="M238,177 V207 M244,177 V207 M250,177 V207 M256,177 V207 M524,-65 V-40 M530,-65 V-40 M536,-65 V-40 M542,-65 V-40 M548,-65 V-40 M554,-65 V-40 M560,-65 V-40 M566,-65 V-40 M572,-65 V-40 M578,-65 V-40 M584,-65 V-40" />
+
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M30,-30 L170,-30 L170,0 L30,0 Z M170,-65 L203,-65 L203,-30 L170,-30 Z M285,-65 L317,-65 L317,-17 L285,-17 Z M317,-65 L347,-65 L347,-17 L317,-17 Z M347,-65 L378,-65 L378,-17 L347,-17 Z M378,-65 L410,-65 L410,-17 L378,-17 Z M410,-65 L430,-65 L430,-17 L410,-17 Z M430,-65 L443,-65 L443,-17 L430,-17 Z M443,-65 L480,-65 L480,-17 L443,-17 Z M480,-65 L518,-65 L518,-17 L480,-17 Z M587,-65 L660,-65 L660,-17 L587,-17 Z M660,-65 L765,-65 L765,-17 L660,-17 Z M765,-65 L800,-65 L800,-17 L765,-17 Z M800,-65 L832,-65 L832,-17 L800,-17 Z M170,0 L230,0 L230,170 L170,170 Z M170,170 L205,170 L205,207 L170,207 Z M205,170 L230,170 L230,207 L205,207 Z M285,3 L402,3 L402,43 L285,43 Z M285,43 L402,43 L402,207 L285,207 Z M732,3 L832,3 L832,207 L732,207 Z" />
+
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="3"
+            android:pathData="M168,-65 L835,-65 L835,210 L732,210 L732,3 L402,3 L402,210 L168,210 Z M30,-30 L168,-30 L168,0 L30,0 Z" />
+
+    </group>
+</vector>

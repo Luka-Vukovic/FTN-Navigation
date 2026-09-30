@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    V sprat (potkrovlje) - Nastavni blok. GENERISANO skriptom tools/nb/build_nb.py (ne menjati ručno).
+    V sprat (potkrovlje) - Nastavni blok. GENERISANO skriptom tools/zgrade/build_nb.py (ne menjati ručno).
     Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
-    (1 px = 0.1014 m), grupa ih pomera u viewport.
+    (zajednički sistem NB, AMF i Kule, 1 px = 0.1014 m), grupa ih pomera u viewport.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="750dp"

@@ -20,9 +20,6 @@ private val PROVISIONAL_NB = listOf("Fizika", "Hemija")
 /** Mesta van kampusa, predaleko da bi bila na mapi (korisnik): prefiks oznake sale -> naziv. */
 private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
 
-/** Deo zgrade sa svojim ulazom (build_campus.py `UNITS`): prefiks oznake sale -> čvor grafa. */
-private val UNIT_NODES = mapOf("GRID-" to "K-Z-GRID")
-
 /**
  * Oznake koje su druga oznaka ucrtane sale: "L1" je računarska učionica L1 (301) u Nastavnom bloku,
  * kao i "L1 (RC)" (jedina L1 na FTN-u van NTP-a). 204A, 205A i 208A su drugi ulazi velikih učionica
@@ -43,7 +40,7 @@ fun buildingOfRoom(room: String): String? {
         name == "O12" -> "NB" // korisnik; u PDF-u sa slovom O
         name == "Scen-LAB" -> "AMF" // FtnGO: suteren Amfiteatara (ranije NB - korisnik prihvatio ispravku)
         PROVISIONAL_NB.any { name.startsWith(it) } -> "NB"
-        name.startsWith("GRID-") -> "AMF" // u Amfiteatrima, ali sa svojim ulazom (UNIT_NODES)
+        name.startsWith("GRID-") -> "AMF" // suteren Amfiteatara, sa svojim ulazom sa zapada
         AR_ROOM.matches(name) -> "AMF"
         name.startsWith("NTP") -> "NTP"
         name.startsWith("ITC") -> "ITC" // ITC03, ITCA1, ITCS-01, ITCS-RC...
@@ -74,9 +71,7 @@ fun resolveTarget(destination: String, graph: BuildingGraph, campus: CampusData)
         return graph.node(building.nodeId)?.let { RouteTarget(it, building, approximate = false) }
     }
     val building = buildingOfRoom(destination)?.let(campus::building) ?: return null
-    // Deo zgrade sa svojim ulazom: ruta do tog ulaza, ne do ostatka zgrade.
-    val unitNode = UNIT_NODES.entries.find { destination.trim().startsWith(it.key) }?.let { graph.node(it.value) }
-    return (unitNode ?: graph.node(building.nodeId))?.let { RouteTarget(it, building, approximate = true) }
+    return graph.node(building.nodeId)?.let { RouteTarget(it, building, approximate = true) }
 }
 
 /**

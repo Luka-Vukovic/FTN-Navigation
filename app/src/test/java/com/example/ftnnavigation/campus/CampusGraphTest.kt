@@ -1,9 +1,11 @@
 package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.PointM
 import com.example.ftnnavigation.schedule.ScheduleData
 import kotlinx.serialization.json.Json
@@ -21,11 +23,13 @@ class CampusGraphTest {
 
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
 
-    private val nb = IndoorPlan.parse(File("src/main/assets/nb.json").readText())
+    private val plans = INDOOR_BUILDINGS.associate { it.buildingId to IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) }
 
-    private val ntp = IndoorPlan.parse(File("src/main/assets/ntp.json").readText())
+    private val nb = plans.getValue(NbPlan.BUILDING_ID)
 
-    private val graph = seedGraph(campus, nb, ntp).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
+    private val ntp = plans.getValue(NtpPlan.BUILDING_ID)
+
+    private val graph = seedGraph(campus, plans.values.toList()).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private fun distance(a: PointM, b: PointM) = hypot(a.x - b.x, a.y - b.y)
 
@@ -78,12 +82,15 @@ class CampusGraphTest {
         assertEquals(76.0, graph.placement(NbPlan.BUILDING_ID).scale.widthM.toDouble(), 1.5)
     }
 
-    /** Nastavni blok -> F-blok: kroz spojne prolaze i Amfiteatre, bez izlaska napolje. */
+    /**
+     * Amfiteatri -> F-blok: spojnim prolazom iz prizemlja, bez izlaska napolje. (Iz NB-a je od 30.09.2026
+     * kraće spolja: unutra se ide kroz Kulu i trem, jer prolaz iz NB-a vodi samo do zadnjih vrata
+     * amfiteatara, a stepenice naviše sa njegovog kraja nisu povezane.)
+     */
     @Test
-    fun nbToFBlock_goesIndoors() {
-        val route = checkNotNull(graph.route(graph.room("101")!!.id, buildingNode("F")))
-        val ids = route.nodes.map { it.id }
-        assertTrue(ids.containsAll(listOf("K-P-AMF-NB", "K-Z-AMF", "K-P-AMF-F")))
+    fun amfToFBlock_goesIndoors() {
+        val route = checkNotNull(graph.route(graph.room("AR0")!!.id, buildingNode("F")))
+        assertTrue("K-P-AMF-F" in route.nodes.map { it.id })
         assertFalse(route.nodes.any { it.type == NodeType.STAZA })
     }
 
@@ -113,17 +120,16 @@ class CampusGraphTest {
         assertNull(offCampusPlaceOf("F 315"))
     }
 
-    /** GRID ima svoj ulaz na Amfiteatrima: ruta vodi do njega, ne kroz ostatak zgrade. */
+    /** GRID-1 je ucrtan u suterenu Amfiteatara, odmah iza svog ulaza sa zapada (K-U-AMF-2). */
     @Test
-    fun gridRoom_routesToOwnEntrance() {
+    fun gridRoom_nextToOwnEntrance() {
         val target = checkNotNull(resolveTarget("GRID-1", graph, campus))
-        assertEquals("K-Z-GRID", target.node.id)
-        assertEquals("AMF", target.building?.id)
-        assertTrue(target.approximate)
-        val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, "K-Z-GRID"))
-        assertEquals("K-U-GRID-1", route.nodes[route.nodes.size - 2].id)
-        // Ulaz GRID-a nije ulaz Amfiteatara: iz Amfiteatara se do GRID-a ide spolja.
-        assertFalse(graph.neighbors("K-Z-AMF").any { (node, _) -> node.id == "K-U-GRID-1" })
+        assertFalse(target.approximate)
+        assertEquals("AMF", target.node.buildingId)
+        assertEquals(-1, target.node.floor)
+        val route = checkNotNull(graph.route("K-U-AMF-2", target.node.id))
+        assertTrue("${route.lengthM} m", route.lengthM < 15)
+        assertNull(graph.node("K-Z-GRID"))
     }
 
     /** Sale podrazumevanog rasporeda (SIIT, 4. godina, grupa 3): ucrtane ili bar do zgrade. */

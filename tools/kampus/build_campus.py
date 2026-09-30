@@ -21,7 +21,7 @@ bude (0, 0).
     zgradi (images/službe.png),
   - spojni prolazi između zgrada (u OSM-u su zasebni delovi zgrada),
   - ulazi koji se koriste: OSM čvor entrance=* ili tačka koja se "lepi" na zid zgrade,
-  - smeštaj plana Nastavnog bloka (tools/nb/build_nb.py) u obris zgrade,
+  - smeštaj planova Nastavnog bloka, Amfiteatara i Kule (tools/zgrade, zajednički sistem) u obrise,
   - smeštaj plana NTP-a (tools/ntp/build_ntp.py) i njegovi ulazi.
 Zgrade bez unutrašnjeg plana u grafu su jedan čvor (ZGRADA) povezan sa ulazima i prolazima.
 """
@@ -36,8 +36,10 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ntp"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "nb"))
-import build_nb  # noqa: E402 - plan Nastavnog bloka: zid, viewport, ulaz i prolazi
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "zgrade"))
+import build_amf  # noqa: E402 - planovi NB, Amfiteatara i Kule: zajednički sistem, viewport-i, ulazi
+import build_kula  # noqa: E402
+import build_nb  # noqa: E402
 import build_ntp  # noqa: E402 - plan NTP-a: viewport i ulazi
 
 REF_LAT, REF_LON = 45.2455, 19.8500
@@ -78,9 +80,9 @@ LABEL_SIDE = {"SMESTAJ": "EAST", "ISHRANA": "WEST", "ZZZS": "WEST"}
 # Zgrade čiji OSM unutrašnji prstenovi nisu dvorišta (provereno na terenu) - crtaju se pune.
 NO_HOLES = {"NTP"}
 
-# Zgrade čiji unutrašnji graf postoji u aplikaciji (assets/nb.json, assets/ntp.json): za njih se
-# ne pravi čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
-WITH_INTERIOR = {"NB", "NTP"}
+# Zgrade čiji unutrašnji graf postoji u aplikaciji (assets/nb.json, amf.json, kula.json, ntp.json): za
+# njih se ne pravi čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
+WITH_INTERIOR = {"NB", "NTP", "AMF", "KULA"}
 
 # Spojni prolazi (unutrašnje veze), OSM way zasebnog dela zgrade između njih.
 PASSAGES = [
@@ -97,7 +99,10 @@ ENTRANCES = {
     "ITC": [2317759575],
     "NB": [11691291600],  # glavni ulaz, prema Trgu Dositeja Obradovića
     "KULA": [2317759457],
-    "AMF": [11691291594],
+    # 2: ulaz GRID-a (Grafičko inženjerstvo i dizajn) sa zapada; označio korisnik na images/entrances 1.png
+    # (29.09.2026), preračunat preko poznatih ulaza i prolaza (greška 1-4 m). Od 30.09.2026 GRID je deo plana
+    # Amfiteatara (GRID-1, GRID-2 na -1), pa je ovo običan drugi ulaz (ranije poseban deo zgrade K-Z-GRID).
+    "AMF": [11691291594, (45.246285, 19.851143)],
     "MI": [2317759407],
     # NTP: ulazi FTN dela sa plana prizemlja (build_ntp.ENTRANCES), preko smeštaja plana - bez lepljenja
     # na zid. OSM ulazi 13123222553 (istok) i 13123222559 (Fruškogorska) su 9-20 m od krajeva PASAŽA
@@ -112,16 +117,6 @@ ENTRANCES = {
     "ISHRANA": [(45.2454119, 19.8489912)],
 }
 
-# Delovi zgrade sa svojim ulazom, do kojih se ne ide kroz ostatak zgrade: nisu zgrada na mapi, već
-# čvor grafa K-Z-<id> (ZGRADA) iza svog ulaza K-U-<id>-1, bez veze sa čvorom same zgrade. Aplikacija
-# vezuje sale za taj čvor (Destinations.kt, UNIT_NODES). id, zgrada, ulaz (lat, lon) sa terenske mape.
-UNITS = [
-    # Grafičko inženjerstvo i dizajn (sala GRID-1), zapadna strana Amfiteatara; ulaz označio korisnik
-    # na images/entrances 1.png (29.09.2026), preračunat preko poznatih ulaza i prolaza (greška 1-4 m).
-    ("GRID", "AMF", (45.246285, 19.851143)),
-]
-# Koliko je čvor dela zgrade unutra od ulaza (ka sredini zgrade), u metrima.
-UNIT_DEPTH_M = 4.0
 
 # Plan Nastavnog bloka (tools/nb/build_nb.py) je u px plana; spoljni zid je pravougaonik OSM obrisa
 # (od 01.10.2026; ranije px fotografije evakuacionog plana, zid y 311..504 - 7 % preširoko poprečno).
@@ -332,6 +327,19 @@ def nb_plan_placement(ring):
         "widthM": round(abs(z) * vw, 2),
         "heightM": round(abs(z) * vh, 2),
     }, abs(z), residual
+
+
+def shared_placement(to_campus, nb_placement, m_per_px, viewport):
+    """Smeštaj plana u zajedničkom sistemu sa NB (tools/zgrade): ista rotacija i razmera, svoj viewport."""
+    vx, vy, vw, vh = viewport
+    origin = to_campus((vx, vy))
+    return {
+        "originX": round(origin[0], 2),
+        "originY": round(origin[1], 2),
+        "rotationDeg": nb_placement["rotationDeg"],
+        "widthM": round(m_per_px * vw, 2),
+        "heightM": round(m_per_px * vh, 2),
+    }
 
 
 def ntp_plan_placement(ring):
@@ -561,16 +569,6 @@ def main():
             add_entrance(entrance, x, y)
             if building_node:
                 graph.add_edge(building_node, entrance)
-    for uid, bid, at in UNITS:
-        x, y = snap_to_wall(rings[bid], *to_xy(*at))
-        entrance = f"K-U-{uid}-1"
-        add_entrance(entrance, x, y)
-        ax, ay = anchors[bid]
-        k = min(1.0, UNIT_DEPTH_M / max(math.dist((x, y), (ax, ay)), 1e-6))
-        unit = f"K-Z-{uid}"
-        graph.add_node(unit, x + (ax - x) * k, y + (ay - y) * k, kind="ZGRADA")
-        special.add(unit)
-        graph.add_edge(unit, entrance)
     for (a, b), ring in passage_rings.items():
         passage = f"K-P-{a}-{b}"
         graph.add_node(passage, *centroid(ring), kind="PROLAZ")
@@ -596,6 +594,17 @@ def main():
         "spojni prolaz -> prolaz NB-KULA": math.dist(to_campus(build_nb.PASSAGE_KULA), graph.xy("K-P-NB-KULA")),
         "prolaz ka Amfiteatrima -> prolaz AMF-NB": math.dist(to_campus(build_nb.PASSAGE_AMF), graph.xy("K-P-AMF-NB")),
     })
+    # Amfiteatri i Kula su u istom sistemu kao plan NB (tools/zgrade/common.py) - ista rotacija i razmera.
+    shared = {bid: shared_placement(to_campus, placement, m_per_px, module.VIEWPORT)
+              for bid, module in (("AMF", build_amf), ("KULA", build_kula))}
+    for label, (plan_xy, node) in {
+        "AMF ulaz": ((245, -65), "K-U-AMF-1"), "AMF ulaz GRID": ((723, -65), "K-U-AMF-2"),
+        "AMF prolaz ka NB": ((680, 207), "K-P-AMF-NB"), "AMF prolaz ka Kuli": ((257, 210), "K-P-AMF-KULA"),
+        "AMF prolaz ka F": ((40, -13), "K-P-AMF-F"), "AMF prolaz ka ITC": ((832, -10), "K-P-ITC-AMF"),
+        "Kula ulaz": ((243, 554), "K-U-KULA-1"), "Kula prolaz ka NB": ((333, 413), "K-P-NB-KULA"),
+        "Kula trem ka AMF": ((236, 376), "K-P-AMF-KULA"),
+    }.items():
+        checks[f"{label} -> {node}"] = math.dist(to_campus(plan_xy), graph.xy(node))
 
     # --- Crtež: ulice i staze ---
     streets, paths = [], []
@@ -616,7 +625,7 @@ def main():
         "generated": dt.date.today().isoformat(),
         "widthM": X_MAX - X_MIN,
         "heightM": Y_MAX - Y_MIN,
-        "plans": {"NB": placement, "NTP": ntp_placement},
+        "plans": {"NB": placement, **shared, "NTP": ntp_placement},
         "buildings": buildings,
         "context": context,
         "streets": streets,

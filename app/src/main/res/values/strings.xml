@@ -109,9 +109,13 @@
     <string name="nb_location">Nastavni blok · %1$s</string>
     <string name="map_campus_location">Kampus FTN-a</string>
     <string name="map_mode_campus">Kampus</string>
-    <string name="map_mode_building">Nastavni blok</string>
+    <string name="map_mode_building">NB</string>
+    <string name="map_mode_amf">Amfiteatri</string>
+    <string name="map_mode_kula">Kula</string>
     <string name="map_mode_ntp">NTP</string>
     <string name="ntp_location">Naučno-tehnološki park · %1$s</string>
+    <string name="amf_location">Amfiteatri · %1$s</string>
+    <string name="kula_location">Kula · %1$s</string>
     <string name="floor_ground">prizemlje</string>
     <string name="floor_basement">suteren</string>
     <string name="floor_number">%1$d. sprat</string>

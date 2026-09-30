@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Prizemlje - Kula. GENERISANO skriptom tools/zgrade/build_kula.py (ne menjati ručno).
+    Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
+    (zajednički sistem NB, AMF i Kule, 1 px = 0.1014 m), grupa ih pomera u viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="280dp"
+    android:height="275dp"
+    android:viewportWidth="280"
+    android:viewportHeight="275">
+
+    <group
+        android:translateX="-140"
+        android:translateY="-300">
+
+        <!-- Unutrašnjost -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M155,375 L335,375 L335,554 L155,554 Z" />
+
+        <!-- Hodnici -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M225,375 L333,375 L333,465 L225,465 Z M224,465 L285,465 L285,511 L224,511 Z M205,490 L224,490 L224,511 L205,511 Z M228,511 L258,511 L258,554 L228,554 Z M205,300 L280,300 L280,375 L205,375 Z M335,397 L420,397 L420,430 L335,430 Z" />
+
+        <!-- Ulazi -->
+        <path
+            android:fillColor="#FFC8E6C9"
+            android:pathData="M228,554 L258,554 L258,560 L228,560 Z" />
+
+        <!-- Stepeništa -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M285,427 L333,427 L333,460 L285,460 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:pathData="M291,427 V460 M297,427 V460 M303,427 V460 M309,427 V460 M315,427 V460 M321,427 V460 M327,427 V460" />
+
+        <!-- Liftovi -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:fillColor="#FFFFCC80"
+            android:pathData="M224,447 L263,447 L263,478 L224,478 Z" />
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="0.8"
+            android:pathData="M224,447 L263,478 M263,447 L224,478" />
+
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M155,375 L210,375 L210,430 L155,430 Z M210,375 L225,375 L225,430 L210,430 Z M155,432 L205,432 L205,472 L155,472 Z M155,472 L205,472 L205,511 L155,511 Z M205,447 L224,447 L224,490 L205,490 Z M155,511 L228,511 L228,554 L155,554 Z M258,511 L335,511 L335,554 L258,554 Z M285,465 L333,465 L333,482 L285,482 Z M297,482 L333,482 L333,511 L297,511 Z" />
+
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="3"
+            android:pathData="M155,375 L335,375 L335,554 L155,554 Z" />
+
+    </group>
+</vector>

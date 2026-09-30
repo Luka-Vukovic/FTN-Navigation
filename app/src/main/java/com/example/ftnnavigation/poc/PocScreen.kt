@@ -1,12 +1,11 @@
 package com.example.ftnnavigation.poc
 
-import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,7 +44,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,7 +61,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -84,8 +83,12 @@ import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.AmfPlan
+import com.example.ftnnavigation.graph.IndoorBuilding
+import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NtpPlan
+import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
@@ -110,8 +113,7 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
         campus = viewModel.campus,
         graph = viewModel.graph,
         mode = viewModel.mode,
-        nbFloor = viewModel.nbFloor,
-        ntpFloor = viewModel.ntpFloor,
+        floor = viewModel.mode.building?.let(viewModel::floorOf) ?: 0,
         destination = viewModel.destination,
         target = viewModel.target,
         route = viewModel.route,
@@ -132,8 +134,7 @@ fun PocScreen(
     campus: CampusData?,
     graph: BuildingGraph?,
     mode: MapMode,
-    nbFloor: Int,
-    ntpFloor: Int,
+    floor: Int,
     destination: String?,
     target: RouteTarget?,
     route: Route?,
@@ -153,11 +154,8 @@ fun PocScreen(
         topBar = {
             FtnTopAppBar(
                 title = stringResource(R.string.poc_title),
-                subtitle = when (mode) {
-                    MapMode.KAMPUS -> stringResource(R.string.map_campus_location)
-                    MapMode.NB -> stringResource(R.string.nb_location, floorName(nbFloor))
-                    MapMode.NTP -> stringResource(R.string.ntp_location, floorName(ntpFloor))
-                },
+                subtitle = mode.building?.let { stringResource(it.locationRes(), floorName(floor)) }
+                    ?: stringResource(R.string.map_campus_location),
             )
         },
     ) { innerPadding ->
@@ -165,8 +163,9 @@ fun PocScreen(
         Column(Modifier.padding(top = innerPadding.calculateTopPadding()).fillMaxSize()) {
             MapModeSelector(mode, onModeChange)
             Box(Modifier.weight(1f).fillMaxWidth()) {
+                val building = mode.building
                 when {
-                    mode == MapMode.KAMPUS && campus != null -> CampusMap(
+                    building == null -> if (campus != null) CampusMap(
                         campus = campus,
                         graph = graph,
                         route = route,
@@ -175,52 +174,26 @@ fun PocScreen(
                         onBuildingLongPress = { infoBuildingId = it.id },
                         modifier = Modifier.fillMaxSize(),
                     )
-                    mode == MapMode.NTP -> {
-                        // PDR je samo u Nastavnom bloku - na NTP-u nema pozicije.
-                        FloorPlan(
-                            planRes = NtpPlan.floorDrawable(ntpFloor),
-                            buildingId = NtpPlan.BUILDING_ID,
-                            floor = ntpFloor,
-                            labelHeight = NTP_LABEL_HEIGHT,
-                            graph = graph,
-                            route = route,
-                            position = null,
-                            rawPosition = null,
-                            headingDeg = state.headingDeg,
-                            isPickingStart = false,
-                            onTap = {},
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                        FloorSelector(
-                            floors = NtpPlan.FLOORS,
-                            selected = ntpFloor,
-                            routeFloors = route.floorsIn(NtpPlan.BUILDING_ID),
-                            onSelect = onFloorChange,
-                            modifier = Modifier.align(Alignment.CenterEnd).padding(12.dp),
-                        )
-                    }
                     else -> {
-                        // PDR pozicija i izbor starta su samo u prizemlju.
-                        val onGround = nbFloor == 0
+                        // PDR pozicija i izbor starta su samo u prizemlju Nastavnog bloka.
+                        val pdrHere = building == NbPlan && floor == 0
                         FloorPlan(
-                            planRes = NbPlan.floorDrawable(nbFloor),
-                            buildingId = NbPlan.BUILDING_ID,
-                            floor = nbFloor,
-                            labelHeight = NB_LABEL_HEIGHT,
+                            building = building,
+                            floor = floor,
                             graph = graph,
                             route = route,
-                            position = state.position.takeIf { onGround },
-                            rawPosition = state.rawPosition.takeIf { onGround },
+                            position = state.position.takeIf { pdrHere },
+                            rawPosition = state.rawPosition.takeIf { pdrHere },
                             headingDeg = state.headingDeg,
-                            isPickingStart = state.isPickingStart && onGround,
+                            isPickingStart = state.isPickingStart && pdrHere,
                             onTap = onMapTap,
-                            // Plan je širok: bez ovoga birač sprata prekriva severni kraj zgrade.
+                            // Širok plan: bez ovoga birač sprata prekriva kraj zgrade.
                             modifier = Modifier.fillMaxSize().padding(end = FLOOR_SELECTOR_SPACE),
                         )
                         FloorSelector(
-                            floors = NbPlan.FLOORS,
-                            selected = nbFloor,
-                            routeFloors = route.floorsIn(NbPlan.BUILDING_ID),
+                            floors = building.floors,
+                            selected = floor,
+                            routeFloors = route.floorsIn(building.buildingId),
                             onSelect = onFloorChange,
                             modifier = Modifier.align(Alignment.CenterEnd).padding(12.dp),
                         )
@@ -298,16 +271,14 @@ fun PocScreen(
 }
 
 /**
- * Slika sprata [floor] zgrade [buildingId] sa pan/zoom gestovima, grafom tog sprata, rutom i
+ * Slika sprata [floor] zgrade [building] sa pan/zoom gestovima, grafom tog sprata, rutom i
  * markerom korisnika. [position] je pozicija na grafu; [rawPosition] (čist PDR, bez
  * map-matching-a) je bleda tačka za poređenje. Zum ostaje pri promeni sprata iste zgrade.
  */
 @Composable
 private fun FloorPlan(
-    @DrawableRes planRes: Int,
-    buildingId: String,
+    building: IndoorBuilding,
     floor: Int,
-    labelHeight: Float,
     graph: BuildingGraph?,
     route: Route?,
     position: Offset?,
@@ -317,32 +288,23 @@ private fun FloorPlan(
     onTap: (Offset) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val painter = painterResource(planRes)
-    var scale by remember(buildingId) { mutableFloatStateOf(1f) }
-    var pan by remember(buildingId) { mutableStateOf(Offset.Zero) }
+    val buildingId = building.buildingId
+    val painter = painterResource(building.floorDrawable(floor))
+    // Zum ostaje pri promeni sprata iste zgrade.
+    val zoom = rememberZoomPanState(maxScale = 6f, buildingId)
     val floorNames = ALL_FLOORS.associateWith { floorName(it) }
 
     Box(
         modifier = modifier
             .clipToBounds()
-            .pointerInput(Unit) {
-                detectTransformGestures { _, panChange, zoomChange, _ ->
-                    scale = (scale * zoomChange).coerceIn(1f, 6f)
-                    pan += panChange
-                }
-            },
+            .zoomPanGestures(zoom),
         contentAlignment = Alignment.Center,
     ) {
-        // Marker i tap koordinate su u koordinatama slike jer su unutar graphicsLayer-a.
+        // Marker i tap koordinate su u koordinatama slike jer su unutar zoomPanLayer-a (graphicsLayer).
         Box(
             Modifier
                 .aspectRatio(painter.intrinsicSize.width / painter.intrinsicSize.height)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = pan.x
-                    translationY = pan.y
-                }
+                .zoomPanLayer(zoom)
                 .pointerInput(isPickingStart, onTap) {
                     if (!isPickingStart) return@pointerInput
                     detectTapGestures { tap ->
@@ -361,7 +323,7 @@ private fun FloorPlan(
             if (graph != null) {
                 val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface, lineHeight = TextUnit.Unspecified)
                 Canvas(Modifier.fillMaxSize()) {
-                    drawGraph(graph, buildingId, floor, labelHeight, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / scale)
+                    drawGraph(graph, building, floor, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / zoom.scale)
                 }
             }
             if (route != null) {
@@ -373,8 +335,8 @@ private fun FloorPlan(
                 val up = stringResource(R.string.route_floor_change_up, "%s")
                 val down = stringResource(R.string.route_floor_change_down, "%s")
                 Canvas(Modifier.fillMaxSize()) {
-                    drawRoute(route, buildingId, floor, position, colors.primary, colors.secondary, 1f / scale)
-                    drawFloorChanges(route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / scale) { from, to ->
+                    drawRoute(route, buildingId, floor, position, colors.primary, colors.secondary, 1f / zoom.scale)
+                    drawFloorChanges(route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / zoom.scale) { from, to ->
                         (if (to > from) up else down).format(floorNames.getValue(to))
                     }
                 }
@@ -384,23 +346,28 @@ private fun FloorPlan(
                 Canvas(Modifier.fillMaxSize()) {
                     if (rawPosition != null && rawPosition != position) {
                         val raw = Offset(rawPosition.x * size.width, rawPosition.y * size.height)
-                        drawCircle(color.copy(alpha = 0.35f), radius = 4.dp.toPx() / scale, center = raw)
+                        drawCircle(color.copy(alpha = 0.35f), radius = 4.dp.toPx() / zoom.scale, center = raw)
                     }
                     val center = Offset(position.x * size.width, position.y * size.height)
                     // Delimo sa scale da bi marker ostao iste veličine na ekranu pri zumiranju.
-                    drawUserMarker(center, headingDeg, color, 1f / scale)
+                    drawUserMarker(center, headingDeg, color, 1f / zoom.scale)
                 }
             }
         }
     }
 }
 
-/** Visina natpisa sale kao deo visine plana (NB je nizak i širok, NTP skoro kvadratan). */
-private const val NB_LABEL_HEIGHT = 0.03f
-private const val NTP_LABEL_HEIGHT = 0.014f
+/** Svi spratovi zgrada sa planom (NB -1 ... 5, AMF -1 ... 0, Kula 0 ... 9, NTP 0 ... 5). */
+private val ALL_FLOORS = -1..9
 
-/** Svi spratovi zgrada sa planom (NB -1 ... 5, NTP 0 ... 5). */
-private val ALL_FLOORS = -1..5
+/** "Nastavni blok · %s" i sl. - podnaslov Mape za zgradu. */
+@StringRes
+private fun IndoorBuilding.locationRes(): Int = when (this) {
+    NbPlan -> R.string.nb_location
+    AmfPlan -> R.string.amf_location
+    KulaPlan -> R.string.kula_location
+    NtpPlan -> R.string.ntp_location
+}
 
 /** Spratovi kroz koje ruta prolazi u zgradi [buildingId]. */
 private fun Route?.floorsIn(buildingId: String): Set<Int> =
@@ -417,9 +384,8 @@ private fun floorName(floor: Int): String = when {
 /** Ivice i čvorovi jednog sprata zgrade; sale imaju natpis sa nazivom iz rasporeda. */
 private fun DrawScope.drawGraph(
     graph: BuildingGraph,
-    buildingId: String,
+    building: IndoorBuilding,
     floor: Int,
-    labelHeight: Float,
     edgeColor: Color,
     roomColor: Color,
     textMeasurer: TextMeasurer,
@@ -427,7 +393,7 @@ private fun DrawScope.drawGraph(
     k: Float,
 ) {
     fun Node.toOffset() = Offset(x * size.width, y * size.height)
-    val nodes = graph.nodes.filter { it.buildingId == buildingId && it.floor == floor }.associateBy { it.id }
+    val nodes = graph.nodes.filter { it.buildingId == building.buildingId && it.floor == floor }.associateBy { it.id }
     for (edge in graph.edges) {
         val a = nodes[edge.fromId] ?: continue
         val b = nodes[edge.toId] ?: continue
@@ -440,8 +406,9 @@ private fun DrawScope.drawGraph(
             NodeType.PROSTORIJA -> {
                 drawCircle(roomColor, radius = 5.dp.toPx() * k, center = center)
                 // Natpis je deo plana (raste sa zumom, kao tekst na pravom planu) da bi stao u sobu.
+                val labelHeight = building.labelHeight
                 val style = labelStyle.copy(fontSize = (size.height * labelHeight).toSp())
-                val label = textMeasurer.measure(node.name.orEmpty(), style)
+                val label = textMeasurer.measure(building.label(node.name.orEmpty()), style)
                 // Natpis na strani sobe dalje od hodnika, da ga ivica ka hodniku ne preseca.
                 val gap = size.height * labelHeight / 2
                 val dy = if (node.y < 0.5f) -gap - label.size.height else gap
@@ -588,7 +555,7 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
                 val building = target?.building?.name
                 if (route != null && building != null && building != destination) {
                     // Sala u zgradi sa spratovima: i sprat.
-                    val where = if (!target.approximate && target.node.buildingId in FLOOR_BUILDINGS) {
+                    val where = if (!target.approximate && indoorBuilding(target.node.buildingId) != null) {
                         stringResource(R.string.building_with_floor, building, floorName(target.node.floor))
                     } else {
                         building
@@ -686,16 +653,20 @@ private fun MapModeSelector(mode: MapMode, onModeChange: (MapMode) -> Unit) {
     val options = listOf(
         MapMode.KAMPUS to R.string.map_mode_campus,
         MapMode.NB to R.string.map_mode_building,
+        MapMode.AMF to R.string.map_mode_amf,
+        MapMode.KULA to R.string.map_mode_kula,
         MapMode.NTP to R.string.map_mode_ntp,
     )
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         options.forEachIndexed { index, (option, label) ->
             SegmentedButton(
                 selected = mode == option,
                 onClick = { onModeChange(option) },
                 shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                // Pet izbora: bez kvačice, da natpisi stanu.
+                icon = {},
             ) {
-                Text(stringResource(label))
+                Text(stringResource(label), maxLines = 1, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -703,9 +674,6 @@ private fun MapModeSelector(mode: MapMode, onModeChange: (MapMode) -> Unit) {
 
 /** Širina birača sprata sa marginom (40 dp dugme + 2 x 4 dp + 12 dp). */
 private val FLOOR_SELECTOR_SPACE = 60.dp
-
-/** Zgrade sa planom spratova. */
-private val FLOOR_BUILDINGS = setOf(NbPlan.BUILDING_ID, NtpPlan.BUILDING_ID)
 
 /**
  * Izbor sprata (odozgo V ... I, P, -1). Spratovi kroz koje prolazi ruta imaju tačku, da se vidi gde
@@ -721,7 +689,8 @@ private fun FloorSelector(
 ) {
     val colors = MaterialTheme.colorScheme
     Surface(shape = MaterialTheme.shapes.large, shadowElevation = 3.dp, modifier = modifier) {
-        Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // Kula ima 10 nivoa - birač se pomera ako ne stane.
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             for (floor in floors.reversed()) {
                 val isSelected = floor == selected
                 val name = floorName(floor)
@@ -869,8 +838,7 @@ private fun PocScreenPreview() {
             campus = null,
             graph = null,
             mode = MapMode.NB,
-            nbFloor = 0,
-            ntpFloor = 0,
+            floor = 0,
             destination = "NTP-307",
             target = null,
             route = null,

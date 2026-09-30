@@ -25,8 +25,12 @@ import com.example.ftnnavigation.events.PlaceOptions
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.MapMatcher
 import com.example.ftnnavigation.graph.MatchedPosition
+import com.example.ftnnavigation.graph.AmfPlan
+import com.example.ftnnavigation.graph.IndoorBuilding
+import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NtpPlan
+import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.PlanPlacement
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.AgendaItem
@@ -62,8 +66,14 @@ data class PocUiState(
     val position: Offset? get() = shownMatch?.point?.let { Offset(it.x, it.y) } ?: rawPosition
 }
 
-/** Šta Mapa prikazuje: spoljnu mapu kampusa, sprat Nastavnog bloka ili sprat NTP-a. */
-enum class MapMode { KAMPUS, NB, NTP }
+/** Šta Mapa prikazuje: spoljnu mapu kampusa ili sprat zgrade sa planom ([building]). */
+enum class MapMode(val building: IndoorBuilding?) {
+    KAMPUS(null),
+    NB(NbPlan),
+    AMF(AmfPlan),
+    KULA(KulaPlan),
+    NTP(NtpPlan),
+}
 
 // Gde je kampus - za magnetsku deklinaciju (ista tačka kao projekcija u build_campus.py).
 private const val CAMPUS_LAT = 45.2455f
@@ -93,7 +103,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     var campus by mutableStateOf<CampusData?>(null)
         private set
 
-    /** Graf kampusa i zgrada (null dok se učitava iz baze). NB ima 7 nivoa (-1 ... 5), NTP 6. */
+    /** Graf kampusa i zgrada (null dok se učitava iz baze). NB ima 7 nivoa (-1 ... 5), AMF 2, Kula 10, NTP 6. */
     var graph by mutableStateOf<BuildingGraph?>(null)
         private set
 
@@ -106,13 +116,14 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     var mode by mutableStateOf(MapMode.NB)
         private set
 
-    /** Sprat Nastavnog bloka koji Mapa prikazuje (0 = prizemlje, -1 = suteren). PDR je samo u prizemlju. */
-    var nbFloor by mutableStateOf(0)
-        private set
+    /** Sprat koji Mapa prikazuje, po zgradi (podrazumevano prizemlje). PDR je samo u prizemlju NB. */
+    private var floors by mutableStateOf(mapOf<String, Int>())
 
-    /** Sprat NTP-a koji Mapa prikazuje (0 = prizemlje). */
-    var ntpFloor by mutableStateOf(0)
-        private set
+    fun floorOf(building: IndoorBuilding): Int = floors[building.buildingId] ?: 0
+
+    private fun showFloor(building: IndoorBuilding, floor: Int) {
+        floors = floors + (building.buildingId to floor)
+    }
 
     /** Smer hoda iz senzora (ne pravac telefona); na Start se pretpostavlja telefon u ruci. */
     val walkingDirection = WalkingDirection()
@@ -197,32 +208,19 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Menja odredište. Sala u Nastavnom bloku ili NTP-u -> Mapa prelazi na njen sprat te zgrade; drugo ->
-     * kampus.
+     * Menja odredište. Sala u zgradi sa planom -> Mapa prelazi na njen sprat te zgrade; drugo -> kampus.
      */
     fun selectDestination(room: String?) {
         destination = room
         val node = target?.node ?: return
-        when (node.buildingId) {
-            NbPlan.BUILDING_ID -> {
-                mode = MapMode.NB
-                nbFloor = node.floor
-            }
-            NtpPlan.BUILDING_ID -> {
-                mode = MapMode.NTP
-                ntpFloor = node.floor
-            }
-            else -> mode = MapMode.KAMPUS
-        }
+        val building = indoorBuilding(node.buildingId)
+        mode = MapMode.entries.first { it.building == building }
+        if (building != null) showFloor(building, node.floor)
     }
 
     /** Sprat zgrade koja je na Mapi. */
     fun selectFloor(floor: Int) {
-        when (mode) {
-            MapMode.NB -> nbFloor = floor
-            MapMode.NTP -> ntpFloor = floor
-            MapMode.KAMPUS -> Unit
-        }
+        mode.building?.let { showFloor(it, floor) }
     }
 
     fun selectMode(mode: MapMode) {
@@ -278,7 +276,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         state = state.copy(isPickingStart = !state.isPickingStart)
         if (state.isPickingStart) {
             mode = MapMode.NB
-            nbFloor = 0
+            showFloor(NbPlan, 0)
         }
     }
 

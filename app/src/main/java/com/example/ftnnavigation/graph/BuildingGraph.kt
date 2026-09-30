@@ -88,7 +88,8 @@ class BuildingGraph(
             val floors = abs(a.floor - b.floor)
             require(
                 when (edge.type) {
-                    EdgeType.HOD -> floors == 0
+                    // Spratovi različitih zgrada su samo nazivi (trem iz prizemlja Kule ulazi u AMF na -1).
+                    EdgeType.HOD -> floors == 0 || a.buildingId != b.buildingId
                     EdgeType.STEPENICE -> floors == 1
                     EdgeType.LIFT -> floors >= 1
                 },
@@ -128,10 +129,12 @@ class BuildingGraph(
             if (g > best.getValue(id)) continue // zastareo unos
             if (id == toId) {
                 val nodes = path(cameFrom, toId)
-                val lengthM = nodes.zipWithNext { a, b -> if (a.floor == b.floor) distanceM(a, b) else 0.0 }.sum()
+                val lengthM = nodes.zipWithNext { a, b -> if (a.floor == b.floor || a.buildingId != b.buildingId) distanceM(a, b) else 0.0 }.sum()
                 return Route(nodes, g, lengthM)
             }
             val node = byId.getValue(id)
+            // Sala nije usputni čvor (ni sala sa dva ulaza, npr. 205, ni amfiteatar sa zadnjim vratima).
+            if (node.type == NodeType.PROSTORIJA && id != fromId) continue
             for ((next, type) in neighbors(id)) {
                 val nextG = g + (cost(node, next, type, profile) ?: continue)
                 if (nextG < (best[next.id] ?: Double.POSITIVE_INFINITY)) {
@@ -204,10 +207,12 @@ class BuildingGraph(
     /**
      * Donja granica preostalog vremena: na istom spratu vazdušna linija (i između zgrada -
      * sve je u metrima istog sistema), inače najjeftinija promena sprata (horizontalni deo se
-     * preskače - planovi spratova ne moraju biti poravnati).
+     * preskače - planovi spratova ne moraju biti poravnati). Različite zgrade na različitim spratovima: 0
+     * (nivoi zgrada nisu iste visine - prolaz sme da poveže prizemlje jedne sa -1 druge).
      */
     private fun heuristic(node: Node, goal: Node, profile: RoutingProfile): Double {
         if (node.floor == goal.floor) return distanceM(node, goal) / profile.walkingSpeedMps
+        if (node.buildingId != goal.buildingId) return 0.0
         val perFloor = minOf(profile.stairsUpSecPerFloor, profile.stairsDownSecPerFloor, profile.liftSecPerFloor)
         return abs(node.floor - goal.floor) * perFloor
     }

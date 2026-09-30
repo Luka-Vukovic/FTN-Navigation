@@ -1,0 +1,119 @@
+package com.example.ftnnavigation.campus
+
+import com.example.ftnnavigation.graph.AmfPlan
+import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
+import com.example.ftnnavigation.graph.IndoorPlan
+import com.example.ftnnavigation.graph.KulaPlan
+import com.example.ftnnavigation.graph.NbPlan
+import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.RoutingProfile
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+import kotlin.math.hypot
+
+/** Amfiteatri i Kula (assets/amf.json, kula.json; tools/zgrade) spojeni sa NB-om i kampusom kao u aplikaciji. */
+class AmfKulaGraphTest {
+
+    private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
+
+    private val plans = INDOOR_BUILDINGS.associate { it.buildingId to IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) }
+
+    private val graph = seedGraph(campus, plans.values.toList()).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
+
+    private fun room(name: String) = checkNotNull(graph.room(name)) { name }
+
+    @Test
+    fun entrances_areBuildingNodes() {
+        for (building in listOf(AmfPlan, KulaPlan)) {
+            val plan = plans.getValue(building.buildingId)
+            assertEquals(building.entranceId, plan.entranceId)
+            assertEquals(building.entranceId, campus.building(building.buildingId)!!.nodeId)
+            assertEquals(NodeType.ULAZ, graph.node(building.entranceId)!!.type)
+            assertEquals(building.floors.toList(), plan.floors)
+            assertNull(graph.node("K-Z-${building.buildingId}"))
+        }
+    }
+
+    /** Veze sa kampusom (ulazi, prolazi) padaju blizu odgovarajućih tačaka iz OSM-a. */
+    @Test
+    fun campusLinks_nearOsm() {
+        for (building in listOf(AmfPlan, KulaPlan)) {
+            for ((campusId, nodeId) in plans.getValue(building.buildingId).campusLinks) {
+                val a = graph.position(graph.node(campusId)!!)
+                val b = graph.position(graph.node(nodeId)!!)
+                assertTrue("$campusId - $nodeId", hypot(a.x - b.x, a.y - b.y) < 10.0)
+            }
+        }
+    }
+
+    @Test
+    fun everyNodeReachableFromNbEntrance() {
+        graph.nodes.filter { it.buildingId == AmfPlan.BUILDING_ID || it.buildingId == KulaPlan.BUILDING_ID }
+            .forEach { assertNotNull(it.id, graph.route(NbPlan.ENTRANCE_ID, it.id)) }
+    }
+
+    /** Nazivi sala su jedinstveni u celom grafu (Kula ima iste brojeve kao NB, zato "Kula 101"). */
+    @Test
+    fun roomNamesUnique() {
+        val names = graph.rooms.map { it.name!! }
+        assertEquals(names.groupingBy { it }.eachCount().filterValues { it > 1 }.keys.toString(), names.size, names.toSet().size)
+        assertNotNull(graph.room("Kula 101"))
+        assertEquals(NbPlan.BUILDING_ID, room("101").buildingId)
+    }
+
+    /** Sale Amfiteatara iz rasporeda su ucrtane (ne "ruta do zgrade"). */
+    @Test
+    fun amfScheduleRooms_drawn() {
+        val drawn = listOf("A1", "A2", "A3", "A4", "AR0", "AR3", "AR6", "Scen-LAB", "GRID-1")
+        for (name in drawn) {
+            val target = checkNotNull(resolveTarget(name, graph, campus)) { name }
+            assertFalse(name, target.approximate)
+            assertEquals(name, AmfPlan.BUILDING_ID, target.node.buildingId)
+        }
+        // INT 1 nije nađena ni na FtnGO-u - ruta do zgrade.
+        assertTrue(checkNotNull(resolveTarget("INT 1", graph, campus)).approximate)
+    }
+
+    /** Prolaz iz NB-a vodi stepenicama naniže do zadnjih vrata A1, A2 i A4 ("Amphitheaters A1 A2 A4"). */
+    @Test
+    fun nbToAmphitheatre_throughPassage() {
+        val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, room("A2").id))
+        val ids = route.nodes.map { it.id }
+        assertTrue(ids.toString(), "K-P-AMF-NB" in ids)
+        assertFalse(route.nodes.any { it.type == NodeType.STAZA })
+    }
+
+    /** Sala nije usputni čvor: do AR sala ide se hodnicima (preko Kule), ne kroz amfiteatar. */
+    @Test
+    fun nbToArRoom_notThroughAmphitheatre() {
+        val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, room("AR3").id))
+        assertFalse(route.nodes.dropLast(1).any { it.type == NodeType.PROSTORIJA })
+        assertFalse(route.nodes.any { it.type == NodeType.STAZA })
+        assertTrue(route.nodes.any { it.buildingId == KulaPlan.BUILDING_ID })
+    }
+
+    /** Kula: na IX sprat liftom kad se izbegavaju stepenice, inače stepeništem; sprat iz broja sale. */
+    @Test
+    fun kulaTopFloor() {
+        val target = room("Kula 905")
+        assertEquals(9, target.floor)
+        val byLift = checkNotNull(graph.route(KulaPlan.ENTRANCE_ID, target.id, RoutingProfile(avoidStairs = true)))
+        assertEquals(listOf(0, 9), byLift.nodes.filter { it.type == NodeType.LIFT }.map { it.floor })
+        assertEquals("905", KulaPlan.label(target.name!!))
+    }
+
+    /** Kula spaja NB i Amfiteatre: iz prizemlja NB-a kroz Kulu i trem, bez izlaska na staze. */
+    @Test
+    fun kulaConnectsNbAndAmf() {
+        val route = checkNotNull(graph.route(NbPlan.PASSAGE_ID, AmfPlan.ENTRANCE_ID))
+        val ids = route.nodes.map { it.id }
+        assertTrue(ids.toString(), ids.containsAll(listOf("K-P-NB-KULA", "KULA-0-PROLAZ-NB", "KULA-0-PROLAZ-AMF", "K-P-AMF-KULA")))
+        assertFalse(route.nodes.any { it.type == NodeType.STAZA })
+    }
+}

@@ -2,9 +2,11 @@ package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.EdgeType
+import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.RoutingProfile
 import com.example.ftnnavigation.schedule.ScheduleData
 import kotlinx.serialization.json.Json
@@ -21,11 +23,13 @@ class NbGraphTest {
 
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
 
-    private val nb = IndoorPlan.parse(File("src/main/assets/nb.json").readText())
+    private val plans = INDOOR_BUILDINGS.associate { it.buildingId to IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) }
 
-    private val ntp = IndoorPlan.parse(File("src/main/assets/ntp.json").readText())
+    private val nb = plans.getValue(NbPlan.BUILDING_ID)
 
-    private val graph = seedGraph(campus, nb, ntp).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
+    private val ntp = plans.getValue(NtpPlan.BUILDING_ID)
+
+    private val graph = seedGraph(campus, plans.values.toList()).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private val nbNodes = graph.nodes.filter { it.buildingId == NbPlan.BUILDING_ID }
 

@@ -3,7 +3,6 @@ package com.example.ftnnavigation.poc
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -14,7 +13,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -33,7 +31,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -109,8 +106,7 @@ fun CampusMap(
     onBuildingLongPress: (CampusBuilding) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var scale by remember { mutableFloatStateOf(1f) }
-    var pan by remember { mutableStateOf(Offset.Zero) }
+    val zoom = rememberZoomPanState(maxScale = 8f)
     val colors = MaterialTheme.colorScheme
     val haptics = LocalHapticFeedback.current
     val currentOnBuildingLongPress by rememberUpdatedState(onBuildingLongPress)
@@ -125,29 +121,19 @@ fun CampusMap(
         modifier = modifier
             .background(colors.surfaceContainer)
             .clipToBounds()
-            .pointerInput(Unit) {
-                detectTransformGestures { _, panChange, zoomChange, _ ->
-                    scale = (scale * zoomChange).coerceIn(1f, 8f)
-                    pan += panChange
-                }
-            },
+            .zoomPanGestures(zoom),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
                 .aspectRatio(campus.widthM / campus.heightM)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = pan.x
-                    translationY = pan.y
-                }
-                // Posle graphicsLayer: dodir stiže u koordinatama mape (zum i pomeraj već skinuti).
+                .zoomPanLayer(zoom)
+                // Posle zoomPanLayer (graphicsLayer): dodir stiže u koordinatama mape (zum i pomeraj već skinuti).
                 // Pomeranje mape troši događaje, pa prekida i držanje.
                 .pointerInput(campus) {
                     detectTapGestures(
                         onLongPress = { at ->
-                            val k = 1f / scale
+                            val k = 1f / zoom.scale
                             val m = size.width / campus.widthM
                             val slop = LABEL_TOUCH_SLOP.toPx() * k
                             val hit = placeLabels(campus, textMeasurer, labelStyle, m, k)
@@ -192,7 +178,7 @@ fun CampusMap(
                         val pathStroke = Stroke(PATH_WIDTH_M * m, cap = StrokeCap.Round, join = StrokeJoin.Round)
 
                         onDrawBehind {
-                            val k = 1f / scale // za veličine koje ostaju iste na ekranu pri zumiranju
+                            val k = 1f / zoom.scale // za veličine koje ostaju iste na ekranu pri zumiranju
                             context.forEach { drawPath(it, colors.surfaceDim) }
                             streets.forEach { drawPath(it, Color.White, style = streetStroke) }
                             paths.forEach { drawPath(it, colors.outlineVariant, style = pathStroke) }
@@ -218,7 +204,7 @@ fun CampusMap(
             )
             if (graph != null && (route != null || position != null)) {
                 Canvas(Modifier.fillMaxSize()) {
-                    val k = 1f / scale
+                    val k = 1f / zoom.scale
                     val m = size.width / campus.widthM
                     fun PointM.toPx() = Offset(x.toFloat() * m, y.toFloat() * m)
                     val nbPlacement = graph.placement(NbPlan.BUILDING_ID)
@@ -240,7 +226,7 @@ fun CampusMap(
             // Natpisi zgrada su iznad svega (i rute), iste veličine na ekranu, sa belim obrubom
             // da se čitaju i preko zidova, staza i rute.
             Canvas(Modifier.fillMaxSize()) {
-                val k = 1f / scale
+                val k = 1f / zoom.scale
                 val m = size.width / campus.widthM
                 // Boja i stil obruba se zadaju pri crtanju: measure() kešira raspored i ne
                 // razlikuje stilove koji menjaju samo crtanje.
