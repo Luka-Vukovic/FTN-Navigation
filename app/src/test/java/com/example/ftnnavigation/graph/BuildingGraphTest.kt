@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 import java.util.PriorityQueue
 
 /** A* i težine, nad veštačkom zgradom sa 6 spratova (plan 60 x 24 m). */
@@ -119,11 +120,14 @@ class BuildingGraphTest {
     /** A* mora da nađe isto vreme kao Dijkstra (bez heuristike) za svaki par čvorova. */
     @Test
     fun aStar_matchesDijkstra() {
-        val placeholder = BuildingGraph(PlaceholderGraph.nodes, PlaceholderGraph.edges, scale)
+        // Pravi Nastavni blok (7 nivoa, bez veza sa kampusom); polazi se sa svakog 5. čvora (brzina).
+        val nb = IndoorPlan.parse(File("src/main/assets/nb.json").readText())
+        val nbIds = nb.nodes.map { it.id }.toSet()
+        val nbGraph = BuildingGraph(nb.graphNodes(), nb.graphEdges().filter { it.fromId in nbIds && it.toId in nbIds }, FloorScale(76f, 27.9f))
         val profiles = listOf(RoutingProfile(), RoutingProfile(avoidStairs = true), RoutingProfile(crowdFactor = 1.7))
-        for (g in listOf(graph, placeholder)) {
+        for ((g, step) in listOf(graph to 1, nbGraph to 5)) {
             for (profile in profiles) {
-                for (from in g.nodes) {
+                for (from in g.nodes.filterIndexed { i, _ -> i % step == 0 }) {
                     val expected = dijkstra(g, from.id, profile)
                     for (to in g.nodes) {
                         val actual = g.route(from.id, to.id, profile)?.durationSec

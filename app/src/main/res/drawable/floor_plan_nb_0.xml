@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Prizemlje - Nastavni blok. GENERISANO skriptom tools/nb/build_nb.py (ne menjati ručno).
+    Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
+    (1 px = 0.1014 m), grupa ih pomera u viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="750dp"
+    android:height="275dp"
+    android:viewportWidth="750"
+    android:viewportHeight="275">
+
+    <group
+        android:translateX="-305"
+        android:translateY="-305">
+
+        <!-- Unutrašnjost -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M413,311 L1038,311 L1038,519 L413,519 Z" />
+
+        <!-- Hodnici -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M416,383 L692,383 L692,378 L760,378 L760,405 L1038,405 L1038,456 L688,456 L688,519 L645,519 L645,456 L416,456 Z M305,403 L416,403 L416,442 L305,442 Z M668,305 L692,305 L692,311 L668,311 Z" />
+
+        <!-- Ulazi -->
+        <path
+            android:fillColor="#FFC8E6C9"
+            android:pathData="M645,519 L688,519 L688,527 L645,527 Z M1034,408 L1042,408 L1042,452 L1034,452 Z" />
+
+        <!-- Stepeništa -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M624,318 L642,318 L642,377 L624,377 Z M638,527 L695,527 L695,545 L638,545 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:pathData="M624,324 H642 M624,330 H642 M624,336 H642 M624,342 H642 M624,348 H642 M624,354 H642 M624,360 H642 M624,366 H642 M624,372 H642 M644,527 V545 M650,527 V545 M656,527 V545 M662,527 V545 M668,527 V545 M674,527 V545 M680,527 V545 M686,527 V545 M692,527 V545" />
+
+        <!-- Lift -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:fillColor="#FFFFCC80"
+            android:pathData="M643,330 L664,330 L664,372 L643,372 Z" />
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="0.8"
+            android:pathData="M643,330 L664,372 M664,330 L643,372" />
+
+        <!-- Stubovi -->
+        <path
+            android:fillColor="#FF455A64"
+            android:pathData="M450,401 L454,401 L454,405 L450,405 Z M485,401 L489,401 L489,405 L485,405 Z M552,401 L556,401 L556,405 L552,405 Z M620,401 L624,401 L624,405 L620,405 Z M485,440 L489,440 L489,444 L485,444 Z M552,440 L556,440 L556,444 L552,444 Z M620,440 L624,440 L624,444 L620,444 Z" />
+
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M416,311 L487,311 L487,383 L416,383 Z M487,311 L520,311 L520,383 L487,383 Z M520,311 L554,311 L554,383 L520,383 Z M554,311 L589,311 L589,383 L554,383 Z M589,311 L624,311 L624,383 L589,383 Z M416,373 L452,373 L452,407 L416,407 Z M692,311 L727,311 L727,378 L692,378 Z M727,311 L760,311 L760,378 L727,378 Z M760,311 L1038,311 L1038,405 L760,405 Z M416,456 L487,456 L487,519 L416,519 Z M487,456 L520,456 L520,519 L487,519 Z M520,456 L554,456 L554,519 L520,519 Z M554,456 L589,456 L589,519 L554,519 Z M589,456 L618,456 L618,519 L589,519 Z M618,456 L645,456 L645,519 L618,519 Z M688,456 L760,456 L760,519 L688,519 Z M760,456 L1003,456 L1003,519 L760,519 Z M1003,456 L1038,456 L1038,519 L1003,519 Z" />
+
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="3"
+            android:pathData="M413,311 L1038,311 L1038,519 L413,519 Z" />
+
+    </group>
+</vector>

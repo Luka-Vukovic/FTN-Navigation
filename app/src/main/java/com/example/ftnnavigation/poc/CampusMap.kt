@@ -55,7 +55,7 @@ import com.example.ftnnavigation.campus.CampusPoint
 import com.example.ftnnavigation.campus.LabelSide
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.NodeType
-import com.example.ftnnavigation.graph.PlaceholderGraph
+import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.PointM
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.ui.theme.OnService
@@ -221,7 +221,7 @@ fun CampusMap(
                     val k = 1f / scale
                     val m = size.width / campus.widthM
                     fun PointM.toPx() = Offset(x.toFloat() * m, y.toFloat() * m)
-                    val nbPlacement = graph.placement(PlaceholderGraph.BUILDING_ID)
+                    val nbPlacement = graph.placement(NbPlan.BUILDING_ID)
                     if (route != null) {
                         val start = position?.let { nbPlacement.toMeters(it.x, it.y).toPx() }
                         val points = listOfNotNull(start) + route.nodes.map { graph.position(it).toPx() }

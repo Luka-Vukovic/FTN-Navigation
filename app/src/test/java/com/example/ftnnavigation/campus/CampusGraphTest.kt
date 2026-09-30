@@ -1,9 +1,9 @@
 package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.graph.IndoorPlan
+import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
-import com.example.ftnnavigation.graph.NtpPlan
-import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.PointM
 import com.example.ftnnavigation.schedule.ScheduleData
 import kotlinx.serialization.json.Json
@@ -21,9 +21,11 @@ class CampusGraphTest {
 
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
 
-    private val ntp = NtpPlan.parse(File("src/main/assets/ntp.json").readText())
+    private val nb = IndoorPlan.parse(File("src/main/assets/nb.json").readText())
 
-    private val graph = seedGraph(campus, ntp).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
+    private val ntp = IndoorPlan.parse(File("src/main/assets/ntp.json").readText())
+
+    private val graph = seedGraph(campus, nb, ntp).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private fun distance(a: PointM, b: PointM) = hypot(a.x - b.x, a.y - b.y)
 
@@ -33,7 +35,7 @@ class CampusGraphTest {
 
     @Test
     fun everyNodeReachableFromMainEntrance() {
-        graph.nodes.forEach { assertNotNull(it.id, graph.route(PlaceholderGraph.ENTRANCE_ID, it.id)) }
+        graph.nodes.forEach { assertNotNull(it.id, graph.route(NbPlan.ENTRANCE_ID, it.id)) }
     }
 
     @Test
@@ -54,7 +56,7 @@ class CampusGraphTest {
         val services = campus.named(BuildingCategory.SLUZBA)
         assertEquals(setOf("MENZA", "ZZZS", "SMESTAJ", "ISHRANA"), services.map { it.id }.toSet())
         for (service in services) {
-            val route = checkNotNull(graph.route(PlaceholderGraph.ENTRANCE_ID, service.nodeId))
+            val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, service.nodeId))
             assertTrue(service.id, route.nodes.any { it.type == NodeType.STAZA })
             assertEquals("K-U-${service.id}-1", route.nodes[route.nodes.size - 2].id)
         }
@@ -69,11 +71,11 @@ class CampusGraphTest {
     /** Smeštaj plana u OSM obris: glavni ulaz sa plana pada na OSM ulaz, prolaz ka Kuli na spojni deo. */
     @Test
     fun nbPlan_alignedWithOsm() {
-        assertTrue(distance(position(PlaceholderGraph.ENTRANCE_ID), position("K-U-NB-1")) < 2.0)
-        assertTrue(distance(position(PlaceholderGraph.PASSAGE_ID), position("K-P-NB-KULA")) < 8.0)
-        assertTrue(distance(position(PlaceholderGraph.AMF_PASSAGE_ID), position("K-P-AMF-NB")) < 8.0)
-        // Zgrada je ~63 m duga; plan (sa prolazom i marginama) je ~76 m.
-        assertEquals(76.5, graph.placement(PlaceholderGraph.BUILDING_ID).scale.widthM.toDouble(), 1.5)
+        assertTrue(distance(position(NbPlan.ENTRANCE_ID), position("K-U-NB-1")) < 2.0)
+        assertTrue(distance(position(NbPlan.PASSAGE_ID), position("K-P-NB-KULA")) < 8.0)
+        assertTrue(distance(position(NbPlan.AMF_PASSAGE_ID), position("K-P-AMF-NB")) < 8.0)
+        // Zgrada je 63,4 m duga; plan (sa prolazom i marginama) je 76 m.
+        assertEquals(76.0, graph.placement(NbPlan.BUILDING_ID).scale.widthM.toDouble(), 1.5)
     }
 
     /** Nastavni blok -> F-blok: kroz spojne prolaze i Amfiteatre, bez izlaska napolje. */
@@ -88,9 +90,9 @@ class CampusGraphTest {
     /** Nastavni blok -> Mašinski institut: napolje kroz glavni ulaz, pa stazama. */
     @Test
     fun nbToMechanicalInstitute_goesOutside() {
-        val route = checkNotNull(graph.route(PlaceholderGraph.ENTRANCE_ID, buildingNode("MI")))
+        val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, buildingNode("MI")))
         assertTrue(route.nodes.any { it.type == NodeType.STAZA })
-        val straight = distance(position(PlaceholderGraph.ENTRANCE_ID), position(buildingNode("MI")))
+        val straight = distance(position(NbPlan.ENTRANCE_ID), position(buildingNode("MI")))
         assertTrue("${route.lengthM} m", route.lengthM in straight..straight * 2.5)
         assertEquals(route.lengthM / 1.3, route.durationSec, 1e-6)
     }
@@ -101,8 +103,8 @@ class CampusGraphTest {
             "NTP-307" to "NTP", "NTP-A" to "NTP", "MI B4-3" to "MI", "MI Đ3-1" to "MI", "F 315" to "F",
             "A2" to "AMF", "INT 1" to "AMF", "AH4A" to "NB", "AH-CRT" to "NB", "L1" to "NB",
             "L4 (RC)" to "NB", "108A" to "NB", "312" to "NB", "ITC04" to "ITC", "ITCA1" to "ITC", "ITCS-RC" to "ITC",
-            "F-208" to "F", "LG 005" to "DGG", "LG 107" to "DGG", "Scen-LAB" to "NB", "O12" to "NB",
-            "GRID-1" to "AMF", "Fizika" to "NB", "Hemija" to "NB", "Hemija 2" to "NB", "AR0" to "F", "AR6" to "F",
+            "F-208" to "F", "LG 005" to "DGG", "LG 107" to "DGG", "Scen-LAB" to "AMF", "O12" to "NB",
+            "GRID-1" to "AMF", "Fizika" to "NB", "Hemija" to "NB", "Hemija 2" to "NB", "AR0" to "AMF", "AR6" to "AMF",
         ).forEach { (room, building) -> assertEquals(room, building, buildingOfRoom(room)) }
         listOf("MF-27", "MF-Sala 1").forEach {
             assertNull(it, buildingOfRoom(it))
@@ -118,7 +120,7 @@ class CampusGraphTest {
         assertEquals("K-Z-GRID", target.node.id)
         assertEquals("AMF", target.building?.id)
         assertTrue(target.approximate)
-        val route = checkNotNull(graph.route(PlaceholderGraph.ENTRANCE_ID, "K-Z-GRID"))
+        val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, "K-Z-GRID"))
         assertEquals("K-U-GRID-1", route.nodes[route.nodes.size - 2].id)
         // Ulaz GRID-a nije ulaz Amfiteatara: iz Amfiteatara se do GRID-a ide spolja.
         assertFalse(graph.neighbors("K-Z-AMF").any { (node, _) -> node.id == "K-U-GRID-1" })

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    I sprat - Nastavni blok. GENERISANO skriptom tools/nb/build_nb.py (ne menjati ručno).
+    Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
+    (1 px = 0.1014 m), grupa ih pomera u viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="750dp"
+    android:height="275dp"
+    android:viewportWidth="750"
+    android:viewportHeight="275">
+
+    <group
+        android:translateX="-305"
+        android:translateY="-305">
+
+        <!-- Unutrašnjost -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M413,311 L1038,311 L1038,519 L413,519 Z" />
+
+        <!-- Hodnici -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M416,406 L1038,406 L1038,441 L416,441 Z M624,377 L691,377 L691,406 L624,406 Z" />
+
+        <!-- Stepeništa -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M624,318 L642,318 L642,377 L624,377 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:pathData="M624,324 H642 M624,330 H642 M624,336 H642 M624,342 H642 M624,348 H642 M624,354 H642 M624,360 H642 M624,366 H642 M624,372 H642" />
+
+        <!-- Lift -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:fillColor="#FFFFCC80"
+            android:pathData="M643,330 L664,330 L664,372 L643,372 Z" />
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="0.8"
+            android:pathData="M643,330 L664,372 M664,330 L643,372" />
+
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M416,311 L449,311 L449,406 L416,406 Z M449,311 L485,311 L485,406 L449,406 Z M485,311 L624,311 L624,406 L485,406 Z M691,311 L727,311 L727,406 L691,406 Z M727,311 L760,311 L760,406 L727,406 Z M760,311 L932,311 L932,406 L760,406 Z M932,311 L1038,311 L1038,406 L932,406 Z M416,441 L520,441 L520,519 L416,519 Z M520,441 L588,441 L588,519 L520,519 Z M588,441 L691,441 L691,519 L588,519 Z M691,441 L759,441 L759,519 L691,519 Z M759,441 L830,441 L830,519 L759,519 Z M830,441 L932,441 L932,519 L830,519 Z M932,441 L1038,441 L1038,519 L932,519 Z" />
+
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="3"
+            android:pathData="M413,311 L1038,311 L1038,519 L413,519 Z" />
+
+    </group>
+</vector>

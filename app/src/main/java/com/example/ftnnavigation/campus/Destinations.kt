@@ -2,14 +2,14 @@ package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
-import com.example.ftnnavigation.graph.PlaceholderGraph
+import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.Route
 
 private val F_BLOCK_ROOM = Regex("""F[ -]\d+""") // F 315, F-208 (ne "Fizika")
 private val AMPHITHEATRE = Regex("""A\d""")
 private val COMPUTER_LAB = Regex("""L\d( \(RC\))?""")
 private val NUMBERED_ROOM = Regex("""\d{3}[A-Z]?""")
-private val AR_ROOM = Regex("""AR\d""") // AR0...AR6 - korisnik: "izgleda u F-bloku", nije provereno
+private val AR_ROOM = Regex("""AR\d""") // AR0...AR6: prizemlje Amfiteatara, zapadna strana (FtnGO)
 
 /**
  * Privremeno u Nastavnom bloku dok se ne sazna tačno (korisnik, 29.09.2026): "neka bude nastavni
@@ -23,6 +23,13 @@ private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
 /** Deo zgrade sa svojim ulazom (build_campus.py `UNITS`): prefiks oznake sale -> čvor grafa. */
 private val UNIT_NODES = mapOf("GRID-" to "K-Z-GRID")
 
+/**
+ * Oznake koje su druga oznaka ucrtane sale: "L1" je računarska učionica L1 (301) u Nastavnom bloku,
+ * kao i "L1 (RC)" (jedina L1 na FTN-u van NTP-a). 204A, 205A i 208A su drugi ulazi velikih učionica
+ * 204, 205 i 208 (korisnik).
+ */
+private val ROOM_ALIASES = mapOf("L1" to "L1 (RC)", "204A" to "204", "205A" to "205", "208A" to "208")
+
 /** Naziv mesta van kampusa za salu (MF-27 -> Medicinski fakultet), ili null. */
 fun offCampusPlaceOf(room: String): String? = OFF_CAMPUS.entries.find { room.trim().startsWith(it.key) }?.value
 
@@ -33,13 +40,14 @@ fun offCampusPlaceOf(room: String): String? = OFF_CAMPUS.entries.find { room.tri
 fun buildingOfRoom(room: String): String? {
     val name = room.trim()
     return when {
-        name == "Scen-LAB" || name == "O12" -> "NB" // korisnik; "O12" je u PDF-u sa slovom O
+        name == "O12" -> "NB" // korisnik; u PDF-u sa slovom O
+        name == "Scen-LAB" -> "AMF" // FtnGO: suteren Amfiteatara (ranije NB - korisnik prihvatio ispravku)
         PROVISIONAL_NB.any { name.startsWith(it) } -> "NB"
         name.startsWith("GRID-") -> "AMF" // u Amfiteatrima, ali sa svojim ulazom (UNIT_NODES)
-        AR_ROOM.matches(name) -> "F"
+        AR_ROOM.matches(name) -> "AMF"
         name.startsWith("NTP") -> "NTP"
         name.startsWith("ITC") -> "ITC" // ITC03, ITCA1, ITCS-01, ITCS-RC...
-        name.startsWith("LG ") -> "DGG" // LG 001...LG 107 - korisnik: "mislim da jeste", nije provereno
+        name.startsWith("LG ") -> "DGG" // LG 001...LG 107 - korisnik našao izvor (30.09.2026)
         name.startsWith("MI ") -> "MI"
         F_BLOCK_ROOM.matches(name) -> "F"
         AMPHITHEATRE.matches(name) || name.startsWith("INT") -> "AMF"
@@ -59,7 +67,7 @@ data class RouteTarget(val node: Node, val building: CampusBuilding?, val approx
  * nazivu, ili zgrada sale po oznaci ([buildingOfRoom]). Null ako se ne zna gde je.
  */
 fun resolveTarget(destination: String, graph: BuildingGraph, campus: CampusData): RouteTarget? {
-    graph.room(destination)?.let { room ->
+    (graph.room(destination) ?: ROOM_ALIASES[destination.trim()]?.let(graph::room))?.let { room ->
         return RouteTarget(room, campus.building(room.buildingId), approximate = false)
     }
     campus.buildingByName(destination)?.let { building ->
@@ -77,6 +85,6 @@ fun resolveTarget(destination: String, graph: BuildingGraph, campus: CampusData)
  */
 fun routeBetween(graph: BuildingGraph, campus: CampusData, fromRoom: String?, toRoom: String): Route? {
     val to = resolveTarget(toRoom, graph, campus) ?: return null
-    val from = if (fromRoom == null) PlaceholderGraph.ENTRANCE_ID else resolveTarget(fromRoom, graph, campus)?.node?.id
+    val from = if (fromRoom == null) NbPlan.ENTRANCE_ID else resolveTarget(fromRoom, graph, campus)?.node?.id
     return graph.route(from ?: return null, to.node.id)
 }

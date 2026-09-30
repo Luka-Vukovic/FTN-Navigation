@@ -1,7 +1,7 @@
 package com.example.ftnnavigation.poc
 
 import com.example.ftnnavigation.campus.CampusData
-import com.example.ftnnavigation.graph.PlaceholderGraph
+import com.example.ftnnavigation.graph.NbPlan
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
@@ -13,7 +13,7 @@ import kotlin.math.sin
 class PlanHeadingTest {
 
     private val placement = CampusData.parse(File("src/main/assets/campus.json").readText())
-        .placements().getValue(PlaceholderGraph.BUILDING_ID)
+        .placements().getValue(NbPlan.BUILDING_ID)
 
     private val declination = 5.5f
 

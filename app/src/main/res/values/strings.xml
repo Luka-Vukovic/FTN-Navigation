@@ -106,13 +106,14 @@
 
     <!-- PoC ekran -->
     <string name="poc_title">Mapa</string>
-    <string name="poc_location">Nastavni blok · prizemlje</string>
+    <string name="nb_location">Nastavni blok · %1$s</string>
     <string name="map_campus_location">Kampus FTN-a</string>
     <string name="map_mode_campus">Kampus</string>
     <string name="map_mode_building">Nastavni blok</string>
     <string name="map_mode_ntp">NTP</string>
     <string name="ntp_location">Naučno-tehnološki park · %1$s</string>
     <string name="floor_ground">prizemlje</string>
+    <string name="floor_basement">suteren</string>
     <string name="floor_number">%1$d. sprat</string>
     <string name="floor_ground_short">P</string>
     <string name="floor_select">Sprat: %1$s</string>

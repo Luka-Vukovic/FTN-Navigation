@@ -2,9 +2,10 @@ package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.EdgeType
+import com.example.ftnnavigation.graph.IndoorPlan
+import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
-import com.example.ftnnavigation.graph.PlaceholderGraph
 import com.example.ftnnavigation.graph.RoutingProfile
 import com.example.ftnnavigation.schedule.ScheduleData
 import kotlinx.serialization.json.Json
@@ -21,9 +22,11 @@ class NtpGraphTest {
 
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
 
-    private val ntp = NtpPlan.parse(File("src/main/assets/ntp.json").readText())
+    private val nb = IndoorPlan.parse(File("src/main/assets/nb.json").readText())
 
-    private val graph = seedGraph(campus, ntp).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
+    private val ntp = IndoorPlan.parse(File("src/main/assets/ntp.json").readText())
+
+    private val graph = seedGraph(campus, nb, ntp).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private val ntpNodes = graph.nodes.filter { it.buildingId == NtpPlan.BUILDING_ID }
 
@@ -107,7 +110,7 @@ class NtpGraphTest {
     /** Iz Nastavnog bloka u NTP: napolje, stazama, pa kroz jedan od ulaza NTP-a. */
     @Test
     fun nbToNtp_goesOutsideThroughNtpEntrance() {
-        val route = checkNotNull(graph.route(PlaceholderGraph.ENTRANCE_ID, graph.room("NTP-208")!!.id))
+        val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, graph.room("NTP-208")!!.id))
         assertTrue(route.nodes.any { it.type == NodeType.STAZA })
         val entrances = ntp.campusLinks.map { it[1] }.toSet()
         assertEquals(1, route.nodes.count { it.id in entrances })

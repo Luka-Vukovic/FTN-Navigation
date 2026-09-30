@@ -21,7 +21,7 @@ bude (0, 0).
     zgradi (images/službe.png),
   - spojni prolazi između zgrada (u OSM-u su zasebni delovi zgrada),
   - ulazi koji se koriste: OSM čvor entrance=* ili tačka koja se "lepi" na zid zgrade,
-  - smeštaj precrtanog plana Nastavnog bloka u obris zgrade,
+  - smeštaj plana Nastavnog bloka (tools/nb/build_nb.py) u obris zgrade,
   - smeštaj plana NTP-a (tools/ntp/build_ntp.py) i njegovi ulazi.
 Zgrade bez unutrašnjeg plana u grafu su jedan čvor (ZGRADA) povezan sa ulazima i prolazima.
 """
@@ -36,6 +36,8 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ntp"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "nb"))
+import build_nb  # noqa: E402 - plan Nastavnog bloka: zid, viewport, ulaz i prolazi
 import build_ntp  # noqa: E402 - plan NTP-a: viewport i ulazi
 
 REF_LAT, REF_LON = 45.2455, 19.8500
@@ -76,7 +78,7 @@ LABEL_SIDE = {"SMESTAJ": "EAST", "ISHRANA": "WEST", "ZZZS": "WEST"}
 # Zgrade čiji OSM unutrašnji prstenovi nisu dvorišta (provereno na terenu) - crtaju se pune.
 NO_HOLES = {"NTP"}
 
-# Zgrade čiji unutrašnji graf postoji u aplikaciji (PlaceholderGraph, assets/ntp.json): za njih se
+# Zgrade čiji unutrašnji graf postoji u aplikaciji (assets/nb.json, assets/ntp.json): za njih se
 # ne pravi čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
 WITH_INTERIOR = {"NB", "NTP"}
 
@@ -121,13 +123,12 @@ UNITS = [
 # Koliko je čvor dela zgrade unutra od ulaza (ka sredini zgrade), u metrima.
 UNIT_DEPTH_M = 4.0
 
-# Plan prizemlja Nastavnog bloka (res/drawable/floor_plan_placeholder.xml) je u pikselima
-# fotografije evakuacionog plana; spoljni zid je x 413..1038, y 311..504, a viewport
-# drawable-a x 305..1055, y 305..560. Orijentacija (provereno glavnim ulazom, prolazom ka
-# Kuli i zbornim mestom "kod fontane"): desno na planu = severni kraj zgrade, dole = istočna
-# strana (glavni ulaz), levo = južni kraj (spojni prolaz ka Kuli).
-NB_PLAN_WALL = (413.0, 311.0, 1038.0, 504.0)
-NB_PLAN_VIEWPORT = (305.0, 305.0, 750.0, 255.0)
+# Plan Nastavnog bloka (tools/nb/build_nb.py) je u px plana; spoljni zid je pravougaonik OSM obrisa
+# (od 01.10.2026; ranije px fotografije evakuacionog plana, zid y 311..504 - 7 % preširoko poprečno).
+# Orijentacija (provereno glavnim ulazom, prolazom ka Kuli i zbornim mestom "kod fontane"): desno na
+# planu = severni kraj zgrade, dole = istočna strana (glavni ulaz), levo = južni kraj (prolaz ka Kuli).
+NB_PLAN_WALL = tuple(float(v) for v in build_nb.WALL)
+NB_PLAN_VIEWPORT = (float(build_nb.VX), float(build_nb.VY), float(build_nb.VW), float(build_nb.VH))
 
 # Plan NTP-a (FTN deo, tools/ntp/build_ntp.py) u px ispravljenih fotografija evakuacionih planova.
 # Zgrada NTP-a u OSM-u je ceo NTP: FTN deo je severni, suženi kraj, a južno od njega je poslovni deo
@@ -591,8 +592,9 @@ def main():
     # --- Plan Nastavnog bloka u koordinatama kampusa ---
     to_campus, placement, m_per_px, residual = nb_plan_placement(rings["NB"])
     checks.update({
-        "glavni ulaz (677, 515) -> OSM ulaz": math.dist(to_campus((677, 515)), graph.xy("K-U-NB-1")),
-        "spojni prolaz (322, 414) -> prolaz NB-KULA": math.dist(to_campus((322, 414)), graph.xy("K-P-NB-KULA")),
+        "glavni ulaz -> OSM ulaz": math.dist(to_campus(build_nb.ENTRANCE), graph.xy("K-U-NB-1")),
+        "spojni prolaz -> prolaz NB-KULA": math.dist(to_campus(build_nb.PASSAGE_KULA), graph.xy("K-P-NB-KULA")),
+        "prolaz ka Amfiteatrima -> prolaz AMF-NB": math.dist(to_campus(build_nb.PASSAGE_AMF), graph.xy("K-P-AMF-NB")),
     })
 
     # --- Crtež: ulice i staze ---
