@@ -170,7 +170,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     private var session: PdrSensorSession? = null
 
     /** GPS: radi dok je Mapa na ekranu ([onMapVisible]) i za vreme praćenja. */
-    private val gpsSession = GpsSession(application, ::onGpsFix)
+    private val gpsRecorder = if (BuildConfig.DEBUG) GpsRecorder(application.filesDir) else null
+    private val gpsSession = GpsSession(application, gpsRecorder, ::onGpsFix)
     private var mapVisible = false
 
     /** Poslednja GPS lokacija; null dok GPS ne radi (nema dozvole, Mapa nije na ekranu i nema praćenja). */
@@ -410,8 +411,12 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun onGpsFix(fix: GpsFix) {
         gps = fix
+        recorder?.gps(fix)
         val detector = buildingDetector ?: return
-        if (detector.onFix(fix)) currentBuilding = detector.current
+        if (detector.onFix(fix)) {
+            currentBuilding = detector.current
+            gpsRecorder?.building(fix.elapsedNs, detector.current?.id)
+        }
     }
 
     private fun startTracking() {

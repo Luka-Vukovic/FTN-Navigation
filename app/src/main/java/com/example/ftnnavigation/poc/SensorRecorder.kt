@@ -1,5 +1,6 @@
 package com.example.ftnnavigation.poc
 
+import com.example.ftnnavigation.campus.GpsFix
 import java.io.BufferedWriter
 import java.io.File
 import java.time.LocalDateTime
@@ -13,7 +14,9 @@ import java.time.format.DateTimeFormatter
  * - `R,t,m0..m8` - matrica rotacije (iz `getRotationMatrixFromVector`),
  * - `A,t,x,y,z` - akcelerometar (koordinate telefona),
  * - `S,t,smer,ponovi,odstupanje,smiren` - korak i šta je [WalkingDirection] tada vratio,
- * - `P,t` / `C,t` - Mapa u pauzi (senzori odjavljeni) / ponovo aktivna.
+ * - `P,t` / `C,t` - Mapa u pauzi (senzori odjavljeni) / ponovo aktivna,
+ * - `G,t,x,y,tačnost_m` - GPS lokacija u metrima kampusa (t = `Location.elapsedRealtimeNanos`, isti
+ *   sat); pun GPS snimak je u [GpsRecorder].
  *
  * Fajlovi: `files/pdr/` aplikacije (`adb exec-out run-as <paket> cat files/pdr/<fajl>`).
  */
@@ -31,6 +34,8 @@ class SensorRecorder private constructor(val file: File) {
 
     fun step(timestampNs: Long, step: WalkingDirection.WalkStep, direction: WalkingDirection) =
         write("S,$timestampNs,${step.headingDeg},${step.redoSteps},${direction.offset},${direction.isAnchored}")
+
+    fun gps(fix: GpsFix) = write("G,${fix.elapsedNs},${fix.point.x},${fix.point.y},${fix.accuracyM}")
 
     /** Senzori odjavljeni (Mapa u pozadini, ekran ugašen) - snimak se upisuje do tu. */
     fun pause(timestampNs: Long) {

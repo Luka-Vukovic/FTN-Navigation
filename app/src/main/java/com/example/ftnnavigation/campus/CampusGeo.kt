@@ -23,8 +23,11 @@ object CampusGeo {
         PointM((lon - REF_LON) * M_PER_DEG_LON - X_MIN, (REF_LAT - lat) * M_PER_DEG_LAT - Y_MIN)
 }
 
-/** GPS lokacija u metrima kampusa; [accuracyM] = poluprečnik procene (68 %), kao `Location.accuracy`. */
-data class GpsFix(val point: PointM, val accuracyM: Float)
+/**
+ * GPS lokacija u metrima kampusa; [accuracyM] = poluprečnik procene (68 %), kao `Location.accuracy`.
+ * [elapsedNs] = `Location.elapsedRealtimeNanos` (isti sat kao PDR senzori) - za snimak.
+ */
+data class GpsFix(val point: PointM, val accuracyM: Float, val elapsedNs: Long = 0L)
 
 /** Da li je tačka u obrisu zgrade (van dvorišta). Služba bez svog obrisa nije nigde. */
 fun CampusBuilding.contains(p: PointM): Boolean =
