@@ -22,7 +22,7 @@
         <!-- Hodnici -->
         <path
             android:fillColor="#FFE8EEF4"
-            android:pathData="M207,432 L287,432 L287,511 L207,511 Z M263,402 L333,402 L333,462 L263,462 Z" />
+            android:pathData="M207,432 L287,432 L287,511 L207,511 Z M263,402 L333,402 L333,462 L263,462 Z M335,404 L420,404 L420,440 L335,440 Z" />
 
         <!-- Stepeništa -->
         <path

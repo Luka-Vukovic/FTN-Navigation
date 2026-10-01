@@ -36,6 +36,9 @@ __pycache__/
 # generisani app/src/main/assets/schedule.json
 /rasporedi/
 /images/
+/teren/
+# Dnevni GPS snimci sa telefona (GpsRecorder)
+/gps/
 # Snimci PDR senzora sa telefona (SensorRecorder) - za WalkingDirectionReplayTest
 /pdr/
 

@@ -13,16 +13,22 @@ Izvor: fotografije evakuacionih planova (images/ntp0..5.jpg, van gita). Perspekt
 ispravljena po spoljnom okviru plana (odnos stranica √2 - prsten "zborno mesto" mora biti okrugao),
 pa je svaki sprat poravnat sa II spratom po stepeništima i liftovima (sličnost: razmera + pomeraj;
 liftovi se na svim spratovima poklapaju na par px). Sve koordinate ispod su u tom zajedničkom
-sistemu (px ispravljenog II sprata); viewport plana je x -300..2140, y 0..1860.
+sistemu (px ispravljenog II sprata). Viewport plana obuhvata ceo OSM obris NTP-a (FTN deo + poslovni
+deo, crta se svetlo na svim spratovima), jer je NTP-A u poslovnom delu.
 
 Spratovi I-IV su isti crtež (ljuska, jezgra, hodnici i kancelarije se poklapaju; razlikuju se
 samo pregrade soba u sredini) - crta se jedan "tipičan sprat". Brojevi sala iz rasporeda
 (NTP-307...) su na IZMIŠLJENIM mestima na pravom spratu (planovi nemaju brojeve), po šemi
-SLOTS ispod. Na planu prizemlja piše L1, L2, L4, LAB, AMFITEATAR: NTP-L3 = LAB i
-NTP-A = Amfiteatar su pretpostavke.
+SLOTS ispod. Na planu prizemlja piše L1, L2, L4, LAB, AMFITEATAR: NTP-L3 = LAB je pretpostavka.
+NTP-A NIJE taj amfiteatar: u prizemlju je, ali u poslovnom delu NTP-a (teren 01.10.2026, korisnik
+nacrtao na mapi kampusa - NTP_A_CAMPUS); do njega se ide kroz predvorje "ULAZ - FTN" (PRETPOSTAVKA).
 
-Orijentacija (vidi tools/kampus/build_campus.py, NTP_PLAN_*): dole na planu je istočni zid (red
-kancelarija, parking), dijagonala je Fruškogorska (zapad), donji desni vrh je sever.
+Smeštaj u kampus (M_PER_PX, PLAN_TIP, plan_transform; koristi ga i build_campus.py): donji desni vrh
+plana -> severni teme OSM obrisa, dole na planu (red kancelarija, parking) uz severoistočni zid, dijagonala
+je Fruškogorska (zapadni zid). Razmera 0,029 m/px (teren 01.10.2026): tada GLAVNI ULAZ - FTN pada 1,4 m od
+ulaza koji je korisnik označio sa strane domova, oba kraja PASAŽA na zidove OSM obrisa (do 1 m), a
+"ULAZ - FTN" ~5 m od ulaza kod pešačkog prelaza na Fruškogorskoj. Hodnik III sprata (1321 px) je tada
+38 m = 64,5 pločice od ~0,59 m / 47 koraka. Ranije 0,042 (pretpostavka) - ~1,45x preveliko.
 """
 
 import argparse
@@ -30,9 +36,50 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-VX, VY, VW, VH = -300, 0, 2440, 1860  # viewport plana (zajednički sistem, px)
+VX, VY, VW, VH = -1650, -720, 3790, 2580  # viewport plana (zajednički sistem, px): ceo OSM obris NTP-a
 BUILDING = "NTP"
 FLOORS = range(6)
+
+# --- Smeštaj u kampus -------------------------------------------------------------------------
+
+M_PER_PX = 0.029
+PLAN_TIP = (2092.0, 1830.0)  # donji desni vrh plana = severni teme OSM obrisa
+
+
+def plan_transform(ring):
+    """(px plana -> metri kampusa, metri kampusa -> px plana) za OSM obris NTP-a [ring]: vrh plana ->
+    najseverniji teme, levo na planu -> ka jugoistočnom uglu."""
+    tip = min(ring, key=lambda p: p[1])
+    southeast = max(ring, key=lambda p: p[0])
+    d = complex(*southeast) - complex(*tip)
+    z = -d / abs(d) * M_PER_PX  # (-1, 0) na planu -> ka jugoistoku
+    t0, c0 = complex(*PLAN_TIP), complex(*tip)
+
+    def to_campus(p):
+        q = c0 + z * (complex(*p) - t0)
+        return q.real, q.imag
+
+    def to_plan(q):
+        p = t0 + (complex(*q) - c0) / z
+        return round(p.real), round(p.imag)
+
+    return to_campus, to_plan, z
+
+
+def osm_ring():
+    """OSM obris NTP-a (metri kampusa) iz assets/campus.json (build_campus.py ga uzima sa Overpass-a)."""
+    campus = json.loads((ROOT / "app/src/main/assets/campus.json").read_text(encoding="utf-8"))
+    return [tuple(p) for b in campus["buildings"] if b["id"] == BUILDING for p in b["outline"]]
+
+
+_TO_CAMPUS, TO_PLAN, _ = plan_transform(osm_ring())
+OSM_OUTLINE = [TO_PLAN(q) for q in osm_ring()]  # ceo NTP (i poslovni deo), px plana
+
+# Teren 01.10.2026, korisnik nacrtao na mapi kampusa (metri kampusa): NTP-A (amfiteatar u poslovnom delu,
+# uz zapadni zid) i ulaz kod pešačkog prelaza na Fruškogorskoj (= "ULAZ - FTN" sa evakuacionog plana).
+NTP_A_CAMPUS = [(34.2, 299.9), (52.6, 299.9), (52.6, 315.5), (34.2, 315.5)]
+NTP_A = [TO_PLAN(q) for q in NTP_A_CAMPUS]
+ULAZ_FTN = TO_PLAN((35.2, 292.6))
 
 # --- Geometrija (px) -------------------------------------------------------------------------
 
@@ -120,7 +167,9 @@ GROUND = {
                 (-156, 1276), (125, 1276)],
     "corridors": [
         [(125, 0), (160, 0), (447, 178), (450, 1830), (350, 1830), (350, 1300), (125, 1300)],  # hol
-        [(-275, 50), (125, 50), (125, 190), (-275, 190)],  # ulaz FTN (sa Fruškogorske)
+        [(-275, 50), (125, 50), (125, 190), (-275, 190)],  # predvorje "ULAZ - FTN" (sa Fruškogorske)
+        [(ULAZ_FTN[0] - 60, ULAZ_FTN[1] - 30), (ULAZ_FTN[0] + 60, ULAZ_FTN[1] - 30), (ULAZ_FTN[0] + 60, 50),
+         (ULAZ_FTN[0] - 60, 50)],  # do spoljnog zida (PRETPOSTAVKA - na planu se izlazi gore iz predvorja)
         [(-156, 1300), (125, 1300), (125, 1395), (-156, 1395)],  # levo krilo
         [(447, 551), (707, 551), (707, 646), (447, 646)],
         [(654, 646), (719, 646), (719, 905), (654, 905)],
@@ -153,7 +202,9 @@ GROUND = {
     "stairs": [(445, 343, 616, 547), (512, 1395, 700, 1551), (1586, 1394, 1769, 1541), (447, 705, 640, 810)],
     "shafts": [(658, 338, 707, 551)],
     "lifts": [(460, 651, 512, 701), (515, 651, 567, 701), (270, 1470, 335, 1545), (1463, 1491, 1524, 1547)],
-    "entrances": [(-290, 50, -270, 190), (1299, 1830, 1403, 1846), (300, 1830, 450, 1846)],
+    "entrances": [(ULAZ_FTN[0] - 60, ULAZ_FTN[1] - 30, ULAZ_FTN[0] + 60, ULAZ_FTN[1] - 10),
+                  (1299, 1830, 1403, 1846), (300, 1830, 450, 1846)],
+    "business_rooms": [NTP_A],
 }
 
 # --- Graf -------------------------------------------------------------------------------------
@@ -188,7 +239,7 @@ ENTRANCES = {
     "ULAZ-PASAZ-I": ((1350, 1830), "K-U-NTP-1"),  # PASAŽ, istočni kraj (parking)
     "ULAZ-PASAZ-Z": ((1215, 700), "K-U-NTP-2"),  # PASAŽ, zapadni kraj (Fruškogorska)
     "ULAZ": ((375, 1830), "K-U-NTP-3"),  # "GLAVNI ULAZ - FTN"
-    "ULAZ-FTN": ((-270, 120), "K-U-NTP-4"),  # "ULAZ - FTN", gornji levi ugao plana prizemlja
+    "ULAZ-FTN": (ULAZ_FTN, "K-U-NTP-4"),  # "ULAZ - FTN" (gore levo na planu), kod pešačkog prelaza
 }
 MAIN_ENTRANCE = "ULAZ"
 
@@ -280,7 +331,7 @@ def top_floor(g):
 def ground_floor(g):
     f = 0
     points(g, f, {
-        "V0": (0, 120), **{f"H{y}": (290, y) for y in (160, 450, 598, 700, 1000, 1340)},
+        "V0": (0, 120), "V1": (ULAZ_FTN[0], 120), **{f"H{y}": (290, y) for y in (160, 450, 598, 700, 1000, 1340)},
         **{f"M{y}": (400, y) for y in (1340, 1470, 1620, 1782)},
         "U560": (560, 598), "U690": (690, 598), "P740": (690, 740), "P865": (690, 865),
         "W900": (900, 865), "PA": (1200, 760), "PB": (1250, 865), "PC": (1250, 1100),
@@ -291,7 +342,7 @@ def ground_floor(g):
     })
     for key, ((x, y), _) in ENTRANCES.items():
         g.node(f, key, x, y, "ULAZ")
-    g.chain(f, ["ULAZ-FTN", "V0", "H160", "H450", "H598", "H700", "H1000", "H1340", "M1340", "M1470", "M1620",
+    g.chain(f, ["ULAZ-FTN", "V1", "V0", "H160", "H450", "H598", "H700", "H1000", "H1340", "M1340", "M1470", "M1620",
                 "M1782", "ULAZ"])
     g.chain(f, ["H1340", "W143", "W0", "W-130"])
     g.chain(f, ["H598", "U560", "U690", "P740", "P865", "W900", "PB"])
@@ -304,7 +355,10 @@ def ground_floor(g):
     g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-0-U560")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), "NTP-0-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), "NTP-0-LB1494")
-    g.room(f, "NTP-A", (550, 1090), (680, 890), "P865")  # "AMFITEATAR" - pretpostavka
+    # NTP-A: poslovni deo; vrata na strani ka predvorju "ULAZ - FTN" (PRETPOSTAVKA).
+    (ax, ay), (bx, by) = NTP_A[0], NTP_A[1]
+    center = (sum(x for x, _ in NTP_A) / 4, sum(y for _, y in NTP_A) / 4)
+    g.room(f, "NTP-A", center, ((ax + bx) / 2, (ay + by) / 2), "V1")
     g.room(f, "NTP-L3", (930, 650), (1131, 764), "PA")  # "LAB" - pretpostavka
     g.room(f, "NTP-L2", (1170, 1410), (1299, 1420), "P1420")
     g.room(f, "NTP-L1", (1170, 1690), (1299, 1690), "P1690")
@@ -395,7 +449,11 @@ def path(fill=None, stroke=None, width=None, data=""):
 
 
 def drawable(plan, title):
-    parts = []
+    parts = [("Ceo NTP (OSM obris, poslovni deo nije ucrtan)",
+              path(fill="#FFF5F5F5", stroke="#FFBDBDBD", width=4, data=poly(OSM_OUTLINE)))]
+    if plan.get("business_rooms"):
+        parts.append(("Poslovni deo: NTP-A", path(fill=C_BG, stroke=C_WALL, width=4,
+                                                    data=" ".join(poly(p) for p in plan["business_rooms"]))))
     if "roof" in plan:
         parts.append(("Krov (niži spratovi)", path(fill=C_ROOF, stroke="#FFBDBDBD", width=4, data=poly(plan["roof"]))))
     outlines = [plan["outline"]] + ([plan["outline2"]] if "outline2" in plan else [])

@@ -167,7 +167,7 @@ def build_graph(building, plans, stairs, lifts):
 
 # --- Izlaz -------------------------------------------------------------------------------------
 
-def write_json(g, path, viewport, floors, entrance, campus_links):
+def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=()):
     vx, vy, vw, vh = viewport
 
     def rel(x, y):
@@ -184,6 +184,8 @@ def write_json(g, path, viewport, floors, entrance, campus_links):
         ],
         "edges": [[a, b, kind] for (a, b), kind in g.edges.items()],
         "campusLinks": [list(link) for link in campus_links],
+        # [čvor ove zgrade, čvor druge zgrade sa planom] - prolaz mimo kampusa (npr. NB - Kula na I spratu)
+        **({"indoorLinks": [list(link) for link in indoor_links]} if indoor_links else {}),
     }
     path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
@@ -266,12 +268,12 @@ def floor_res(prefix, f):
     return f"{prefix}_{'m' + str(-f) if f < 0 else f}"
 
 
-def write_all(g, plans, viewport, wall, building_name, script, prefix, entrance, campus_links):
+def write_all(g, plans, viewport, wall, building_name, script, prefix, entrance, campus_links, indoor_links=()):
     res = ROOT / "app/src/main/res/drawable"
     for f, plan in plans.items():
         (res / f"{floor_res(prefix, f)}.xml").write_text(drawable(plan, viewport, wall, building_name, script), encoding="utf-8")
     asset = ROOT / f"app/src/main/assets/{g.building.lower()}.json"
-    write_json(g, asset, viewport, list(plans), entrance, campus_links)
+    write_json(g, asset, viewport, list(plans), entrance, campus_links, indoor_links)
     rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA")
     print(f"{g.building}: {len(g.nodes)} čvorova, {len(g.edges)} ivica, {rooms} sala -> {asset.name}")
 

@@ -93,7 +93,8 @@ def floor_1():
     return {
         "title": "1. sprat",
         "paths": RING,
-        "corridors": [rect_poly(207, 432, 287, 511), rect_poly(263, 402, 333, 462)],
+        "corridors": [rect_poly(207, 432, 287, 511), rect_poly(263, 402, 333, 462),
+                      rect_poly(335, 404, 420, 440)],  # zastakljen prolaz ka NB-u (teren 01.10.2026)
         "rooms": [
             *row(375, 432, [(155, 192, k(103)), (192, 227, k(101)), (227, 263, k(102))]),
             *row(375, 402, [(263, 298, "5MX-1"), (298, 333, "5MX-2")]),
@@ -103,6 +104,8 @@ def floor_1():
         ],
         "stairs": STAIRS,
         "lifts": LIFTS,
+        # Veza sa NB-1-PROLAZ je u nb.json (indoorLinks).
+        "points": [("PROLAZ-NB", (333, 422), "PROLAZ")],
     }
 
 

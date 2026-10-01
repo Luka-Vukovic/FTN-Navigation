@@ -20,7 +20,14 @@ Orijentacija: desno = sever, dole = istok (glavni ulaz), levo = jug (prolaz ka K
 
 Pojednostavljeno: vrata sale su na sredini zida prema hodniku (FtnGO vrata nisu precrtavana), čvor
 hodnika je naspram vrata. V sprat je srednji pojas zgrade (potkrovlje); do njega vodi glavno stepenište
-i spiralno stepenište iz hodnika IV sprata. Lift ide od -1 do IV sprata (na V spratu ga nema na snimku).
+i spiralno stepenište iz hodnika IV sprata. Lift ide od -1 do IV sprata (potvrđeno na terenu 01.10.2026).
+
+Teren 01.10.2026 (korisnik + fotografija evakuacionog plana I sprata):
+  - spojni prolaz ka Kuli postoji i na I spratu (indoor_links: NB-1-PROLAZ <-> KULA-1-PROLAZ-NB),
+  - na I-IV spratu pored stepeništa su toaleti (FtnGO: 113/110, 212/209, 316/313, 412/410 - nisu u
+    rasporedu), malo uvučeni: između hodnika i stepeništa/toaleta je hol,
+  - AH6 i AH7 su podeljeni na pola: AH6A i AH7A su polovine bliže stepeništu,
+  - 012 ("O12" u rasporedu) je u prizemlju blizu 013/014 - PRETPOSTAVKA: desni deo bloka 015.
 """
 
 import argparse
@@ -43,6 +50,18 @@ ENTRANCE = (666, 522)
 PASSAGE_KULA = (322, 422)
 PASSAGE_AMF = (680, 313)
 CAMPUS_LINKS = [("K-U-NB-1", "NB-0-ULAZ"), ("K-P-NB-KULA", "NB-0-PROLAZ"), ("K-P-AMF-NB", "NB-0-PROLAZ-AMF")]
+# Veze sa drugom zgradom mimo kampusa (zastakljen prolaz NB - Kula na I spratu, evakuacioni plan).
+INDOOR_LINKS = [("NB-1-PROLAZ", "KULA-1-PROLAZ-NB")]
+
+
+def toilets():
+    """Toaleti desno od stepeništa (I-IV sprat), uvučeni: između njih i hodnika je hol."""
+    return [R(691, 727, 311, 377), R(727, 760, 311, 377)]
+
+
+def hall(y1):
+    """Hol između hodnika i stepeništa/toaleta."""
+    return rect_poly(624, 377, 760, y1)
 
 
 def spine(y, x0, x1):
@@ -86,7 +105,7 @@ def floor_0():
             R(416, 452, 373, 407, "018A"),
             *row(311, 378, [(692, 727, None), (727, 760, "008")]),
             R(760, 1038, 311, 405, "Svečana sala"),
-            *row(456, 519, [(416, 487, "015"), (487, 520, "013"), (520, 554, "014"), (554, 589, "016"),
+            *row(456, 519, [(416, 452, "015"), (452, 487, "012"), (487, 520, "013"), (520, 554, "014"), (554, 589, "016"),
                             (589, 618, "017"), (618, 645, "Portir"), (688, 760, None),
                             (760, 1003, "Studentska služba"), (1003, 1038, "002")]),
         ],
@@ -103,15 +122,18 @@ def floor_1():
     return {
         "title": "I sprat",
         "paths": spine(423, 425, 1025),
-        "corridors": [rect_poly(416, 406, 1038, 441), rect_poly(624, 377, 691, 406)],
+        "corridors": [rect_poly(416, 406, 1038, 441), hall(406),
+                      rect_poly(305, 404, 416, 440)],  # zastakljen prolaz ka Kuli
         "rooms": [
-            *row(311, 406, [(416, 449, None), (449, 485, "102"), (485, 624, "101"), (691, 727, "113"),
-                            (727, 760, "110"), (760, 932, "109A"), (932, 1038, "109")]),
+            *row(311, 406, [(416, 449, None), (449, 485, "102"), (485, 624, "101"),
+                            (760, 932, "109A"), (932, 1038, "109")]),
+            *toilets(),
             *row(441, 519, [(416, 520, "103"), (520, 588, "104"), (588, 691, "105"), (691, 759, "106"),
                             (759, 830, "107"), (830, 932, "108"), (932, 1038, "108A")]),
         ],
         "stairs": STAIRS,
         "lifts": LIFTS,
+        "points": [("PROLAZ", PASSAGE_KULA, "PROLAZ")],
     }
 
 
@@ -119,12 +141,12 @@ def floor_2():
     return {
         "title": "II sprat",
         "paths": spine(415, 425, 1025),
-        "corridors": [rect_poly(416, 395, 1038, 436), rect_poly(624, 377, 691, 395)],
+        "corridors": [rect_poly(416, 395, 1038, 436), hall(395)],
         "rooms": [
             # 204/204A, 205/205A i 208/208A su po jedna velika učionica sa dva ulaza (korisnik; na FtnGO-u
             # su dve oznake, 204A čak sa zidom - verovatno ranije odvojene). "…A" su drugi ulazi (ROOM_ALIASES).
-            *row(311, 395, [(416, 521, "202"), (521, 624, "201"), (691, 727, "212"), (727, 760, "209"),
-                            (933, 1038, "207")]),
+            *row(311, 395, [(416, 521, "202"), (521, 624, "201"), (933, 1038, "207")]),
+            *toilets(),
             R(760, 933, 311, 395, "208", doors=[(803, 395), (890, 395)]),
             *row(436, 519, [(416, 588, "203"), (934, 1038, "206")]),
             R(588, 760, 436, 519, "204", doors=[(640, 436), (726, 436)]),
@@ -139,12 +161,12 @@ def floor_3():
     return {
         "title": "III sprat",
         "paths": spine(415, 425, 1025),
-        "corridors": [rect_poly(416, 395, 1038, 436), rect_poly(624, 377, 691, 395)],
+        "corridors": [rect_poly(416, 395, 1038, 436), hall(395)],
         "rooms": [
             # Računarski centar: FtnGO "L1 (301)", u rasporedu "L1 (RC)".
             *row(311, 395, [(416, 468, "L2 (RC)"), (468, 521, "L4 (RC)"), (521, 624, "L1 (RC)"),
-                            (691, 727, "316"), (727, 760, "313"), (760, 830, "312"), (830, 933, "311"),
-                            (933, 1038, "310")]),
+                            (760, 830, "312"), (830, 933, "311"), (933, 1038, "310")]),
+            *toilets(),
             *row(436, 519, [(416, 484, "L3 (RC)"), (484, 521, "303A"), (521, 587, "L5 (RC)"),
                             (587, 639, "L6 (RC)"), (639, 691, "306A"), (691, 759, "306"), (759, 829, "307"),
                             (829, 932, "308"), (932, 1038, "309")]),
@@ -160,10 +182,12 @@ def floor_4():
         "paths": spine(414, 405, 1025),
         "corridors": [[(416, 395), (1038, 395), (1038, 434), (416, 434), (416, 431), (400, 427), (396, 415),
                        (400, 403), (416, 399)],  # zaobljen južni kraj hodnika
-                      rect_poly(624, 377, 691, 395)],
+                      hall(395)],
         "rooms": [
-            *row(311, 395, [(416, 521, "AH1A"), (521, 554, None), (554, 624, "AH8"), (691, 728, "412"),
-                            (728, 761, "410"), (761, 899, "AH7"), (899, 1038, "AH6")]),
+            # AH6 i AH7 su podeljeni na pola; "A" je polovina bliža stepeništu (teren 01.10.2026).
+            *row(311, 395, [(416, 521, "AH1A"), (521, 554, None), (554, 624, "AH8"), (761, 830, "AH7A"),
+                            (830, 899, "AH7"), (899, 968, "AH6A"), (968, 1038, "AH6")]),
+            *toilets(),
             *row(434, 519, [(416, 554, "AH1B"), (554, 659, "AH2"), (659, 762, "AH3"), (762, 831, "AH4"),
                             (831, 900, "AH4A"), (900, 934, "406"), (934, 1038, "AH5")]),
         ],
@@ -207,7 +231,8 @@ def main():
     parser.add_argument("--check", type=Path, help="folder sa w-1..w5.png (prepare_screens.py nb)")
     args = parser.parse_args()
     g = build()
-    write_all(g, PLANS, VIEWPORT, WALL, "Nastavni blok", "build_nb.py", "floor_plan_nb", "NB-0-ULAZ", CAMPUS_LINKS)
+    write_all(g, PLANS, VIEWPORT, WALL, "Nastavni blok", "build_nb.py", "floor_plan_nb", "NB-0-ULAZ", CAMPUS_LINKS,
+              INDOOR_LINKS)
     if args.check:
         check_images(g, PLANS, VIEWPORT, WALL, args.check)
 

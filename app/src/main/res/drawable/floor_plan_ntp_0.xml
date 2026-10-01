@@ -5,14 +5,28 @@
     koordinate su u zajedničkom sistemu spratova, grupa ih pomera u viewport.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="1220dp"
-    android:height="930dp"
-    android:viewportWidth="2440"
-    android:viewportHeight="1860">
+    android:width="1895dp"
+    android:height="1290dp"
+    android:viewportWidth="3790"
+    android:viewportHeight="2580">
 
     <group
-        android:translateX="300"
-        android:translateY="0">
+        android:translateX="1650"
+        android:translateY="720">
+
+        <!-- Ceo NTP (OSM obris, poslovni deo nije ucrtan) -->
+        <path
+            android:strokeColor="#FFBDBDBD"
+            android:strokeWidth="4"
+            android:fillColor="#FFF5F5F5"
+            android:pathData="M2092,1830 L2083,1380 L1705,1059 L1313,720 L876,448 L263,55 L-157,-172 L-773,-434 L-1341,-651 L-1468,-183 L-1564,292 L-1529,297 L-1531,345 L-1534,393 L-1581,387 L-1583,1830 L-842,1830 L436,1830 L894,1828 L1309,1830 Z" />
+
+        <!-- Poslovni deo: NTP-A -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="4"
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M-359,-278 L-619,301 L-1110,80 L-850,-498 Z" />
 
         <!-- Unutrašnjost -->
         <path
@@ -22,7 +36,7 @@
         <!-- Hodnici -->
         <path
             android:fillColor="#FFE8EEF4"
-            android:pathData="M125,0 L160,0 L447,178 L450,1830 L350,1830 L350,1300 L125,1300 Z M-275,50 L125,50 L125,190 L-275,190 Z M-156,1300 L125,1300 L125,1395 L-156,1395 Z M447,551 L707,551 L707,646 L447,646 Z M654,646 L719,646 L719,905 L654,905 Z M719,829 L1096,829 L1096,905 L719,905 Z M1143,642 L1403,835 L1403,1830 L1299,1830 L1299,1272 L1096,1272 L1096,829 L1143,829 Z M1403,1297 L1780,1297 L1780,1394 L1403,1394 Z M450,1740 L812,1740 L812,1830 L450,1830 Z" />
+            android:pathData="M125,0 L160,0 L447,178 L450,1830 L350,1830 L350,1300 L125,1300 Z M-275,50 L125,50 L125,190 L-275,190 Z M-204,-173 L-84,-173 L-84,50 L-204,50 Z M-156,1300 L125,1300 L125,1395 L-156,1395 Z M447,551 L707,551 L707,646 L447,646 Z M654,646 L719,646 L719,905 L654,905 Z M719,829 L1096,829 L1096,905 L719,905 Z M1143,642 L1403,835 L1403,1830 L1299,1830 L1299,1272 L1096,1272 L1096,829 L1143,829 Z M1403,1297 L1780,1297 L1780,1394 L1403,1394 Z M450,1740 L812,1740 L812,1830 L450,1830 Z" />
 
         <!-- Rampa -->
         <path
@@ -36,7 +50,7 @@
         <!-- Ulazi -->
         <path
             android:fillColor="#FFC8E6C9"
-            android:pathData="M-290,50 L-270,50 L-270,190 L-290,190 Z M1299,1830 L1403,1830 L1403,1846 L1299,1846 Z M300,1830 L450,1830 L450,1846 L300,1846 Z" />
+            android:pathData="M-204,-173 L-84,-173 L-84,-153 L-204,-153 Z M1299,1830 L1403,1830 L1403,1846 L1299,1846 Z M300,1830 L450,1830 L450,1846 L300,1846 Z" />
 
         <!-- Stepeništa -->
         <path

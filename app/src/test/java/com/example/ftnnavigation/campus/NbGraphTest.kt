@@ -17,6 +17,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.math.hypot
 
 /** Unutrašnji graf Nastavnog bloka (assets/nb.json, tools/nb/build_nb.py) spojen sa kampusom kao u aplikaciji. */
 class NbGraphTest {
@@ -33,8 +34,8 @@ class NbGraphTest {
 
     private val nbNodes = graph.nodes.filter { it.buildingId == NbPlan.BUILDING_ID }
 
-    /** Sale iz rasporeda za koje se zna da su u NB, ali ih nema na snimcima FtnGO-a. */
-    private val notDrawn = setOf("AH6A", "AH7A", "O12", "Fizika", "Hemija", "Hemija 2")
+    /** Sale iz rasporeda koje su privremeno u NB, a nisu ucrtane (AH6A, AH7A i 012 ucrtane posle terena 01.10.2026). */
+    private val notDrawn = setOf("Fizika", "Hemija", "Hemija 2")
 
     @Test
     fun entranceAndPassages_areConstants() {
@@ -76,6 +77,7 @@ class NbGraphTest {
                 room == "AH9" || room == "AH-CRT" -> 5
                 room.startsWith("AH") -> 4
                 room.startsWith("L") -> 3
+                room == "O12" -> 0 // 012 (u rasporedu slovo O)
                 else -> room.first().digitToInt()
             }
             assertEquals(room, floor, target.node.floor)
@@ -143,5 +145,34 @@ class NbGraphTest {
         assertEquals(0, route.nodes[1].floor)
         assertEquals(NodeType.HODNIK, route.nodes[1].type)
         assertEquals(1, route.nodes.last().floor)
+    }
+
+    /** Teren 01.10.2026: zastakljen prolaz NB - Kula postoji i na I spratu (evakuacioni plan). */
+    @Test
+    fun kulaPassage_alsoOnFirstFloor() {
+        val from = checkNotNull(graph.room("101"))
+        val to = checkNotNull(graph.room("Kula 101"))
+        val route = checkNotNull(graph.route(from.id, to.id))
+        assertTrue(route.nodes.any { it.id == "NB-1-PROLAZ" })
+        assertTrue(route.nodes.all { it.floor == 1 })
+    }
+
+    /** Pored stepeništa na I-IV spratu su toaleti (FtnGO ih zove 113/110, 212/209, 316/313, 412/410). */
+    @Test
+    fun toiletsNextToStairs_areNotRooms() {
+        listOf("113", "110", "212", "209", "316", "313", "412", "410").forEach { assertNull(it, graph.room(it)) }
+    }
+
+    /** AH6 i AH7 su podeljeni na pola; "A" polovina je bliža stepeništu. */
+    @Test
+    fun ah6aAndAh7a_closerToStairs() {
+        val stairs = checkNotNull(graph.node("NB-4-S"))
+        for (name in listOf("AH6", "AH7")) {
+            val a = checkNotNull(graph.room("${name}A"))
+            val b = checkNotNull(graph.room(name))
+            assertEquals(4, a.floor)
+            val (pa, pb, ps) = listOf(a, b, stairs).map(graph::position)
+            assertTrue(name, hypot(pa.x - ps.x, pa.y - ps.y) < hypot(pb.x - ps.x, pb.y - ps.y))
+        }
     }
 }

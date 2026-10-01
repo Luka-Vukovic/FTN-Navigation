@@ -5,14 +5,21 @@
     koordinate su u zajedničkom sistemu spratova, grupa ih pomera u viewport.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="1220dp"
-    android:height="930dp"
-    android:viewportWidth="2440"
-    android:viewportHeight="1860">
+    android:width="1895dp"
+    android:height="1290dp"
+    android:viewportWidth="3790"
+    android:viewportHeight="2580">
 
     <group
-        android:translateX="300"
-        android:translateY="0">
+        android:translateX="1650"
+        android:translateY="720">
+
+        <!-- Ceo NTP (OSM obris, poslovni deo nije ucrtan) -->
+        <path
+            android:strokeColor="#FFBDBDBD"
+            android:strokeWidth="4"
+            android:fillColor="#FFF5F5F5"
+            android:pathData="M2092,1830 L2083,1380 L1705,1059 L1313,720 L876,448 L263,55 L-157,-172 L-773,-434 L-1341,-651 L-1468,-183 L-1564,292 L-1529,297 L-1531,345 L-1534,393 L-1581,387 L-1583,1830 L-842,1830 L436,1830 L894,1828 L1309,1830 Z" />
 
         <!-- Krov (niži spratovi) -->
         <path

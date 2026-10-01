@@ -19,8 +19,10 @@ stepenište.png, kula spaja nb i amf.png; korisnik, 30.09.2026):
   - stepenice NAVIŠE na kraju prolaza iz NB-a vode u L1 ("po oznaci na vratima", korisnik) - prostorija
     iznad zadnjeg hodnika, na FtnGO nivou 1 (jedino što se na tom nivou razlikuje od prizemlja),
   - glavni ulaz vodi na nivo sa Skriptarnicom i Bibliotekom (-1), ulaz kod GRID-a do GRID laboratorija
-    (korisnik); trem iz Kule ulazi na -1 kod donjeg levog stepeništa (PRETPOSTAVKA), prolazi ka F-bloku i
-    ITC-u su u prizemlju ("amf to f.png": prolaz je iznad Skriptarnice),
+    (korisnik); trem iz Kule stiže na međunivo donjeg levog stepeništa S1, odakle se ide dole na -1 ili gore
+    u prizemlje (teren 01.10.2026; veza sa oba nivoa - prelaz -1 <-> 0 preko trema nema cenu stepenica),
+    prolazi ka F-bloku i ITC-u su u prizemlju ("amf to f.png": prolaz je iznad Skriptarnice). Prolaz ka
+    F-bloku stiže na međunivo F-bloka (dole prizemlje, gore I sprat) - F-blok nema plan, pa se to ne vidi,
   - GRID-1 i GRID-2 su na -1; GRID ima svoj ulaz sa zapada (korisnik), koji vodi kroz GRID-1.
 Na -1 u sredini (ispod amfiteatara) nema prostorija. Pošta (Pošta Srbije, ulaz spolja sa zapada) nije u ovom
 grafu - na mapi kampusa je služba (build_campus.py SERVICES).
@@ -40,7 +42,10 @@ S3 = ("S3", (693, 212, 711, 240), (700, 212))  # sa kraja prolaza iz NB-a naviš
 CAMPUS_LINKS = [
     ("K-U-AMF-1", "AMF-m1-ULAZ"),
     ("K-U-AMF-2", "AMF-m1-ULAZ-GRID"),
+    # Trem iz Kule stiže na međunivo stepeništa S1 (teren 01.10.2026): odatle dole na -1 (izlaz, Biblioteka,
+    # Skriptarnica) ili gore na prizemlje (amfiteatri) - zato veza sa oba nivoa.
     ("K-P-AMF-KULA", "AMF-m1-PROLAZ-KULA"),
+    ("K-P-AMF-KULA", "AMF-0-PROLAZ-KULA"),
     ("K-P-AMF-NB", "AMF-0-PROLAZ-NB"),
     ("K-P-AMF-F", "AMF-0-PROLAZ-F"),
     ("K-P-ITC-AMF", "AMF-0-PROLAZ-ITC"),
@@ -93,7 +98,7 @@ def floor_0():
         ],
         "stairs": [S1, ("S2", (497, -65, 587, -28), (542, -30)), S3],
         "points": [("PROLAZ-F", (40, -13), "PROLAZ"), ("PROLAZ-ITC", (832, -10), "PROLAZ"),
-                   ("PROLAZ-NB", (680, 207), "PROLAZ")],
+                   ("PROLAZ-NB", (680, 207), "PROLAZ"), ("PROLAZ-KULA", (250, 210), "PROLAZ")],
     }
 
 

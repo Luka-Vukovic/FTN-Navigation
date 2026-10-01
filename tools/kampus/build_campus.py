@@ -109,8 +109,8 @@ ENTRANCES = {
     "AMF": [11691291594, (45.246285, 19.851143)],
     "MI": [2317759407],
     # NTP: ulazi FTN dela sa plana prizemlja (build_ntp.ENTRANCES), preko smeštaja plana - bez lepljenja
-    # na zid. OSM ulazi 13123222553 (istok) i 13123222559 (Fruškogorska) su 9-20 m od krajeva PASAŽA
-    # (verovatno poslovni deo NTP-a) i ne koriste se.
+    # na zid. OSM ulazi 13123222553 (istok) i 13123222559 (Fruškogorska) se ne koriste (sa razmerom 0,042
+    # su bili 9-20 m od krajeva PASAŽA; proveriti ponovo).
     "NTP": [("plan", x, y) for (x, y), _ in build_ntp.ENTRANCES.values()],
     "F": [(45.245662, 19.851880)],  # južna strana, ~58 % dužine od zapada
     "DGG": [(45.244697, 19.850246)],  # istočna strana, gornja trećina
@@ -130,18 +130,9 @@ ENTRANCES = {
 NB_PLAN_WALL = tuple(float(v) for v in build_nb.WALL)
 NB_PLAN_VIEWPORT = (float(build_nb.VX), float(build_nb.VY), float(build_nb.VW), float(build_nb.VH))
 
-# Plan NTP-a (FTN deo, tools/ntp/build_ntp.py) u px ispravljenih fotografija evakuacionih planova.
-# Zgrada NTP-a u OSM-u je ceo NTP: FTN deo je severni, suženi kraj, a južno od njega je poslovni deo
-# (korisnik: "sastoji se od FTN dela i poslovnog dela za kompanije"). Smeštaj: severni vrh plana (donji
-# desni ugao) -> severni vrh OSM obrisa, dole na planu (red kancelarija) uz istočni zid (vrh -> jugoistočni
-# ugao). Razmera nije na planu: sa 0,042 m/px "ULAZ - FTN" (gornji levi ugao plana prizemlja) pada tačno na
-# jugozapadni ugao OSM obrisa (Fruškogorska / Dr Ilije Đuričića), a južno od FTN dela ostaje traka za
-# poslovni deo. Mere su tada realne (kancelarija ~5 m, hodnik ~4,2 m, lift ~2,2 m). Probano i odbačeno:
-# 0,061 (red kancelarija = ceo istočni zid - prizemlje prelazi preko Fruškogorske), 0,052 (FTN deo
-# zauzima ceo obris, "ULAZ - FTN" 29 m van zida). Dijagonalna fasada sa plana je do ~11 m zapadnije od
-# OSM zida (ugao dijagonale 34° naspram 30,5° u OSM-u). PRETPOSTAVKA - izmeriti na terenu.
-NTP_PLAN_TIP = (2092.0, 1830.0)
-NTP_M_PER_PX = 0.042
+# Plan NTP-a (FTN deo): smeštaj (razmera, vrh, transformacija) je u tools/ntp/build_ntp.py (M_PER_PX,
+# plan_transform) - tamo su i provere sa terena (01.10.2026: 0,029 m/px; ranije pretpostavljenih 0,042 je
+# bilo ~1,45x previše). Zgrada NTP-a u OSM-u je ceo NTP: FTN deo je severni kraj, južno je poslovni deo.
 
 WALKABLE = {
     "footway", "path", "pedestrian", "steps", "service", "living_street", "residential",
@@ -348,17 +339,8 @@ def shared_placement(to_campus, nb_placement, m_per_px, viewport):
 
 
 def ntp_plan_placement(ring):
-    """Plan NTP-a u kampus: vrh plana -> najseverniji teme obrisa, levo na planu -> ka jugoistočnom uglu."""
-    tip = min(ring, key=lambda p: p[1])
-    southeast = max(ring, key=lambda p: p[0])
-    d = complex(*southeast) - complex(*tip)
-    z = -d / abs(d) * NTP_M_PER_PX  # (-1, 0) na planu -> ka jugoistoku
-    t0, c0 = complex(*NTP_PLAN_TIP), complex(*tip)
-
-    def transform(p):
-        q = c0 + z * (complex(*p) - t0)
-        return q.real, q.imag
-
+    """Plan NTP-a u kampus (build_ntp.plan_transform): transformacija i smeštaj za campus.json."""
+    transform, _, z = build_ntp.plan_transform(ring)
     vx, vy, vw, vh = build_ntp.VX, build_ntp.VY, build_ntp.VW, build_ntp.VH
     origin = transform((vx, vy))
     return transform, {
@@ -644,7 +626,7 @@ def main():
     print(f"zgrade: {len(buildings)} (+{len(context)} okolnih), ulice: {len(streets)}, staze: {len(paths)}")
     print(f"graf: {len(data['nodes'])} čvorova, {len(data['edges'])} ivica")
     print(f"plan NB: {m_per_px:.4f} m/px, {placement}, odstupanje uglova {residual:.2f} m")
-    print(f"plan NTP: {NTP_M_PER_PX} m/px, {ntp_placement}")
+    print(f"plan NTP: {build_ntp.M_PER_PX} m/px, {ntp_placement}")
     for label, d in checks.items():
         print(f"  provera {label}: {d:.1f} m")
     for w in warnings:

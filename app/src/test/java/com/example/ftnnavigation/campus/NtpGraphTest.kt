@@ -142,4 +142,14 @@ class NtpGraphTest {
             assertTrue(hypot(dx, dy) <= MATCH_TOLERANCE_M + 1e-6)
         }
     }
+
+    /** NTP-A je u prizemlju poslovnog dela (teren 01.10.2026), blizu ulaza "ULAZ - FTN" sa Fruškogorske. */
+    @Test
+    fun ntpA_inBusinessPart_nearFruskogorskaEntrance() {
+        val room = checkNotNull(graph.room("NTP-A"))
+        assertEquals(0, room.floor)
+        assertTrue(room.x in 0f..1f && room.y in 0f..1f)
+        val route = checkNotNull(graph.route("K-U-NTP-4", room.id))
+        assertTrue("${route.lengthM}", route.lengthM < 30)
+    }
 }

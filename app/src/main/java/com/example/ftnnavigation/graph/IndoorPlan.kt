@@ -23,12 +23,14 @@ data class IndoorPlan(
     val edges: List<List<String>>,
     /** [čvor kampusa (ulaz K-U-... ili prolaz K-P-...), čvor zgrade]. */
     val campusLinks: List<List<String>>,
+    /** [čvor ove zgrade, čvor druge zgrade sa planom] - prolaz mimo kampusa (NB - Kula na I spratu). */
+    val indoorLinks: List<List<String>> = emptyList(),
 ) {
     fun graphNodes(): List<Node> = nodes.map { Node(it.id, buildingId, it.floor, it.x, it.y, it.type, it.name) }
 
     fun graphEdges(): List<Edge> =
         edges.map { (a, b, type) -> Edge(a, b, EdgeType.valueOf(type)) } +
-            campusLinks.map { (campus, entrance) -> Edge(campus, entrance, EdgeType.HOD) }
+            (campusLinks + indoorLinks).map { (a, b) -> Edge(a, b, EdgeType.HOD) }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
@@ -179,7 +181,8 @@ object NtpPlan : IndoorBuilding {
     override val asset get() = ASSET
     override val floors get() = FLOORS
     override val entranceId get() = ENTRANCE_ID
-    override val labelHeight get() = 0.014f
+    // Plan obuhvata ceo NTP (i poslovni deo), pa je FTN deo manji deo visine nego ranije (0,014 pri visini 1860 px).
+    override val labelHeight get() = 0.01f
 
     /** Crtež sprata; spratovi I-IV su isti plan. */
     @DrawableRes

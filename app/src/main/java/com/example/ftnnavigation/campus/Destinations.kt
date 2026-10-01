@@ -20,8 +20,11 @@ private val PROVISIONAL_NB = listOf("Fizika", "Hemija")
 /** Mesta van kampusa, predaleko da bi bila na mapi (korisnik): prefiks oznake sale -> naziv. */
 private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
 
-/** Oznake koje su druga oznaka ucrtane sale: 204A, 205A i 208A su drugi ulazi učionica 204, 205 i 208 (korisnik). */
-private val ROOM_ALIASES = mapOf("204A" to "204", "205A" to "205", "208A" to "208")
+/**
+ * Oznake koje su druga oznaka ucrtane sale: 204A, 205A i 208A su drugi ulazi učionica 204, 205 i 208 (korisnik);
+ * "O12" iz rasporeda (slovo O) je 012 u prizemlju NB-a (teren 01.10.2026).
+ */
+private val ROOM_ALIASES = mapOf("204A" to "204", "205A" to "205", "208A" to "208", "O12" to "012")
 
 /** Naziv mesta van kampusa za salu (MF-27 -> Medicinski fakultet), ili null. */
 fun offCampusPlaceOf(room: String): String? = OFF_CAMPUS.entries.find { room.trim().startsWith(it.key) }?.value

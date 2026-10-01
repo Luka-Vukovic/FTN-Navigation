@@ -127,4 +127,11 @@ class AmfKulaGraphTest {
         assertTrue(ids.toString(), ids.containsAll(listOf("K-P-NB-KULA", "KULA-0-PROLAZ-NB", "KULA-0-PROLAZ-AMF", "K-P-AMF-KULA")))
         assertFalse(route.nodes.any { it.type == NodeType.STAZA })
     }
+
+    /** Teren 01.10.2026: trem iz Kule stiže na međunivo - odatle dole na -1 ili gore u prizemlje Amfiteatara. */
+    @Test
+    fun kulaPorch_reachesMezzanineToBothLevels() {
+        val ids = graph.neighbors("K-P-AMF-KULA").map { it.first.id }
+        assertTrue(ids.containsAll(listOf("AMF-m1-PROLAZ-KULA", "AMF-0-PROLAZ-KULA")))
+    }
 }
