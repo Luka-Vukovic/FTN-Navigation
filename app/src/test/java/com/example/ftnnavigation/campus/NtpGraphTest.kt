@@ -4,6 +4,8 @@ import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.EdgeType
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
+import com.example.ftnnavigation.graph.MATCH_TOLERANCE_M
+import com.example.ftnnavigation.graph.MapMatcher
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
@@ -118,5 +120,26 @@ class NtpGraphTest {
         val entrances = ntp.campusLinks.map { it[1] }.toSet()
         assertEquals(1, route.nodes.count { it.id in entrances })
         assertEquals(2, route.nodes.last().floor)
+    }
+
+    /**
+     * PDR u NTP-u (01.10.2026): na svakom spratu map-matching ima hodnike, a hod od glavnog ulaza
+     * ostaje na spratu i blizu slobodne pozicije (tolerancija).
+     */
+    @Test
+    fun pdr_mapMatchingOnEveryFloor() {
+        val scale = graph.placement(NtpPlan.BUILDING_ID).scale
+        for (floor in NtpPlan.floors) {
+            val matcher = MapMatcher(graph, NtpPlan.BUILDING_ID, floor)
+            val hall = ntpNodes.first { it.floor == floor && it.type == NodeType.HODNIK }
+            val start = matcher.start(hall.x, hall.y)
+            assertNotNull("sprat $floor", start)
+            var position = start!!
+            for (step in 1..20) position = matcher.step(position, 0.7, 0.0)
+            assertEquals(floor, position.point.from.floor)
+            val dx = (position.x - position.point.x) * scale.widthM
+            val dy = (position.y - position.point.y) * scale.heightM
+            assertTrue(hypot(dx, dy) <= MATCH_TOLERANCE_M + 1e-6)
+        }
     }
 }

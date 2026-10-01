@@ -42,7 +42,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.example.ftnnavigation.campus.CampusBuilding
+import com.example.ftnnavigation.campus.GpsFix
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,11 +105,13 @@ import kotlin.math.roundToInt
 
 /**
  * Ekran Mapa. Dok praćenje ne radi, kači samo orijentaciju (smer za prikaz); za vreme praćenja
- * senzore drži [PocViewModel] nezavisno od ekrana.
+ * senzore drži [PocViewModel] nezavisno od ekrana. GPS radi dok je Mapa na ekranu (i za vreme
+ * praćenja); dozvola za lokaciju se traži pri otvaranju Mape.
  */
 @Composable
 fun PocRoute(viewModel: PocViewModel = viewModel()) {
     val state = viewModel.state
+    val context = LocalContext.current
 
     PdrHeadingEffect(
         enabled = !state.isTracking,
@@ -108,15 +119,29 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
         onHeading = viewModel::onHeading,
     )
 
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        viewModel.onLocationPermissionResult()
+    }
+    LaunchedEffect(Unit) {
+        if (!GpsSession.hasPermission(context)) locationPermission.launch(GpsSession.PERMISSIONS)
+    }
+    LifecycleResumeEffect(viewModel) {
+        viewModel.onMapVisible(true)
+        onPauseOrDispose { viewModel.onMapVisible(false) }
+    }
+
     PocScreen(
         state = state,
         campus = viewModel.campus,
         graph = viewModel.graph,
         mode = viewModel.mode,
         floor = viewModel.mode.building?.let(viewModel::floorOf) ?: 0,
+        gps = viewModel.gps,
+        currentBuilding = viewModel.currentBuilding,
         destination = viewModel.destination,
         target = viewModel.target,
         route = viewModel.route,
+        routeStart = viewModel.routeStart,
         onModeChange = viewModel::selectMode,
         onFloorChange = viewModel::selectFloor,
         onDestinationChange = viewModel::selectDestination,
@@ -135,9 +160,12 @@ fun PocScreen(
     graph: BuildingGraph?,
     mode: MapMode,
     floor: Int,
+    gps: GpsFix?,
+    currentBuilding: CampusBuilding?,
     destination: String?,
     target: RouteTarget?,
     route: Route?,
+    routeStart: RouteStart,
     onModeChange: (MapMode) -> Unit,
     onFloorChange: (Int) -> Unit,
     onDestinationChange: (String?) -> Unit,
@@ -161,22 +189,25 @@ fun PocScreen(
     ) { innerPadding ->
         // Samo gornji padding - donji panel sam rešava navigation bar da bi mu pozadina išla do ivice.
         Column(Modifier.padding(top = innerPadding.calculateTopPadding()).fillMaxSize()) {
-            MapModeSelector(mode, onModeChange)
+            MapModeSelector(mode, currentBuilding, onModeChange)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 val building = mode.building
+                val pdrHere = building == state.pdrBuilding && floor == state.pdrFloor
                 when {
                     building == null -> if (campus != null) CampusMap(
                         campus = campus,
                         graph = graph,
                         route = route,
+                        routeStart = routeStart,
+                        pdrBuildingId = state.pdrBuilding.buildingId,
                         position = state.position,
+                        gps = gps,
                         headingDeg = state.headingDeg,
                         onBuildingLongPress = { infoBuildingId = it.id },
                         modifier = Modifier.fillMaxSize(),
                     )
                     else -> {
-                        // PDR pozicija i izbor starta su samo u prizemlju Nastavnog bloka.
-                        val pdrHere = building == NbPlan && floor == 0
+                        // PDR pozicija je na spratu na kome je postavljen start; start se bira na bilo kom planu.
                         FloorPlan(
                             building = building,
                             floor = floor,
@@ -185,7 +216,7 @@ fun PocScreen(
                             position = state.position.takeIf { pdrHere },
                             rawPosition = state.rawPosition.takeIf { pdrHere },
                             headingDeg = state.headingDeg,
-                            isPickingStart = state.isPickingStart && pdrHere,
+                            isPickingStart = state.isPickingStart,
                             onTap = onMapTap,
                             // Širok plan: bez ovoga birač sprata prekriva kraj zgrade.
                             modifier = Modifier.fillMaxSize().padding(end = FLOOR_SELECTOR_SPACE),
@@ -199,11 +230,15 @@ fun PocScreen(
                         )
                     }
                 }
-                // Start se postavlja samo na planu zgrade (PDR je za sada samo u Nastavnom bloku).
+                // Start se postavlja samo na planu zgrade; ako je pozicija na drugom planu, piše gde je.
                 val hint = when {
-                    mode != MapMode.NB -> null
-                    state.isPickingStart -> R.string.poc_hint_pick_start
-                    state.position == null -> R.string.poc_hint_no_start
+                    building == null -> null
+                    state.isPickingStart -> stringResource(R.string.poc_hint_pick_start)
+                    state.position == null -> stringResource(R.string.poc_hint_no_start)
+                    !pdrHere -> stringResource(
+                        R.string.poc_hint_position_elsewhere,
+                        stringResource(state.pdrBuilding.locationRes(), floorName(state.pdrFloor)),
+                    )
                     else -> null
                 }
                 Column(
@@ -216,13 +251,13 @@ fun PocScreen(
                             destination = destination,
                             target = target,
                             route = route,
-                            fromPosition = state.position != null,
+                            routeStart = routeStart,
                             onClear = { onDestinationChange(null) },
                         )
                     }
-                    if (hint != null) HintBanner(stringResource(hint))
+                    if (hint != null) HintBanner(hint)
                 }
-                if (mode == MapMode.NB) {
+                if (mode.building != null) {
                     FilterChip(
                         selected = state.snapToGraph,
                         onClick = onSnapToggle,
@@ -526,7 +561,7 @@ internal fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: 
  * sale - ako sala nije ucrtana, ruta vodi samo do zgrade.
  */
 @Composable
-private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?, fromPosition: Boolean, onClear: () -> Unit) {
+private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?, routeStart: RouteStart, onClear: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         shadowElevation = 3.dp,
@@ -544,7 +579,13 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
                 val details = if (route == null) {
                     stringResource(R.string.route_not_on_map)
                 } else {
-                    val from = stringResource(if (fromPosition) R.string.route_from_position else R.string.route_from_entrance)
+                    val from = stringResource(
+                        when (routeStart) {
+                            RouteStart.PDR -> R.string.route_from_position
+                            RouteStart.GPS -> R.string.route_from_gps
+                            RouteStart.ENTRANCE -> R.string.route_from_entrance
+                        },
+                    )
                     stringResource(R.string.route_summary, route.minutes, route.lengthM.toInt()) + " · " + from
                 }
                 Text(
@@ -647,26 +688,75 @@ private fun DestinationItem(name: String, isSelected: Boolean, onClick: () -> Un
     )
 }
 
-/** Prekidač prikaza Mape: kampus (spolja), plan Nastavnog bloka ili NTP. */
+@StringRes
+private fun MapMode.labelRes(): Int = when (this) {
+    MapMode.KAMPUS -> R.string.map_mode_campus
+    MapMode.NB -> R.string.map_mode_building
+    MapMode.AMF -> R.string.map_mode_amf
+    MapMode.KULA -> R.string.map_mode_kula
+    MapMode.NTP -> R.string.map_mode_ntp
+}
+
+/**
+ * Prekidač prikaza Mape: kampus (spolja) ili plan zgrade. Kad se po GPS-u zna u kojoj je zgradi
+ * korisnik ([here]), prikazani su samo kampus i ta zgrada (sa oznakom lokacije), a ostale su u
+ * meniju "…" ([shownModes]).
+ */
 @Composable
-private fun MapModeSelector(mode: MapMode, onModeChange: (MapMode) -> Unit) {
-    val options = listOf(
-        MapMode.KAMPUS to R.string.map_mode_campus,
-        MapMode.NB to R.string.map_mode_building,
-        MapMode.AMF to R.string.map_mode_amf,
-        MapMode.KULA to R.string.map_mode_kula,
-        MapMode.NTP to R.string.map_mode_ntp,
-    )
+private fun MapModeSelector(mode: MapMode, here: CampusBuilding?, onModeChange: (MapMode) -> Unit) {
+    val shown = shownModes(mode, here)
+    val hidden = MapMode.entries - shown.toSet()
+    val count = shown.size + if (hidden.isEmpty()) 0 else 1
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        options.forEachIndexed { index, (option, label) ->
+        shown.forEachIndexed { index, option ->
+            val isHere = here != null && option.building?.buildingId == here.id
             SegmentedButton(
                 selected = mode == option,
                 onClick = { onModeChange(option) },
-                shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                // Pet izbora: bez kvačice, da natpisi stanu.
+                shape = SegmentedButtonDefaults.itemShape(index, count),
+                // Do pet izbora: bez kvačice, da natpisi stanu; zgrada u kojoj je korisnik ima oznaku.
+                icon = {
+                    if (isHere) {
+                        Icon(
+                            painterResource(R.drawable.ic_my_location),
+                            contentDescription = stringResource(R.string.map_mode_here),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                },
+            ) {
+                Text(stringResource(option.labelRes()), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        if (hidden.isNotEmpty()) {
+            var expanded by remember { mutableStateOf(false) }
+            val moreDescription = stringResource(R.string.map_mode_more_description)
+            SegmentedButton(
+                selected = false,
+                onClick = { expanded = true },
+                shape = SegmentedButtonDefaults.itemShape(count - 1, count),
                 icon = {},
             ) {
-                Text(stringResource(label), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                // Meni je u dugmetu da bi se otvorio ispod njega.
+                Box {
+                    Text(
+                        stringResource(R.string.map_mode_more),
+                        maxLines = 1,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.semantics { contentDescription = moreDescription },
+                    )
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        for (option in hidden) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(option.labelRes())) },
+                                onClick = {
+                                    expanded = false
+                                    onModeChange(option)
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -839,9 +929,12 @@ private fun PocScreenPreview() {
             graph = null,
             mode = MapMode.NB,
             floor = 0,
+            gps = null,
+            currentBuilding = null,
             destination = "NTP-307",
             target = null,
             route = null,
+            routeStart = RouteStart.PDR,
             onModeChange = {},
             onFloorChange = {},
             onDestinationChange = {},

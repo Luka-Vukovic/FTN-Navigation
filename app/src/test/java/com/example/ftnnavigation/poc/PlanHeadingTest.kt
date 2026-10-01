@@ -1,7 +1,9 @@
 package com.example.ftnnavigation.poc
 
 import com.example.ftnnavigation.campus.CampusData
+import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.NbPlan
+import com.example.ftnnavigation.graph.PlanPlacement
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
@@ -9,16 +11,17 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Smer na planu NB iz magnetskog azimuta, preko pravog smeštaja plana iz campus.json. */
+/** Smer na planu (NB, NTP...) iz magnetskog azimuta, preko pravog smeštaja planova iz campus.json. */
 class PlanHeadingTest {
 
-    private val placement = CampusData.parse(File("src/main/assets/campus.json").readText())
-        .placements().getValue(NbPlan.BUILDING_ID)
+    private val placements = CampusData.parse(File("src/main/assets/campus.json").readText()).placements()
+
+    private val placement = placements.getValue(NbPlan.BUILDING_ID)
 
     private val declination = 5.5f
 
     /** Korak kao u [PocViewModel.onStep], preveden u metre kampusa -> geografski azimut. */
-    private fun trueAzimuthOfStep(magneticAzimuth: Float): Float {
+    private fun trueAzimuthOfStep(magneticAzimuth: Float, placement: PlanPlacement = this.placement): Float {
         val planUp = planUpMagneticAzimuthDeg(placement, declination)
         val rad = Math.toRadians((magneticAzimuth - planUp).toDouble())
         val dxM = sin(rad)
@@ -37,6 +40,19 @@ class PlanHeadingTest {
         for (magnetic in 0 until 360 step 15) {
             val expected = normalizeDeg(magnetic + declination)
             assertEquals("magnetski $magnetic", 0f, angleDiffDeg(trueAzimuthOfStep(magnetic.toFloat()), expected), 0.1f)
+        }
+    }
+
+    /** PDR radi na planu bilo koje zgrade sa planom (NTP od 01.10.2026) - smer mora da važi za svaki smeštaj. */
+    @Test
+    fun stepOnEveryPlan_goesInTrueDirection() {
+        for (building in INDOOR_BUILDINGS) {
+            val placement = placements.getValue(building.buildingId)
+            for (magnetic in 0 until 360 step 15) {
+                val expected = normalizeDeg(magnetic + declination)
+                val actual = trueAzimuthOfStep(magnetic.toFloat(), placement)
+                assertEquals("${building.buildingId} magnetski $magnetic", 0f, angleDiffDeg(actual, expected), 0.1f)
+            }
         }
     }
 

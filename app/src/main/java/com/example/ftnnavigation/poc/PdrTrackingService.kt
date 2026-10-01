@@ -18,8 +18,10 @@ import com.example.ftnnavigation.R
  * ili je aplikacija u pozadini: foreground servis (trajno obaveštenje - sistem ne ubija proces)
  * i partial wake lock (bez njega procesor sa ugašenim ekranom zaspi, pa senzori ne javljaju).
  *
- * Senzore kači [PocViewModel] ([PdrSensorSession]); servis samo drži proces i procesor budnim.
- * Tip `health` (praćenje koraka), uslov za njega je HIGH_SAMPLING_RATE_SENSORS (bez pitanja).
+ * Senzore i GPS kači [PocViewModel] ([PdrSensorSession], [GpsSession]); servis samo drži proces i
+ * procesor budnim. Tip `health` (praćenje koraka), uslov za njega je HIGH_SAMPLING_RATE_SENSORS (bez
+ * pitanja); i tip `location` ako je lokacija dozvoljena - tada GPS radi i u pozadini, bez dozvole
+ * "uvek" (servis se pokreće dok je aplikacija na ekranu).
  */
 class PdrTrackingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
@@ -27,7 +29,9 @@ class PdrTrackingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)
+        // Tip location bez dozvole za lokaciju sistem odbija (SecurityException).
+        val location = if (GpsSession.hasPermission(this)) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
+        startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH or location)
         if (wakeLock == null) {
             wakeLock = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FTNNavigation:pdr")

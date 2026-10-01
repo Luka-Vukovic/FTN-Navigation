@@ -148,12 +148,12 @@ class BuildingGraph(
     }
 
     /**
-     * Čvor zgrade [buildingId] najbliži tački ([x]/[y] relativno na plan sprata), ili null ako
-     * sprat nema čvorova.
+     * Čvor zgrade [buildingId] najbliži tački ([x]/[y] relativno na plan sprata), samo tipova
+     * [types] ako su zadati, ili null ako sprat nema takvih čvorova.
      */
-    fun nearestNode(buildingId: String, floor: Int, x: Float, y: Float): Node? {
+    fun nearestNode(buildingId: String, floor: Int, x: Float, y: Float, types: Set<NodeType>? = null): Node? {
         val point = placement(buildingId).toMeters(x, y)
-        return nodes.filter { it.buildingId == buildingId && it.floor == floor }
+        return nodes.filter { it.buildingId == buildingId && it.floor == floor && (types == null || it.type in types) }
             .minByOrNull { distanceM(position(it), point) }
     }
 
@@ -168,8 +168,9 @@ class BuildingGraph(
         y: Float,
         toId: String,
         profile: RoutingProfile = RoutingProfile(),
+        startTypes: Set<NodeType>? = null,
     ): Route? {
-        val start = nearestNode(buildingId, floor, x, y) ?: return null
+        val start = nearestNode(buildingId, floor, x, y, startTypes) ?: return null
         val legM = distanceM(position(start), placement(buildingId).toMeters(x, y))
         return route(start.id, toId, profile)?.withLeg(legM, profile)
     }

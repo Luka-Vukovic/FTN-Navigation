@@ -16,6 +16,12 @@
     <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- GPS na kampusu (pitanje pri prvom otvaranju Mape; "dok se aplikacija koristi" je dovoljno):
+         na Mapi i za vreme praćenja - tada servis ima i tip location, pa GPS radi i u pozadini. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -38,7 +44,7 @@
         <service
             android:name=".poc.PdrTrackingService"
             android:exported="false"
-            android:foregroundServiceType="health" />
+            android:foregroundServiceType="health|location" />
 
         <receiver
             android:name=".departure.DepartureAlarmReceiver"

@@ -49,10 +49,10 @@ import com.example.ftnnavigation.campus.BuildingCategory
 import com.example.ftnnavigation.campus.CampusBuilding
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.CampusPoint
+import com.example.ftnnavigation.campus.GpsFix
 import com.example.ftnnavigation.campus.LabelSide
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.NodeType
-import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.PointM
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.ui.theme.OnService
@@ -62,6 +62,9 @@ import com.example.ftnnavigation.ui.theme.ServiceOutline
 // Širine u metrima - rastu sa zumom, kao na pravoj mapi.
 private const val STREET_WIDTH_M = 6f
 private const val PATH_WIDTH_M = 1.5f
+
+/** Krug tačnosti GPS-a se ne crta veći od ovoga (bez fiksa tačnost je ogromna, krug bi prekrio mapu). */
+private const val MAX_DRAWN_ACCURACY_M = 100f
 
 /** Koliko oko natpisa se još računa kao držanje natpisa (natpisi su sitni). */
 private val LABEL_TOUCH_SLOP = 8.dp
@@ -94,14 +97,19 @@ private fun Density.placeLabels(
 /**
  * Spoljna mapa kampusa (OpenStreetMap): okolne zgrade, ulice i staze za orijentaciju, FTN
  * zgrade i studentske službe (toplim tonom) sa natpisima, spojni prolazi, ulazi i ruta. [position] je PDR pozicija relativno na
- * plan Nastavnog bloka - preslikava se u kampus preko smeštaja plana.
+ * plan zgrade [pdrBuildingId] - preslikava se u kampus preko smeštaja plana; [headingDeg] je smer u
+ * odnosu na "gore" tog plana. [gps] je GPS lokacija sa krugom tačnosti; kad postoji i PDR pozicija,
+ * GPS je samo tačka (smer pripada PDR oznaci). Ruta se crta od mesta odakle kreće ([routeStart]).
  */
 @Composable
 fun CampusMap(
     campus: CampusData,
     graph: BuildingGraph?,
     route: Route?,
+    routeStart: RouteStart,
+    pdrBuildingId: String,
     position: Offset?,
+    gps: GpsFix?,
     headingDeg: Float,
     onBuildingLongPress: (CampusBuilding) -> Unit,
     modifier: Modifier = Modifier,
@@ -202,24 +210,41 @@ fun CampusMap(
                         }
                     },
             )
-            if (graph != null && (route != null || position != null)) {
+            if (graph != null && (route != null || position != null || gps != null)) {
                 Canvas(Modifier.fillMaxSize()) {
                     val k = 1f / zoom.scale
                     val m = size.width / campus.widthM
                     fun PointM.toPx() = Offset(x.toFloat() * m, y.toFloat() * m)
-                    val nbPlacement = graph.placement(NbPlan.BUILDING_ID)
+                    val pdrPlacement = graph.placement(pdrBuildingId)
                     if (route != null) {
-                        val start = position?.let { nbPlacement.toMeters(it.x, it.y).toPx() }
+                        val start = when (routeStart) {
+                            RouteStart.PDR -> position?.let { pdrPlacement.toMeters(it.x, it.y).toPx() }
+                            RouteStart.GPS -> gps?.point?.toPx()
+                            RouteStart.ENTRANCE -> null
+                        }
                         val points = listOfNotNull(start) + route.nodes.map { graph.position(it).toPx() }
                         val path = Path()
                         points.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
                         drawPath(path, colors.primary, style = Stroke(5.dp.toPx() * k, cap = StrokeCap.Round, join = StrokeJoin.Round))
                         drawTargetMarker(points.last(), colors.primary, colors.secondary, k)
                     }
+                    if (gps != null) {
+                        val center = gps.point.toPx()
+                        // Krug tačnosti je u metrima - raste sa zumom.
+                        val radius = gps.accuracyM.coerceAtMost(MAX_DRAWN_ACCURACY_M) * m
+                        drawCircle(colors.primary.copy(alpha = 0.12f), radius = radius, center = center)
+                        drawCircle(colors.primary.copy(alpha = 0.35f), radius = radius, center = center, style = Stroke(1.dp.toPx() * k))
+                        if (position == null) {
+                            drawUserMarker(center, headingDeg + pdrPlacement.rotationDeg.toFloat(), colors.primary, k)
+                        } else {
+                            drawCircle(Color.White, radius = 6.dp.toPx() * k, center = center)
+                            drawCircle(colors.primary.copy(alpha = 0.6f), radius = 4.dp.toPx() * k, center = center)
+                        }
+                    }
                     if (position != null) {
-                        val center = nbPlacement.toMeters(position.x, position.y).toPx()
+                        val center = pdrPlacement.toMeters(position.x, position.y).toPx()
                         // Smer je u odnosu na "gore" plana; plan je u kampusu zarotiran.
-                        drawUserMarker(center, headingDeg + nbPlacement.rotationDeg.toFloat(), colors.primary, k)
+                        drawUserMarker(center, headingDeg + pdrPlacement.rotationDeg.toFloat(), colors.primary, k)
                     }
                 }
             }

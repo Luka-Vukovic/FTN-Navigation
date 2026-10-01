@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">FTN Navigation</string>
+    <string name="app_name">FTN Navigacija</string>
 
     <!-- Navigacija -->
     <string name="nav_home">Početna</string>
@@ -113,6 +113,9 @@
     <string name="map_mode_amf">Amfiteatri</string>
     <string name="map_mode_kula">Kula</string>
     <string name="map_mode_ntp">NTP</string>
+    <string name="map_mode_more">…</string>
+    <string name="map_mode_more_description">Ostale zgrade</string>
+    <string name="map_mode_here">Ovde si</string>
     <string name="ntp_location">Naučno-tehnološki park · %1$s</string>
     <string name="amf_location">Amfiteatri · %1$s</string>
     <string name="kula_location">Kula · %1$s</string>
@@ -126,6 +129,7 @@
     <string name="building_with_floor">%1$s · %2$s</string>
     <string name="poc_hint_no_start">Postavi početnu poziciju da bi pokrenuo praćenje</string>
     <string name="poc_hint_pick_start">Dodirni plan na mestu gde stojiš</string>
+    <string name="poc_hint_position_elsewhere">Pozicija je na planu: %1$s</string>
     <string name="poc_stat_steps">Koraci</string>
     <string name="poc_stat_heading">Smer</string>
     <string name="poc_stat_distance">Pređeno</string>
@@ -156,6 +160,7 @@
     <string name="route_to_building">Sala nije ucrtana · ruta do zgrade %1$s</string>
     <string name="route_summary">~%1$d min · %2$d m</string>
     <string name="route_from_position">od tvoje pozicije</string>
+    <string name="route_from_gps">od tvoje lokacije (GPS)</string>
     <string name="route_from_entrance">od glavnog ulaza</string>
     <string name="route_not_on_map">Sala još nije na mapi</string>
     <string name="route_off_campus">Van kampusa</string>

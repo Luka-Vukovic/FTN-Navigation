@@ -12,7 +12,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ftnnavigation.BuildConfig
 import com.example.ftnnavigation.campus.BuildingCategory
+import com.example.ftnnavigation.campus.BuildingDetector
+import com.example.ftnnavigation.campus.CAMPUS_ID
+import com.example.ftnnavigation.campus.CampusBuilding
 import com.example.ftnnavigation.campus.CampusData
+import com.example.ftnnavigation.campus.CampusGeo
+import com.example.ftnnavigation.campus.GpsFix
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
@@ -29,6 +34,7 @@ import com.example.ftnnavigation.graph.AmfPlan
 import com.example.ftnnavigation.graph.IndoorBuilding
 import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
+import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.PlanPlacement
@@ -39,14 +45,18 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Stanje PoC ekrana. Pozicije su relativne u odnosu na sliku sprata (0..1 po obe ose),
- * tako da ne zavise od rezolucije plana ni od zuma.
+ * Stanje PoC ekrana. Pozicije su relativne u odnosu na sliku sprata [pdrFloor] zgrade
+ * [pdrBuilding] (0..1 po obe ose), tako da ne zavise od rezolucije plana ni od zuma.
  */
 data class PocUiState(
+    /** Plan na kome je PDR: zgrada i sprat na kome je postavljen start (sprat se ne menja u hodu). */
+    val pdrBuilding: IndoorBuilding = NbPlan,
+    val pdrFloor: Int = 0,
     /** Čist PDR (koraci + smer, bez ispravki) - za poređenje sa [match]. */
     val rawPosition: Offset? = null,
     /** PDR pozicija zalepljena za graf; null dok se graf učitava. */
     val match: MatchedPosition? = null,
+    /** Smer u odnosu na "gore" plana [pdrBuilding] (0 = gore). */
     val headingDeg: Float = 0f,
     /** Odstupanje telefona od pravca hoda (-180..180); null dok se premešten telefon smiruje. */
     val phoneOffsetDeg: Float? = 0f,
@@ -75,9 +85,28 @@ enum class MapMode(val building: IndoorBuilding?) {
     NTP(NtpPlan),
 }
 
-// Gde je kampus - za magnetsku deklinaciju (ista tačka kao projekcija u build_campus.py).
-private const val CAMPUS_LAT = 45.2455f
-private const val CAMPUS_LON = 19.85f
+/**
+ * Izbori na prekidaču Mape. Kad se po GPS-u zna zgrada u kojoj je korisnik ([here]), samo kampus,
+ * plan te zgrade i ono što je prikazano ([mode]); ostale zgrade su u meniju. Napolju, ili dok se
+ * ne zna, sve.
+ */
+internal fun shownModes(mode: MapMode, here: CampusBuilding?): List<MapMode> =
+    if (here == null) {
+        MapMode.entries
+    } else {
+        MapMode.entries.filter { it == MapMode.KAMPUS || it == mode || it.building?.buildingId == here.id }
+    }
+
+/** Odakle kreće ruta: PDR pozicija (NB), GPS lokacija (kampus) ili glavni ulaz NB-a. */
+enum class RouteStart { PDR, GPS, ENTRANCE }
+
+/** GPS lokacija lošija od ovoga se ne koristi za rutu (u zgradi luta desetinama metara). */
+private const val MAX_ROUTE_ACCURACY_M = 50f
+
+/** GPS ruta kreće sa staze ili sa ulaza, ne iz unutrašnjosti zgrade bez plana ili spojnog prolaza. */
+private val GPS_START_TYPES = setOf(NodeType.STAZA, NodeType.ULAZ)
+
+// Visina kampusa - za magnetsku deklinaciju (tačka je referentna tačka projekcije, CampusGeo).
 private const val CAMPUS_ALT_M = 80f
 
 /**
@@ -107,16 +136,22 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     var graph by mutableStateOf<BuildingGraph?>(null)
         private set
 
-    /** Magnetski azimut pravca "gore" na planu NB; 0 dok se kampus učitava. */
-    private var planUpAzimuthDeg = 0f
+    /** Magnetski azimut pravca "gore" na planu, po zgradi; prazno dok se kampus učitava. */
+    private var planUpAzimuths = mapOf<String, Float>()
 
-    /** Map-matching PDR pozicije na graf prizemlja Nastavnog bloka (kad se graf učita). */
+    /** Magnetski azimut "gore" plana na kome je PDR (0 dok se kampus učitava). */
+    private val planUpAzimuthDeg: Float get() = planUpAzimuths[state.pdrBuilding.buildingId] ?: 0f
+
+    /** Poslednji azimut sa senzora - da se smer preračuna kad se PDR premesti na drugi plan. */
+    private var lastAzimuthDeg: Float? = null
+
+    /** Map-matching PDR pozicije na graf sprata [PocUiState.pdrFloor] zgrade [PocUiState.pdrBuilding] (kad se graf učita). */
     private var matcher: MapMatcher? = null
 
     var mode by mutableStateOf(MapMode.NB)
         private set
 
-    /** Sprat koji Mapa prikazuje, po zgradi (podrazumevano prizemlje). PDR je samo u prizemlju NB. */
+    /** Sprat koji Mapa prikazuje, po zgradi (podrazumevano prizemlje). PDR je na spratu gde je start. */
     private var floors by mutableStateOf(mapOf<String, Int>())
 
     fun floorOf(building: IndoorBuilding): Int = floors[building.buildingId] ?: 0
@@ -134,6 +169,20 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Senzori za vreme praćenja (od Start do Stop). */
     private var session: PdrSensorSession? = null
 
+    /** GPS: radi dok je Mapa na ekranu ([onMapVisible]) i za vreme praćenja. */
+    private val gpsSession = GpsSession(application, ::onGpsFix)
+    private var mapVisible = false
+
+    /** Poslednja GPS lokacija; null dok GPS ne radi (nema dozvole, Mapa nije na ekranu i nema praćenja). */
+    var gps by mutableStateOf<GpsFix?>(null)
+        private set
+
+    private var buildingDetector: BuildingDetector? = null
+
+    /** Zgrada u kojoj je korisnik po GPS-u; null = napolju ili se ne zna. */
+    var currentBuilding by mutableStateOf<CampusBuilding?>(null)
+        private set
+
     /** Naziv sale (kao u rasporedu) ili zgrade; čuva se i dok se graf još učitava. */
     var destination by mutableStateOf<String?>(null)
         private set
@@ -145,18 +194,46 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         destination?.let { resolveTarget(it, graph, campus) }
     }
 
+    /** GPS lokacija dovoljno tačna za početak rute, na mapi kampusa (van nje ruta nema smisla). */
+    private val routeGps: GpsFix?
+        get() {
+            val campus = campus ?: return null
+            return gps?.takeIf {
+                it.accuracyM <= MAX_ROUTE_ACCURACY_M &&
+                    it.point.x in 0.0..campus.widthM.toDouble() && it.point.y in 0.0..campus.heightM.toDouble()
+            }
+        }
+
+    /** Odakle kreće [route]: PDR pozicija ima prednost (tačnija je u zgradi), pa GPS, pa glavni ulaz NB-a. */
+    val routeStart: RouteStart by derivedStateOf {
+        when {
+            state.rawPosition != null -> RouteStart.PDR
+            routeGps != null -> RouteStart.GPS
+            else -> RouteStart.ENTRANCE
+        }
+    }
+
     /**
-     * Ruta do odredišta: od pozicije na grafu (kroz bolji kraj njene ivice), inače od glavnog
-     * ulaza. Ponovo se računa pri svakom koraku - graf je mali, A* traje ispod milisekunde.
+     * Ruta do odredišta: od pozicije na grafu (kroz bolji kraj njene ivice), od GPS lokacije (preko
+     * najbliže staze ili ulaza), inače od glavnog ulaza. Ponovo se računa pri svakom koraku i
+     * lokaciji - graf je mali, A* traje ispod milisekunde.
      */
     val route: Route? by derivedStateOf {
         val graph = graph ?: return@derivedStateOf null
+        val campus = campus ?: return@derivedStateOf null
         val target = target ?: return@derivedStateOf null
         val match = state.shownMatch
         val raw = state.rawPosition
+        val gps = routeGps
         when {
             match != null -> graph.routeFrom(match.point, target.node.id)
-            raw != null -> graph.routeFrom(NbPlan.BUILDING_ID, 0, raw.x, raw.y, target.node.id)
+            raw != null -> graph.routeFrom(state.pdrBuilding.buildingId, state.pdrFloor, raw.x, raw.y, target.node.id)
+            gps != null -> graph.routeFrom(
+                CAMPUS_ID, 0,
+                (gps.point.x / campus.widthM).toFloat(), (gps.point.y / campus.heightM).toFloat(),
+                target.node.id,
+                startTypes = GPS_START_TYPES,
+            )
             else -> graph.route(NbPlan.ENTRANCE_ID, target.node.id)
         }
     }
@@ -165,13 +242,15 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val campus = loadCampus(application)
             this@PocViewModel.campus = campus
-            campus.placements()[NbPlan.BUILDING_ID]?.let {
-                val declination = GeomagneticField(CAMPUS_LAT, CAMPUS_LON, CAMPUS_ALT_M, System.currentTimeMillis()).declination
-                planUpAzimuthDeg = planUpMagneticAzimuthDeg(it, declination)
-            }
+            buildingDetector = BuildingDetector(campus)
+            val declination = GeomagneticField(
+                CampusGeo.REF_LAT.toFloat(), CampusGeo.REF_LON.toFloat(), CAMPUS_ALT_M, System.currentTimeMillis(),
+            ).declination
+            planUpAzimuths = campus.plans.mapValues { planUpMagneticAzimuthDeg(it.value.toPlacement(), declination) }
+            lastAzimuthDeg?.let(::onHeading)
             val graph = loadGraph(application, campus)
-            matcher = MapMatcher(graph, NbPlan.BUILDING_ID, floor = 0)
             this@PocViewModel.graph = graph
+            matcher = MapMatcher(graph, state.pdrBuilding.buildingId, state.pdrFloor)
             // Start postavljen dok se graf učitavao.
             state.rawPosition?.let { state = state.copy(match = matcher?.start(it.x, it.y)) }
         }
@@ -229,6 +308,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Smer za prikaz (azimut iz [walkingDirection]). */
     fun onHeading(azimuth: Float) {
+        lastAzimuthDeg = azimuth
         state = state.copy(
             headingDeg = normalizeDeg(azimuth - planUpAzimuthDeg),
             phoneOffsetDeg = walkingDirection.offset.toFloat().takeIf { walkingDirection.isAnchored },
@@ -246,7 +326,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun onStep(step: WalkingDirection.WalkStep) {
         var raw = state.rawPosition ?: return
-        val planScale = graph?.placement(NbPlan.BUILDING_ID)?.scale ?: return
+        val planScale = graph?.placement(state.pdrBuilding.buildingId)?.scale ?: return
         var match = state.match
         val redo = step.redoSteps.coerceAtMost(stepStarts.size)
         if (redo > 0) {
@@ -271,18 +351,35 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         state = state.copy(rawPosition = raw, match = match, steps = state.steps + 1)
     }
 
-    /** Start se postavlja na planu prizemlja Nastavnog bloka, pa Mapa prelazi na njega. */
+    /**
+     * Start se postavlja na prikazanom spratu zgrade sa planom. Sa kampusa Mapa prelazi na zgradu u
+     * kojoj je korisnik po GPS-u (ako ima plan), inače na zgradu prethodnog starta.
+     */
     fun togglePickStart() {
         state = state.copy(isPickingStart = !state.isPickingStart)
-        if (state.isPickingStart) {
-            mode = MapMode.NB
-            showFloor(NbPlan, 0)
+        if (state.isPickingStart && mode.building == null) {
+            val building = currentBuilding?.let { indoorBuilding(it.id) } ?: state.pdrBuilding
+            mode = MapMode.entries.first { it.building == building }
         }
     }
 
+    /** Start na prikazanom planu: PDR od sada radi na tom spratu te zgrade. */
     fun setStart(point: Offset) {
+        val building = mode.building ?: return
+        val floor = floorOf(building)
         stepStarts.clear()
-        state = state.copy(rawPosition = point, match = matcher?.start(point.x, point.y), isPickingStart = false)
+        if (building != state.pdrBuilding || floor != state.pdrFloor) {
+            matcher = graph?.let { MapMatcher(it, building.buildingId, floor) }
+        }
+        state = state.copy(
+            pdrBuilding = building,
+            pdrFloor = floor,
+            rawPosition = point,
+            match = matcher?.start(point.x, point.y),
+            isPickingStart = false,
+        )
+        // Smer u odnosu na "gore" novog plana.
+        lastAzimuthDeg?.let(::onHeading)
     }
 
     fun toggleSnapToGraph() {
@@ -291,6 +388,30 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleTracking() {
         if (state.isTracking) stopTracking() else startTracking()
+    }
+
+    /** Mapa je na ekranu (RESUMED) ili nije - GPS radi dok je na ekranu. */
+    fun onMapVisible(visible: Boolean) {
+        mapVisible = visible
+        updateGps()
+    }
+
+    /** Posle pitanja za dozvolu lokacije (odobrena ili ne). */
+    fun onLocationPermissionResult() = updateGps()
+
+    private fun updateGps() {
+        if (mapVisible || state.isTracking) {
+            gpsSession.start()
+        } else {
+            gpsSession.stop()
+            gps = null
+        }
+    }
+
+    private fun onGpsFix(fix: GpsFix) {
+        gps = fix
+        val detector = buildingDetector ?: return
+        if (detector.onFix(fix)) currentBuilding = detector.current
     }
 
     private fun startTracking() {
@@ -309,6 +430,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         ).also { it.start() }
         PdrTrackingService.start(app)
         state = state.copy(isTracking = true)
+        updateGps()
     }
 
     private fun stopTracking() {
@@ -318,15 +440,25 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         recorder?.close()
         recorder = null
         state = state.copy(isTracking = false)
+        updateGps()
     }
 
-    override fun onCleared() = stopTracking()
+    override fun onCleared() {
+        stopTracking()
+        gpsSession.stop()
+    }
 
     // Smer se zadržava - dolazi sa senzora, nije deo sesije praćenja.
     fun reset() {
         stopTracking()
         walkingDirection.reset()
         stepStarts.clear()
-        state = PocUiState(headingDeg = state.headingDeg, phoneOffsetDeg = 0f, snapToGraph = state.snapToGraph)
+        state = PocUiState(
+            pdrBuilding = state.pdrBuilding,
+            pdrFloor = state.pdrFloor,
+            headingDeg = state.headingDeg,
+            phoneOffsetDeg = 0f,
+            snapToGraph = state.snapToGraph,
+        )
     }
 }

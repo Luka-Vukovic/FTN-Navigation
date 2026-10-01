@@ -42,6 +42,7 @@ import build_kula  # noqa: E402
 import build_nb  # noqa: E402
 import build_ntp  # noqa: E402 - plan NTP-a: viewport i ulazi
 
+# Projekcija (REF_*, M_PER_DEG_*, X_MIN, Y_MIN) je prepisana u aplikaciju za GPS: campus/CampusGeo.kt - menjati oba.
 REF_LAT, REF_LON = 45.2455, 19.8500
 M_PER_DEG_LAT = 110540.0
 M_PER_DEG_LON = 111320.0 * math.cos(math.radians(REF_LAT))
