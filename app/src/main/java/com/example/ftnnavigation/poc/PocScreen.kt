@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +38,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -49,12 +54,15 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.ftnnavigation.campus.CampusBuilding
 import com.example.ftnnavigation.campus.GpsFix
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,6 +71,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -70,25 +80,32 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.campus.BuildingCategory
+import com.example.ftnnavigation.campus.ROOM_HOURS
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
+import com.example.ftnnavigation.campus.searchDestinations
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
@@ -99,6 +116,9 @@ import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.schedule.AcademicCalendar
+import com.example.ftnnavigation.schedule.RoomSchedule
+import com.example.ftnnavigation.schedule.ScheduleData
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
 import kotlin.math.roundToInt
@@ -109,9 +129,16 @@ import kotlin.math.roundToInt
  * praćenja); dozvola za lokaciju se traži pri otvaranju Mape.
  */
 @Composable
-fun PocRoute(viewModel: PocViewModel = viewModel()) {
+fun PocRoute(
+    viewModel: PocViewModel = viewModel(),
+    scheduleData: ScheduleData? = null,
+    calendar: AcademicCalendar? = null,
+) {
     val state = viewModel.state
     val context = LocalContext.current
+    val roomSchedule = remember(scheduleData, calendar) {
+        if (scheduleData != null && calendar != null) RoomSchedule(scheduleData, calendar) else null
+    }
 
     PdrHeadingEffect(
         enabled = !state.isTracking,
@@ -142,6 +169,7 @@ fun PocRoute(viewModel: PocViewModel = viewModel()) {
         target = viewModel.target,
         route = viewModel.route,
         routeStart = viewModel.routeStart,
+        roomSchedule = roomSchedule,
         onModeChange = viewModel::selectMode,
         onFloorChange = viewModel::selectFloor,
         onDestinationChange = viewModel::selectDestination,
@@ -166,6 +194,7 @@ fun PocScreen(
     target: RouteTarget?,
     route: Route?,
     routeStart: RouteStart,
+    roomSchedule: RoomSchedule?,
     onModeChange: (MapMode) -> Unit,
     onFloorChange: (Int) -> Unit,
     onDestinationChange: (String?) -> Unit,
@@ -178,6 +207,8 @@ fun PocScreen(
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     // Zgrada čiji je natpis držan na mapi kampusa - pop-up sa opisom.
     var infoBuildingId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Sala čiji je natpis držan na planu zgrade - pop-up sa radnim vremenom / zauzetošću.
+    var infoRoomId by rememberSaveable { mutableStateOf<String?>(null) }
     Scaffold(
         topBar = {
             FtnTopAppBar(
@@ -218,6 +249,7 @@ fun PocScreen(
                             headingDeg = state.headingDeg,
                             isPickingStart = state.isPickingStart,
                             onTap = onMapTap,
+                            onRoomLongPress = { infoRoomId = it.id },
                             // Širok plan: bez ovoga birač sprata prekriva kraj zgrade.
                             modifier = Modifier.fillMaxSize().padding(end = FLOOR_SELECTOR_SPACE),
                         )
@@ -303,6 +335,22 @@ fun PocScreen(
             onDismiss = { infoBuildingId = null },
         )
     }
+    val infoRoom = infoRoomId?.let { graph?.node(it) }
+    val infoRoomBuilding = infoRoom?.let { indoorBuilding(it.buildingId) }
+    val infoRoomName = infoRoom?.name
+    if (infoRoomBuilding != null && infoRoomName != null) {
+        RoomInfoDialog(
+            name = infoRoomName,
+            location = stringResource(infoRoomBuilding.locationRes(), floorName(infoRoom.floor)),
+            hours = ROOM_HOURS[infoRoomName],
+            schedule = roomSchedule,
+            onRoute = {
+                onDestinationChange(infoRoomName)
+                infoRoomId = null
+            },
+            onDismiss = { infoRoomId = null },
+        )
+    }
 }
 
 /**
@@ -321,6 +369,7 @@ private fun FloorPlan(
     headingDeg: Float,
     isPickingStart: Boolean,
     onTap: (Offset) -> Unit,
+    onRoomLongPress: (Node) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val buildingId = building.buildingId
@@ -328,6 +377,12 @@ private fun FloorPlan(
     // Zum ostaje pri promeni sprata iste zgrade.
     val zoom = rememberZoomPanState(maxScale = 6f, buildingId)
     val floorNames = ALL_FLOORS.associateWith { floorName(it) }
+    val colors = MaterialTheme.colorScheme
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface, lineHeight = TextUnit.Unspecified)
+    val haptics = LocalHapticFeedback.current
+    val currentOnRoomLongPress by rememberUpdatedState(onRoomLongPress)
+    val rooms = remember(graph, buildingId, floor) { graph?.roomsOn(buildingId, floor).orEmpty() }
 
     Box(
         modifier = modifier
@@ -340,10 +395,29 @@ private fun FloorPlan(
             Modifier
                 .aspectRatio(painter.intrinsicSize.width / painter.intrinsicSize.height)
                 .zoomPanLayer(zoom)
-                .pointerInput(isPickingStart, onTap) {
-                    if (!isPickingStart) return@pointerInput
-                    detectTapGestures { tap ->
-                        onTap(Offset(tap.x / size.width, tap.y / size.height))
+                // Posle zoomPanLayer (graphicsLayer): dodir stiže u koordinatama plana (zum i pomeraj već skinuti).
+                .pointerInput(isPickingStart, onTap, rooms, building) {
+                    if (isPickingStart) {
+                        detectTapGestures { tap ->
+                            onTap(Offset(tap.x / size.width, tap.y / size.height))
+                        }
+                    } else {
+                        detectTapGestures(
+                            onLongPress = { at ->
+                                val k = 1f / zoom.scale
+                                val slop = LABEL_TOUCH_SLOP.toPx() * k
+                                val hit = placeRoomLabels(rooms, building, size.toSize(), textMeasurer, labelStyle)
+                                    .filter {
+                                        Rect(it.topLeft, it.layout.size.toSize()).inflate(slop).contains(at) ||
+                                            (it.dot - at).getDistance() <= ROOM_DOT_RADIUS.toPx() * k + slop
+                                    }
+                                    .minByOrNull { (it.topLeft + it.layout.size.toSize().center - at).getDistanceSquared() }
+                                if (hit != null) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    currentOnRoomLongPress(hit.node)
+                                }
+                            },
+                        )
                     }
                 },
         ) {
@@ -353,12 +427,9 @@ private fun FloorPlan(
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize(),
             )
-            val colors = MaterialTheme.colorScheme
-            val textMeasurer = rememberTextMeasurer()
             if (graph != null) {
-                val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface, lineHeight = TextUnit.Unspecified)
                 Canvas(Modifier.fillMaxSize()) {
-                    drawGraph(graph, building, floor, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / zoom.scale)
+                    drawGraph(graph, building, floor, rooms, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / zoom.scale)
                 }
             }
             if (route != null) {
@@ -377,7 +448,7 @@ private fun FloorPlan(
                 }
             }
             if (position != null) {
-                val color = MaterialTheme.colorScheme.primary
+                val color = colors.primary
                 Canvas(Modifier.fillMaxSize()) {
                     if (rawPosition != null && rawPosition != position) {
                         val raw = Offset(rawPosition.x * size.width, rawPosition.y * size.height)
@@ -416,11 +487,46 @@ private fun floorName(floor: Int): String = when {
     else -> stringResource(R.string.floor_number, floor)
 }
 
-/** Ivice i čvorovi jednog sprata zgrade; sale imaju natpis sa nazivom iz rasporeda. */
+/** Koliko oko natpisa sale se još računa kao držanje natpisa. */
+private val LABEL_TOUCH_SLOP = 8.dp
+
+private val ROOM_DOT_RADIUS = 5.dp
+
+/** Natpis sale izmeren i smešten u px plana (pre zuma), za crtanje i za držanje prstom; [dot] je tačka sale. */
+private data class PlacedRoomLabel(val node: Node, val layout: TextLayoutResult, val topLeft: Offset, val dot: Offset)
+
+/** Sale sa nazivom na spratu [floor] zgrade [buildingId]. */
+private fun BuildingGraph.roomsOn(buildingId: String, floor: Int): List<Node> =
+    nodes.filter { it.buildingId == buildingId && it.floor == floor && it.type == NodeType.PROSTORIJA && it.name != null }
+
+/**
+ * Natpisi sala na planu veličine [size]. Natpis je deo plana (raste sa zumom, kao tekst na pravom planu) da bi
+ * stao u sobu, i na strani sobe dalje od hodnika, da ga ivica ka hodniku ne preseca.
+ */
+private fun Density.placeRoomLabels(
+    rooms: List<Node>,
+    building: IndoorBuilding,
+    size: Size,
+    textMeasurer: TextMeasurer,
+    labelStyle: TextStyle,
+): List<PlacedRoomLabel> {
+    val labelHeight = building.labelHeight
+    val style = labelStyle.copy(fontSize = (size.height * labelHeight).toSp())
+    val gap = size.height * labelHeight / 2
+    return rooms.map { node ->
+        val dot = Offset(node.x * size.width, node.y * size.height)
+        val label = textMeasurer.measure(building.label(node.name.orEmpty()), style)
+        val dy = if (node.y < 0.5f) -gap - label.size.height else gap
+        PlacedRoomLabel(node, label, dot + Offset(-label.size.width / 2f, dy), dot)
+    }
+}
+
+/** Ivice i čvorovi jednog sprata zgrade; sale ([rooms]) imaju natpis sa nazivom iz rasporeda. */
 private fun DrawScope.drawGraph(
     graph: BuildingGraph,
     building: IndoorBuilding,
     floor: Int,
+    rooms: List<Node>,
     edgeColor: Color,
     roomColor: Color,
     textMeasurer: TextMeasurer,
@@ -438,21 +544,14 @@ private fun DrawScope.drawGraph(
         val center = node.toOffset()
         when (node.type) {
             NodeType.HODNIK, NodeType.VRATA -> drawCircle(edgeColor.copy(alpha = 0.5f), radius = 3.dp.toPx() * k, center = center)
-            NodeType.PROSTORIJA -> {
-                drawCircle(roomColor, radius = 5.dp.toPx() * k, center = center)
-                // Natpis je deo plana (raste sa zumom, kao tekst na pravom planu) da bi stao u sobu.
-                val labelHeight = building.labelHeight
-                val style = labelStyle.copy(fontSize = (size.height * labelHeight).toSp())
-                val label = textMeasurer.measure(building.label(node.name.orEmpty()), style)
-                // Natpis na strani sobe dalje od hodnika, da ga ivica ka hodniku ne preseca.
-                val gap = size.height * labelHeight / 2
-                val dy = if (node.y < 0.5f) -gap - label.size.height else gap
-                drawText(label, topLeft = center + Offset(-label.size.width / 2f, dy))
-            }
+            NodeType.PROSTORIJA -> drawCircle(roomColor, radius = ROOM_DOT_RADIUS.toPx() * k, center = center)
             NodeType.STEPENISTE, NodeType.LIFT, NodeType.ULAZ, NodeType.PROLAZ ->
                 drawCircle(edgeColor, radius = 5.dp.toPx() * k, center = center)
             NodeType.STAZA, NodeType.ZGRADA -> Unit // ne postoje na planu zgrade
         }
+    }
+    for (label in placeRoomLabels(rooms, building, size, textMeasurer, labelStyle)) {
+        drawText(label.layout, topLeft = label.topLeft)
     }
 }
 
@@ -616,8 +715,9 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
 }
 
 /**
- * Izbor odredišta: zgrade FTN-a, studentske službe i sale Nastavnog bloka. Koristi ga i
- * izmena događaja (mesto događaja) - tada [noneLabel] dodaje stavku bez mesta ([onSelect] null).
+ * Izbor odredišta: zgrade FTN-a, studentske službe i sale, sa pretragom po nazivu
+ * ([searchDestinations]). Koristi ga i izmena događaja (mesto događaja) - tada [noneLabel] dodaje
+ * stavku bez mesta ([onSelect] null).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -631,30 +731,65 @@ internal fun DestinationSheet(
     title: String = stringResource(R.string.route_destinations_title),
     noneLabel: String? = null,
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val sections = listOf(
+        R.string.route_destinations_buildings to buildings,
+        R.string.route_destinations_services to services,
+        R.string.route_destinations_rooms to rooms,
+    ).map { (header, names) -> header to searchDestinations(names, query) }
+    val focusManager = LocalFocusManager.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp),
-        )
-        LazyColumn(Modifier.navigationBarsPadding()) {
-            if (noneLabel != null) {
-                item { DestinationItem(noneLabel, isSelected = selected == null, onClick = { onSelect(null) }) }
-            }
-            item { SheetSectionHeader(stringResource(R.string.route_destinations_buildings)) }
-            items(buildings) { building ->
-                DestinationItem(building, isSelected = building == selected, onClick = { onSelect(building) })
-            }
-            item { SheetSectionHeader(stringResource(R.string.route_destinations_services)) }
-            items(services) { service ->
-                DestinationItem(service, isSelected = service == selected, onClick = { onSelect(service) })
-            }
-            item { SheetSectionHeader(stringResource(R.string.route_destinations_rooms)) }
-            items(rooms) { room ->
-                DestinationItem(room, isSelected = room == selected, onClick = { onSelect(room) })
+        // Puna visina, da se prozor ne skuplja dok se kuca (lista se skraćuje).
+        Column(Modifier.fillMaxHeight().navigationBarsPadding().imePadding()) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp),
+            )
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text(stringResource(R.string.route_destinations_search)) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(
+                                painterResource(R.drawable.ic_close),
+                                contentDescription = stringResource(R.string.route_destinations_search_clear),
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 4.dp),
+            )
+            LazyColumn(Modifier.weight(1f)) {
+                if (noneLabel != null && query.isBlank()) {
+                    item { DestinationItem(noneLabel, isSelected = selected == null, onClick = { onSelect(null) }) }
+                }
+                for ((header, names) in sections) {
+                    if (names.isEmpty()) continue
+                    item(key = header) { SheetSectionHeader(stringResource(header)) }
+                    items(names) { name ->
+                        DestinationItem(name, isSelected = name == selected, onClick = { onSelect(name) })
+                    }
+                }
+                if (sections.all { it.second.isEmpty() }) {
+                    item {
+                        Text(
+                            stringResource(R.string.route_destinations_no_results, query.trim()),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        )
+                    }
+                }
             }
         }
     }
@@ -935,6 +1070,7 @@ private fun PocScreenPreview() {
             target = null,
             route = null,
             routeStart = RouteStart.PDR,
+            roomSchedule = null,
             onModeChange = {},
             onFloorChange = {},
             onDestinationChange = {},

@@ -62,8 +62,22 @@ private fun hours(vararg ranges: String): List<TimeRange> = ranges.map { range -
     TimeRange(LocalTime.parse(start), LocalTime.parse(end))
 }
 
+/** Samo radnim danima. */
+private fun weekdays(vararg ranges: String) = OpeningHours(weekday = hours(*ranges), saturday = emptyList(), sunday = emptyList())
+
 // Radno vreme (korisnik, 29.09.2026).
-private val OFFICE_HOURS = OpeningHours(weekday = hours("08:00-14:00"), saturday = emptyList(), sunday = emptyList())
+private val OFFICE_HOURS = weekdays("08:00-14:00")
+
+/**
+ * Radno vreme prostorija na planovima zgrada, po nazivu sale (pop-up pri držanju natpisa sale; korisnik,
+ * 02.10.2026). Praznici se ne gledaju.
+ */
+val ROOM_HOURS: Map<String, OpeningHours> = mapOf(
+    "Skriptarnica" to weekdays("07:00-14:30"),
+    "Biblioteka" to weekdays("07:00-19:00"),
+    "Čitaonica" to hours("07:00-22:00").let { OpeningHours(weekday = it, saturday = it, sunday = it) },
+    "Studentska služba" to weekdays("11:00-13:00"),
+)
 
 /** Po [CampusBuilding.id]; svaka zgrada sa nazivom treba da ima unos (proverava `CampusGraphTest`). */
 val BUILDING_INFO: Map<String, BuildingInfo> = mapOf(
@@ -95,6 +109,6 @@ val BUILDING_INFO: Map<String, BuildingInfo> = mapOf(
     "POSTA" to BuildingInfo(
         R.string.building_info_posta,
         null,
-        OpeningHours(weekday = hours("07:30-14:00"), saturday = emptyList(), sunday = emptyList()),
+        weekdays("07:30-14:00"),
     ),
 )

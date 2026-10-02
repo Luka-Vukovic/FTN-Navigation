@@ -233,10 +233,10 @@ private fun WeekHeader(
 
 /**
  * Napomene za dan iz kalendara nastave: praznici, nadoknade, ispitni rokovi, van semestra,
- * ili raspored za drugi semestar.
+ * ili raspored za drugi semestar ([timetableSemester] null = bez te napomene).
  */
 @Composable
-private fun dayNotes(info: DayInfo, timetableSemester: SemesterKind): List<String> {
+internal fun dayNotes(info: DayInfo, timetableSemester: SemesterKind?): List<String> {
     val accusative = stringArrayResource(R.array.days_accusative)
     val notes = info.special.map { range ->
         when (range.type) {
@@ -249,7 +249,7 @@ private fun dayNotes(info: DayInfo, timetableSemester: SemesterKind): List<Strin
     val semester = info.semester
     return when {
         semester == null && info.special.isEmpty() -> listOf(stringResource(R.string.schedule_out_of_semester))
-        semester != null && semester != timetableSemester -> notes + stringResource(
+        timetableSemester != null && semester != null && semester != timetableSemester -> notes + stringResource(
             R.string.schedule_other_semester,
             stringResource(if (timetableSemester == SemesterKind.ZIMSKI) R.string.semester_winter else R.string.semester_summer),
         )

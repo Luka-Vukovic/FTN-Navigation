@@ -97,7 +97,7 @@ fun BuildingInfoDialog(
 
 /** Da li je sada otvoreno, pa radno vreme po tipu dana (današnji red podebljan). */
 @Composable
-private fun OpeningHoursSection(hours: OpeningHours, modifier: Modifier = Modifier) {
+internal fun OpeningHoursSection(hours: OpeningHours, modifier: Modifier = Modifier) {
     val now by rememberNow()
     val status = hours.status(now)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {

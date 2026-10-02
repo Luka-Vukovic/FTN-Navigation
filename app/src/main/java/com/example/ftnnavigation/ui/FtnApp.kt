@@ -153,7 +153,7 @@ fun FtnApp() {
                     onOpenNotifications = { navController.navigate(NotificationsRoute) },
                 )
             }
-            composable<MapRoute> { PocRoute(mapViewModel) }
+            composable<MapRoute> { PocRoute(mapViewModel, scheduleViewModel.data, scheduleViewModel.calendar) }
             composable<ScheduleRoute> {
                 ScheduleScreen(
                     scheduleViewModel,

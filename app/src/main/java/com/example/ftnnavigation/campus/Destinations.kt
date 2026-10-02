@@ -26,6 +26,52 @@ private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
  */
 private val ROOM_ALIASES = mapOf("204A" to "204", "205A" to "205", "208A" to "208", "O12" to "012")
 
+/** Oznaka sale iz rasporeda kako je ucrtana na planu (O12 -> 012, 204A -> 204), inače ista oznaka. */
+fun canonicalRoom(room: String): String = room.trim().let { ROOM_ALIASES[it] ?: it }
+
+/**
+ * Odredišta iz [names] koja odgovaraju pretrazi [query], bolja poklapanja prva: ceo naziv, pa naziv koji
+ * počinje upitom, pa ostali (u istom redosledu kao [names]). Prazan upit vraća sve.
+ *
+ * Bez obzira na velika slova, kvačice (svecana -> Svečana), razmake i crtice (ah9 -> AH9, scenlab ->
+ * Scen-LAB); reči upita mogu biti bilo kojim redom (sala svecana). Sala se nalazi i po drugoj oznaci
+ * (O12 -> 012, 204A -> 204).
+ */
+fun searchDestinations(names: List<String>, query: String): List<String> {
+    val words = query.split(' ').map(::searchKey).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return names
+    val whole = words.joinToString("")
+    val aliases = ROOM_ALIASES.entries.groupBy({ it.value }, { searchKey(it.key) })
+    return names
+        .mapNotNull { name ->
+            val keys = listOf(searchKey(name)) + aliases[name].orEmpty()
+            val rank = keys.minOf { key ->
+                when {
+                    key == whole -> 0
+                    key.startsWith(whole) -> 1
+                    words.all { it in key } -> 2
+                    else -> 3
+                }
+            }
+            if (rank < 3) name to rank else null
+        }
+        .sortedBy { it.second }
+        .map { it.first }
+}
+
+/** Naziv za poređenje u pretrazi: mala slova, bez kvačica, razmaka i znakova (Scen-LAB -> scenlab). */
+private fun searchKey(text: String): String = buildString {
+    for (c in text.lowercase()) {
+        when (c) {
+            'č', 'ć' -> append('c')
+            'š' -> append('s')
+            'ž' -> append('z')
+            'đ' -> append("dj")
+            else -> if (c.isLetterOrDigit()) append(c)
+        }
+    }
+}
+
 /** Naziv mesta van kampusa za salu (MF-27 -> Medicinski fakultet), ili null. */
 fun offCampusPlaceOf(room: String): String? = OFF_CAMPUS.entries.find { room.trim().startsWith(it.key) }?.value
 
@@ -66,7 +112,7 @@ data class RouteTarget(val node: Node, val building: CampusBuilding?, val approx
  * nazivu, ili zgrada sale po oznaci ([buildingOfRoom]). Null ako se ne zna gde je.
  */
 fun resolveTarget(destination: String, graph: BuildingGraph, campus: CampusData): RouteTarget? {
-    (graph.room(destination) ?: ROOM_ALIASES[destination.trim()]?.let(graph::room))?.let { room ->
+    (graph.room(destination) ?: graph.room(canonicalRoom(destination)))?.let { room ->
         return RouteTarget(room, campus.building(room.buildingId), approximate = false)
     }
     campus.buildingByName(destination)?.let { building ->

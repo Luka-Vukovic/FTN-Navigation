@@ -156,6 +156,9 @@
     <string name="route_destinations_buildings">Zgrade FTN-a</string>
     <string name="route_destinations_services">Studentske službe</string>
     <string name="route_destinations_rooms">Sale</string>
+    <string name="route_destinations_search">Pretraži po nazivu</string>
+    <string name="route_destinations_search_clear">Obriši pretragu</string>
+    <string name="route_destinations_no_results">Nema odredišta za „%1$s“</string>
     <string name="route_in_building">Zgrada: %1$s</string>
     <string name="route_to_building">Sala nije ucrtana · ruta do zgrade %1$s</string>
     <string name="route_summary">~%1$d min · %2$d m</string>
@@ -190,6 +193,18 @@
     <!-- "otvara u ponedeljak u 08:00" -->
     <string name="building_info_opens_day">Sada zatvoreno · otvara u %1$s u %2$s</string>
     <string name="building_info_never_open">Ne radi</string>
+
+    <!-- Pop-up o prostoriji (držanje natpisa sale na planu) -->
+    <string name="room_info_occupancy">Zauzetost po rasporedu</string>
+    <string name="room_info_previous_day">Prethodni dan</string>
+    <string name="room_info_next_day">Sledeći dan</string>
+    <string name="room_info_busy_until">Sada zauzeta · do %1$s</string>
+    <string name="room_info_free_until">Sada slobodna · do %1$s</string>
+    <string name="room_info_free_rest_of_day">Sada slobodna · do kraja dana</string>
+    <string name="room_info_no_classes_day">Nema časova ovog dana.</string>
+    <string name="room_info_semester_missing">Rasporedi za ovaj semestar još nisu učitani.</string>
+    <string name="room_info_occupancy_note">Po zvaničnim rasporedima svih smerova. Ispiti, konsultacije i nadoknade nisu uključeni.</string>
+    <string name="room_info_no_data">Za ovu prostoriju nema rasporeda ni radnog vremena.</string>
     <string name="building_info_nb">Glavna zgrada fakulteta, sa glavnim ulazom sa Trga Dositeja Obradovića. Ovde su učionice 101–312, računarske laboratorije L1–L6 i sale AH, kao i Svečana sala, Studentska služba i portirnica. Iznutra je povezana sa Kulom i Amfiteatrima.</string>
     <string name="building_info_amf">Zgrada sa velikim salama A1–A4 za predavanja, salama AR0–AR6, Bibliotekom i Skriptarnicom. Iznutra je povezana sa Nastavnim blokom, Kulom, F-blokom i ITC-om, pa se do njih ne mora napolje. U zgradi je i pošta, sa ulazom spolja sa zapadne strane.</string>
     <string name="building_info_f">Ovde su sale F 3xx. Do F-bloka se iznutra stiže kroz Amfiteatre.</string>
