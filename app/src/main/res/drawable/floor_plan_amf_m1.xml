@@ -2,7 +2,7 @@
 <!--
     Suteren (-1) - Amfiteatri. GENERISANO skriptom tools/zgrade/build_amf.py (ne menjati ručno).
     Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
-    (zajednički sistem NB, AMF i Kule, 1 px = 0.1014 m), grupa ih pomera u viewport.
+    (zajednički sistem NB, AMF, Kule i F-bloka, 1 px = 0.1014 m), grupa ih pomera u viewport.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="820dp"
@@ -37,7 +37,7 @@
         <path
             android:strokeColor="#FF455A64"
             android:strokeWidth="1.5"
-            android:pathData="M30,-30 L170,-30 L170,0 L30,0 Z M170,-65 L203,-65 L203,-30 L170,-30 Z M285,-65 L317,-65 L317,-17 L285,-17 Z M317,-65 L347,-65 L347,-17 L317,-17 Z M347,-65 L378,-65 L378,-17 L347,-17 Z M378,-65 L410,-65 L410,-17 L378,-17 Z M410,-65 L430,-65 L430,-17 L410,-17 Z M430,-65 L443,-65 L443,-17 L430,-17 Z M443,-65 L480,-65 L480,-17 L443,-17 Z M480,-65 L518,-65 L518,-17 L480,-17 Z M587,-65 L660,-65 L660,-17 L587,-17 Z M660,-65 L765,-65 L765,-17 L660,-17 Z M765,-65 L800,-65 L800,-17 L765,-17 Z M800,-65 L832,-65 L832,-17 L800,-17 Z M170,0 L230,0 L230,170 L170,170 Z M170,170 L205,170 L205,207 L170,207 Z M205,170 L230,170 L230,207 L205,207 Z M285,3 L402,3 L402,43 L285,43 Z M285,43 L402,43 L402,207 L285,207 Z M732,3 L832,3 L832,207 L732,207 Z" />
+            android:pathData="M30,-30 L170,-30 L170,0 L30,0 Z M170,-65 L203,-65 L203,-30 L170,-30 Z M285,-65 L317,-65 L317,-17 L285,-17 Z M317,-65 L347,-65 L347,-17 L317,-17 Z M347,-65 L378,-65 L378,-17 L347,-17 Z M378,-65 L410,-65 L410,-17 L378,-17 Z M410,-65 L430,-65 L430,-17 L410,-17 Z M430,-65 L443,-65 L443,-17 L430,-17 Z M443,-65 L480,-65 L480,-17 L443,-17 Z M480,-65 L518,-65 L518,-17 L480,-17 Z M587,-65 L660,-65 L660,-17 L587,-17 Z M660,-65 L765,-65 L765,-17 L660,-17 Z M765,-65 L800,-65 L800,-17 L765,-17 Z M800,-65 L832,-65 L832,-17 L800,-17 Z M170,0 L230,0 L230,170 L170,170 Z M170,170 L205,170 L205,207 L170,207 Z M205,170 L230,170 L230,207 L205,207 Z M266,183 L285,183 L285,207 L266,207 Z M285,3 L402,3 L402,43 L285,43 Z M285,43 L402,43 L402,207 L285,207 Z M732,3 L832,3 L832,207 L732,207 Z" />
 
         <!-- Spoljni zid -->
         <path

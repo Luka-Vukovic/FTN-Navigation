@@ -2,7 +2,7 @@
 <!--
     3. sprat - Kula. GENERISANO skriptom tools/zgrade/build_kula.py (ne menjati ručno).
     Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
-    (zajednički sistem NB, AMF i Kule, 1 px = 0.1014 m), grupa ih pomera u viewport.
+    (zajednički sistem NB, AMF, Kule i F-bloka, 1 px = 0.1014 m), grupa ih pomera u viewport.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="280dp"

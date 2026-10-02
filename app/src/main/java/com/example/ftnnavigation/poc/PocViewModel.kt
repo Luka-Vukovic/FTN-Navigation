@@ -32,6 +32,7 @@ import com.example.ftnnavigation.graph.MapMatcher
 import com.example.ftnnavigation.graph.MatchedPosition
 import com.example.ftnnavigation.graph.AmfPlan
 import com.example.ftnnavigation.graph.IndoorBuilding
+import com.example.ftnnavigation.graph.FPlan
 import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
@@ -61,7 +62,9 @@ data class PocUiState(
     /** Odstupanje telefona od pravca hoda (-180..180); null dok se premešten telefon smiruje. */
     val phoneOffsetDeg: Float? = 0f,
     val steps: Int = 0,
-    val stepLengthM: Float = 0.7f, // TODO: kalibrisati merenjem 20 m + brojanjem koraka
+    // Teren 02.10.2026: hodnik III sprata NTP-a (38,3 m) = 46 i 48 detektovanih koraka (01.10. 50) -> ~0,8 m.
+    // Korak korisnika (visok); drugima će biti predug - kandidat za podešavanje.
+    val stepLengthM: Float = 0.8f,
     val isTracking: Boolean = false,
     val isPickingStart: Boolean = false,
     /** Prikaz i ruta sa grafa (map-matching); isključeno = čist PDR (provera smera hoda). */
@@ -83,6 +86,7 @@ enum class MapMode(val building: IndoorBuilding?) {
     AMF(AmfPlan),
     KULA(KulaPlan),
     NTP(NtpPlan),
+    F(FPlan),
 }
 
 /**

@@ -175,4 +175,12 @@ class NbGraphTest {
             assertTrue(name, hypot(pa.x - ps.x, pa.y - ps.y) < hypot(pb.x - ps.x, pb.y - ps.y))
         }
     }
+
+    /** Teren 02.10.2026: 012 je između 014 i 016 (prvo, 01.10., pretpostavljeno kao desni deo 015). */
+    @Test
+    fun room012_between014And016() {
+        val (a, b, c) = listOf("014", "012", "016").map { checkNotNull(graph.room(it)) { it } }
+        assertEquals(0, b.floor)
+        assertTrue(a.x < b.x && b.x < c.x)
+    }
 }

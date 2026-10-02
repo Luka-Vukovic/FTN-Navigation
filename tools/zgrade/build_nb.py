@@ -27,7 +27,9 @@ Teren 01.10.2026 (korisnik + fotografija evakuacionog plana I sprata):
   - na I-IV spratu pored stepeništa su toaleti (FtnGO: 113/110, 212/209, 316/313, 412/410 - nisu u
     rasporedu), malo uvučeni: između hodnika i stepeništa/toaleta je hol,
   - AH6 i AH7 su podeljeni na pola: AH6A i AH7A su polovine bliže stepeništu,
-  - 012 ("O12" u rasporedu) je u prizemlju blizu 013/014 - PRETPOSTAVKA: desni deo bloka 015.
+  - 012 ("O12" u rasporedu) je u prizemlju blizu 013/014 - prvo (01.10.) stavljeno kao desni deo bloka 015;
+    teren 02.10.2026: "012 je između 016 i 014" - FtnGO tu nema sobu, pa je prostor 014-016 podeljen na tri
+    (širine su PRETPOSTAVKA), a 015 je opet cele širine kao na FtnGO-u.
 """
 
 import argparse
@@ -105,7 +107,7 @@ def floor_0():
             R(416, 452, 373, 407, "018A"),
             *row(311, 378, [(692, 727, None), (727, 760, "008")]),
             R(760, 1038, 311, 405, "Svečana sala"),
-            *row(456, 519, [(416, 452, "015"), (452, 487, "012"), (487, 520, "013"), (520, 554, "014"), (554, 589, "016"),
+            *row(456, 519, [(416, 487, "015"), (487, 520, "013"), (520, 543, "014"), (543, 566, "012"), (566, 589, "016"),
                             (589, 618, "017"), (618, 645, "Portir"), (688, 760, None),
                             (760, 1003, "Studentska služba"), (1003, 1038, "002")]),
         ],

@@ -21,7 +21,10 @@ samo pregrade soba u sredini) - crta se jedan "tipičan sprat". Brojevi sala iz 
 (NTP-307...) su na IZMIŠLJENIM mestima na pravom spratu (planovi nemaju brojeve), po šemi
 SLOTS ispod. Na planu prizemlja piše L1, L2, L4, LAB, AMFITEATAR: NTP-L3 = LAB je pretpostavka.
 NTP-A NIJE taj amfiteatar: u prizemlju je, ali u poslovnom delu NTP-a (teren 01.10.2026, korisnik
-nacrtao na mapi kampusa - NTP_A_CAMPUS); do njega se ide kroz predvorje "ULAZ - FTN" (PRETPOSTAVKA).
+nacrtao na mapi kampusa); do njega se ide kroz predvorje "ULAZ - FTN" (PRETPOSTAVKA). Teren 02.10.2026:
+korisnik ga je nacrtao ponovo, na planu - poravnat je sa planom (paralelno/upravno sa ostalim zidovima) i
+nije uz zapadni zid zgrade (NTP_A); prvi crtež (na mapi kampusa) je bio zarotiran i uz zid.
+Evakuacioni putevi se ne koriste (korisnik, 02.10.2026): terasa V sprata do desnog jezgra je samo crtež.
 
 Smeštaj u kampus (M_PER_PX, PLAN_TIP, plan_transform; koristi ga i build_campus.py): donji desni vrh
 plana -> severni teme OSM obrisa, dole na planu (red kancelarija, parking) uz severoistočni zid, dijagonala
@@ -75,11 +78,12 @@ def osm_ring():
 _TO_CAMPUS, TO_PLAN, _ = plan_transform(osm_ring())
 OSM_OUTLINE = [TO_PLAN(q) for q in osm_ring()]  # ceo NTP (i poslovni deo), px plana
 
-# Teren 01.10.2026, korisnik nacrtao na mapi kampusa (metri kampusa): NTP-A (amfiteatar u poslovnom delu,
-# uz zapadni zid) i ulaz kod pešačkog prelaza na Fruškogorskoj (= "ULAZ - FTN" sa evakuacionog plana).
-NTP_A_CAMPUS = [(34.2, 299.9), (52.6, 299.9), (52.6, 315.5), (34.2, 315.5)]
-NTP_A = [TO_PLAN(q) for q in NTP_A_CAMPUS]
+# Teren 01.10.2026, korisnik nacrtao na mapi kampusa (metri kampusa): ulaz kod pešačkog prelaza na Fruškogorskoj
+# (= "ULAZ - FTN" sa evakuacionog plana).
 ULAZ_FTN = TO_PLAN((35.2, 292.6))
+# NTP-A (amfiteatar u poslovnom delu): teren 02.10.2026, korisnik nacrtao na snimku ekrana plana prizemlja; px plana
+# preko čvorova ULAZ-FTN, V1, V0 na snimku (centar starog NTP-A pogođen na 2 px). 12,5 x 17,5 m, ~1-6 m od zida.
+NTP_A = [(-627, -325), (-627, 277), (-1057, 277), (-1057, -325)]  # vrata na prvoj stranici (istok, ka predvorju)
 
 # --- Geometrija (px) -------------------------------------------------------------------------
 
@@ -310,12 +314,14 @@ def top_floor(g):
         **{f"U{x}": (x, 595) for x in (640, 817, 920)},
         **{f"C{x}": (x, 1334) for x in (560, 815, 870, 1025, 1115, 1212)},
         **{f"R{y}": (1115, y) for y in (856, 945, 1035, 1130, 1230)},
-        # terasa do desnog jezgra
+        # terasa do desnog jezgra - evakuacioni put, ne vezuje se za hodnik (korisnik, 02.10.2026); jezgro se
+        # na V spratu dostiže samo stepenicama/liftom odozdo
         "T1350": (1350, 1340), "T1494": (1494, 1340), "T1600": (1600, 1340),
     })
     g.chain(f, [f"M{y}" for y in (450, 595, 676, 890, 1112, 1250, 1334, 1470)])
     g.chain(f, ["M595", "U640", "U817", "U920"])
-    g.chain(f, ["M1334", "C560", "C815", "C870", "C1025", "C1115", "C1212", "T1350", "T1494", "T1600"])
+    g.chain(f, ["M1334", "C560", "C815", "C870", "C1025", "C1115", "C1212"])
+    g.chain(f, ["T1350", "T1494", "T1600"])
     g.chain(f, ["R856", "R945", "R1035", "R1130", "R1230", "C1115"])
     g.edge(g.node(f, "S1", 530, 445, "STEPENISTE"), "NTP-5-M450")
     g.edge(g.node(f, "S2", 575, 1470, "STEPENISTE"), "NTP-5-M1470")
@@ -333,6 +339,7 @@ def ground_floor(g):
     points(g, f, {
         "V0": (0, 120), "V1": (ULAZ_FTN[0], 120), **{f"H{y}": (290, y) for y in (160, 450, 598, 700, 1000, 1340)},
         **{f"M{y}": (400, y) for y in (1340, 1470, 1620, 1782)},
+        "VA": (-275, 120),  # zapadni kraj predvorja "ULAZ - FTN", ka NTP-A
         "U560": (560, 598), "U690": (690, 598), "P740": (690, 740), "P865": (690, 865),
         "W900": (900, 865), "PA": (1200, 760), "PB": (1250, 865), "PC": (1250, 1100),
         **{f"P{y}": (1350, y) for y in (1300, 1420, 1690)},
@@ -345,6 +352,7 @@ def ground_floor(g):
     g.chain(f, ["ULAZ-FTN", "V1", "V0", "H160", "H450", "H598", "H700", "H1000", "H1340", "M1340", "M1470", "M1620",
                 "M1782", "ULAZ"])
     g.chain(f, ["H1340", "W143", "W0", "W-130"])
+    g.chain(f, ["V1", "VA"])
     g.chain(f, ["H598", "U560", "U690", "P740", "P865", "W900", "PB"])
     g.chain(f, ["ULAZ-PASAZ-Z", "PA", "PB", "PC", "P1300", "P1420", "P1690", "ULAZ-PASAZ-I"])
     g.chain(f, ["P1300", "LB1494", "LB1600", "LB1790"])
@@ -355,10 +363,9 @@ def ground_floor(g):
     g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-0-U560")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), "NTP-0-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), "NTP-0-LB1494")
-    # NTP-A: poslovni deo; vrata na strani ka predvorju "ULAZ - FTN" (PRETPOSTAVKA).
-    (ax, ay), (bx, by) = NTP_A[0], NTP_A[1]
+    # NTP-A: poslovni deo; vrata na istočnoj strani, naspram predvorja "ULAZ - FTN" (PRETPOSTAVKA).
     center = (sum(x for x, _ in NTP_A) / 4, sum(y for _, y in NTP_A) / 4)
-    g.room(f, "NTP-A", center, ((ax + bx) / 2, (ay + by) / 2), "V1")
+    g.room(f, "NTP-A", center, (NTP_A[0][0], 120), "VA")
     g.room(f, "NTP-L3", (930, 650), (1131, 764), "PA")  # "LAB" - pretpostavka
     g.room(f, "NTP-L2", (1170, 1410), (1299, 1420), "P1420")
     g.room(f, "NTP-L1", (1170, 1690), (1299, 1690), "P1690")

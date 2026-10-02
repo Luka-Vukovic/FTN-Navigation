@@ -26,9 +26,9 @@ class MapModesTest {
         assertEquals(listOf(MapMode.KAMPUS, MapMode.NB, MapMode.NTP), shownModes(MapMode.NTP, campus.building("NB")))
     }
 
-    /** Zgrada bez plana (F-blok): od planova ništa, ostaje kampus (ostalo u meniju). */
+    /** Zgrada bez plana (ITC; do 02.10.2026 i F-blok): od planova ništa, ostaje kampus (ostalo u meniju). */
     @Test
     fun inBuildingWithoutPlan_onlyCampus() {
-        assertEquals(listOf(MapMode.KAMPUS), shownModes(MapMode.KAMPUS, campus.building("F")))
+        assertEquals(listOf(MapMode.KAMPUS), shownModes(MapMode.KAMPUS, campus.building("ITC")))
     }
 }

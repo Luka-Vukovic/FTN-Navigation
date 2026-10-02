@@ -113,12 +113,14 @@
     <string name="map_mode_amf">Amfiteatri</string>
     <string name="map_mode_kula">Kula</string>
     <string name="map_mode_ntp">NTP</string>
+    <string name="map_mode_f">F-blok</string>
     <string name="map_mode_more">…</string>
     <string name="map_mode_more_description">Ostale zgrade</string>
     <string name="map_mode_here">Ovde si</string>
     <string name="ntp_location">Naučno-tehnološki park · %1$s</string>
     <string name="amf_location">Amfiteatri · %1$s</string>
     <string name="kula_location">Kula · %1$s</string>
+    <string name="f_location">F-blok · %1$s</string>
     <string name="floor_ground">prizemlje</string>
     <string name="floor_basement">suteren</string>
     <string name="floor_number">%1$d. sprat</string>
@@ -207,7 +209,7 @@
     <string name="room_info_no_data">Za ovu prostoriju nema rasporeda ni radnog vremena.</string>
     <string name="building_info_nb">Glavna zgrada fakulteta, sa glavnim ulazom sa Trga Dositeja Obradovića. Ovde su učionice 101–312, računarske laboratorije L1–L6 i sale AH, kao i Svečana sala, Studentska služba i portirnica. Iznutra je povezana sa Kulom i Amfiteatrima.</string>
     <string name="building_info_amf">Zgrada sa velikim salama A1–A4 za predavanja, salama AR0–AR6, Bibliotekom i Skriptarnicom. Iznutra je povezana sa Nastavnim blokom, Kulom, F-blokom i ITC-om, pa se do njih ne mora napolje. U zgradi je i pošta, sa ulazom spolja sa zapadne strane.</string>
-    <string name="building_info_f">Ovde su sale F 3xx. Do F-bloka se iznutra stiže kroz Amfiteatre.</string>
+    <string name="building_info_f">Prizemlje i tri sprata sa salama F 0xx–F 3xx. Do F-bloka se iznutra stiže pasarelom iz Amfiteatara, koja vodi na podest glavnog stepeništa između prizemlja i I sprata.</string>
     <string name="building_info_kula">Najviša zgrada fakulteta. Iznutra je povezana sa Nastavnim blokom i Amfiteatrima.</string>
     <string name="building_info_itc">Istraživačko-tehnološki centar. Iznutra je povezan sa Amfiteatrima.</string>
     <string name="building_info_mi">Ovde su sale sa oznakom MI. Zgrada nije povezana sa ostalima, do nje se ide spolja.</string>

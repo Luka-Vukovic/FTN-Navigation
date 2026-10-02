@@ -219,7 +219,7 @@ def path(fill=None, stroke=None, width=None, data=""):
     return "        <path\n            " + "\n            ".join(attrs) + " />\n"
 
 
-def drawable(plan, viewport, wall, building_name, script):
+def drawable(plan, viewport, wall, building_name, script, source="snimaka aplikacije FtnGO"):
     vx, vy, vw, vh = viewport
     outlines = plan.get("outline") or [rect_poly(*wall)]
     parts = []
@@ -246,8 +246,8 @@ def drawable(plan, viewport, wall, building_name, script):
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <!--
     {plan["title"]} - {building_name}. GENERISANO skriptom tools/zgrade/{script} (ne menjati ručno).
-    Šematski precrtano sa ispravljenih snimaka aplikacije FtnGO; koordinate su px plana
-    (zajednički sistem NB, AMF i Kule, 1 px = {M_PER_PX:.4f} m), grupa ih pomera u viewport.
+    Šematski precrtano sa ispravljenih {source}; koordinate su px plana
+    (zajednički sistem NB, AMF, Kule i F-bloka, 1 px = {M_PER_PX:.4f} m), grupa ih pomera u viewport.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="{vw}dp"
@@ -268,10 +268,11 @@ def floor_res(prefix, f):
     return f"{prefix}_{'m' + str(-f) if f < 0 else f}"
 
 
-def write_all(g, plans, viewport, wall, building_name, script, prefix, entrance, campus_links, indoor_links=()):
+def write_all(g, plans, viewport, wall, building_name, script, prefix, entrance, campus_links, indoor_links=(),
+              source="snimaka aplikacije FtnGO"):
     res = ROOT / "app/src/main/res/drawable"
     for f, plan in plans.items():
-        (res / f"{floor_res(prefix, f)}.xml").write_text(drawable(plan, viewport, wall, building_name, script), encoding="utf-8")
+        (res / f"{floor_res(prefix, f)}.xml").write_text(drawable(plan, viewport, wall, building_name, script, source), encoding="utf-8")
     asset = ROOT / f"app/src/main/assets/{g.building.lower()}.json"
     write_json(g, asset, viewport, list(plans), entrance, campus_links, indoor_links)
     rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA")

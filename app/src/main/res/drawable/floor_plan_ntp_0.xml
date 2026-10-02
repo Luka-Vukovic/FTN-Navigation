@@ -26,7 +26,7 @@
             android:strokeColor="#FF455A64"
             android:strokeWidth="4"
             android:fillColor="#FFFFFFFF"
-            android:pathData="M-359,-278 L-619,301 L-1110,80 L-850,-498 Z" />
+            android:pathData="M-627,-325 L-627,277 L-1057,277 L-1057,-325 Z" />
 
         <!-- Unutrašnjost -->
         <path

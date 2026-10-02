@@ -134,4 +134,24 @@ class AmfKulaGraphTest {
         val ids = graph.neighbors("K-P-AMF-KULA").map { it.first.id }
         assertTrue(ids.containsAll(listOf("AMF-m1-PROLAZ-KULA", "AMF-0-PROLAZ-KULA")))
     }
+
+    /** Teren 02.10.2026: gornji red prizemlja "AR0 AR1 X AR2 AR3 X AR4 | stepenište | AR5 X X ? AR6". */
+    @Test
+    fun arRooms_inOrderAroundWideStairs() {
+        val xs = (0..6).map { room("AR$it").x }
+        assertEquals(xs.sorted(), xs)
+        val stairs = checkNotNull(graph.node("AMF-0-S2")).x
+        assertTrue(room("AR4").x < stairs && stairs < room("AR5").x)
+        assertEquals(xs.last(), graph.rooms.filter { it.buildingId == AmfPlan.BUILDING_ID && it.floor == 0 }.maxOf { it.x })
+    }
+
+    /** Kiosk (teren 02.10.2026): suteren, odmah pored stepeništa S1; radno vreme radnim danom 7-18. */
+    @Test
+    fun kiosk_nextToStairs() {
+        val kiosk = room("Kiosk")
+        assertEquals(-1, kiosk.floor)
+        val (pk, ps) = listOf(kiosk, checkNotNull(graph.node("AMF-m1-S1"))).map(graph::position)
+        assertTrue(hypot(pk.x - ps.x, pk.y - ps.y) < 4f)
+        assertNotNull(ROOM_HOURS["Kiosk"])
+    }
 }

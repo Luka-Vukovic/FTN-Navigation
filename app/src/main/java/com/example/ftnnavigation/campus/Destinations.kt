@@ -22,9 +22,10 @@ private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
 
 /**
  * Oznake koje su druga oznaka ucrtane sale: 204A, 205A i 208A su drugi ulazi učionica 204, 205 i 208 (korisnik);
- * "O12" iz rasporeda (slovo O) je 012 u prizemlju NB-a (teren 01.10.2026).
+ * "O12" iz rasporeda (slovo O) je 012 u prizemlju NB-a (teren 01.10.2026); "F-208" je u rasporedu napisano sa
+ * crticom, a ostale sale F-bloka razmakom ("F 315") - na planu su sve sa razmakom.
  */
-private val ROOM_ALIASES = mapOf("204A" to "204", "205A" to "205", "208A" to "208", "O12" to "012")
+private val ROOM_ALIASES = mapOf("204A" to "204", "205A" to "205", "208A" to "208", "O12" to "012", "F-208" to "F 208")
 
 /** Oznaka sale iz rasporeda kako je ucrtana na planu (O12 -> 012, 204A -> 204), inače ista oznaka. */
 fun canonicalRoom(room: String): String = room.trim().let { ROOM_ALIASES[it] ?: it }

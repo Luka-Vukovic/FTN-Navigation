@@ -6,8 +6,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * Unutrašnji graf zgrade sa spratovima iz assets-a (nb.json, amf.json, kula.json, ntp.json), generisan
- * skriptama tools/zgrade/build_{nb,amf,kula}.py i tools/ntp/build_ntp.py. Promena formata mora da prati te skripte; posle
+ * Unutrašnji graf zgrade sa spratovima iz assets-a (nb.json, amf.json, kula.json, f.json, ntp.json), generisan
+ * skriptama tools/zgrade/build_{nb,amf,kula,f}.py i tools/ntp/build_ntp.py. Promena formata mora da prati te skripte; posle
  * promene JSON-a povećati verziju [GraphDatabase].
  *
  * Stepeništa su ivice između susednih spratova, liftovi ivice između svaka dva sprata.
@@ -72,7 +72,7 @@ sealed interface IndoorBuilding {
 }
 
 /** Sve zgrade sa planom, redom kao na Mapi. */
-val INDOOR_BUILDINGS: List<IndoorBuilding> by lazy { listOf(NbPlan, AmfPlan, KulaPlan, NtpPlan) }
+val INDOOR_BUILDINGS: List<IndoorBuilding> by lazy { listOf(NbPlan, AmfPlan, KulaPlan, NtpPlan, FPlan) }
 
 fun indoorBuilding(buildingId: String): IndoorBuilding? = INDOOR_BUILDINGS.find { it.buildingId == buildingId }
 
@@ -190,5 +190,37 @@ object NtpPlan : IndoorBuilding {
         0 -> R.drawable.floor_plan_ntp_0
         5 -> R.drawable.floor_plan_ntp_5
         else -> R.drawable.floor_plan_ntp_typical
+    }
+}
+
+/**
+ * F-blok: prizemlje ... III sprat, sa fotografija evakuacionih planova (tools/zgrade/build_f.py). Plan je okrenut
+ * kao evakuacioni plan (korisnik): stepenište i pasarela dole (sever), levo istok, gore jug. Brojevi sala su po
+ * pravilu korisnika (od sobe levo od stepeništa, u smeru kazaljke) - pretpostavka; u zgradu se ulazi samo
+ * pasarelom iz Amfiteatara.
+ */
+object FPlan : IndoorBuilding {
+    const val BUILDING_ID = "F"
+    const val ROOM_PREFIX = "F "
+
+    /** Pasarela iz Amfiteatara (podest stepeništa između prizemlja i I sprata). */
+    const val ENTRANCE_ID = "F-0-PROLAZ-AMF"
+    val FLOORS = 0..3
+
+    override val buildingId get() = BUILDING_ID
+    override val asset get() = "f.json"
+    override val floors get() = FLOORS
+    override val entranceId get() = ENTRANCE_ID
+    // Plan je nizak i širok kao NB (630 x 230 px naspram 750 x 275) - ista visina slova kao NB.
+    override val labelHeight get() = 0.033f
+
+    override fun label(name: String) = name.removePrefix(ROOM_PREFIX)
+
+    @DrawableRes
+    override fun floorDrawable(floor: Int): Int = when (floor) {
+        1 -> R.drawable.floor_plan_f_1
+        2 -> R.drawable.floor_plan_f_2
+        3 -> R.drawable.floor_plan_f_3
+        else -> R.drawable.floor_plan_f_0
     }
 }

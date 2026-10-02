@@ -24,6 +24,10 @@ stepenište.png, kula spaja nb i amf.png; korisnik, 30.09.2026):
     prolazi ka F-bloku i ITC-u su u prizemlju ("amf to f.png": prolaz je iznad Skriptarnice). Prolaz ka
     F-bloku stiže na međunivo F-bloka (dole prizemlje, gore I sprat) - F-blok nema plan, pa se to ne vidi,
   - GRID-1 i GRID-2 su na -1; GRID ima svoj ulaz sa zapada (korisnik), koji vodi kroz GRID-1.
+Teren 02.10.2026 (korisnik + evakuacioni plan prizemlja, teren/izveštaj2/): gornji red prizemlja je
+"AR0 AR1 X AR2 AR3 X AR4 | stepenište | AR5 X X ? AR6" (X = ne zna se šta je; AR6 je velika soba na kraju, ka
+ITC-u) - pregrade sa evakuacionog plana (FtnGO je imao 7 soba jednu do druge). Kiosk (radnim danom 7-18) je na
+-1 odmah pored stepeništa S1, desno od njega (korisnik označio na snimku ekrana).
 Na -1 u sredini (ispod amfiteatara) nema prostorija. Pošta (Pošta Srbije, ulaz spolja sa zapada) nije u ovom
 grafu - na mapi kampusa je služba (build_campus.py SERVICES).
 """
@@ -68,6 +72,7 @@ def floor_m1():
                             (587, 660, "INT 1"), (660, 765, "GRID-1"), (765, 800, None), (800, 832, None)]),
             R(170, 230, 0, 170, "Scen-LAB", door=(230, 60)),  # FtnGO "SCENLab"
             R(170, 205, 170, 207), R(205, 230, 170, 207),
+            R(266, 285, 183, 207, "Kiosk"),  # pored stepeništa S1 (teren 02.10.2026)
             R(285, 402, 3, 43, "B008"),
             R(285, 402, 43, 207, "Biblioteka", door=(285, 120)),  # FtnGO "Biblioteka (B009)"
             R(732, 832, 3, 207, "GRID-2", door=(760, 3)),
@@ -87,8 +92,11 @@ def floor_0():
                       rect_poly(553, 168, 693, 207),  # hodnik iza amfiteatara, iz prolaza iz NB-a
                       rect_poly(664, 207, 711, 240)],  # kraj staklenog prolaza iz NB-a (OSM spojni deo)
         "rooms": [
-            *row(-65, -28, [(170, 258, "AR0"), (258, 327, "AR1"), (327, 410, "AR2"), (410, 497, "AR3"),
-                            (587, 657, "AR4"), (657, 726, "AR5"), (726, 832, "AR6")]),
+            # Evakuacioni plan (teren 02.10.2026): 7 soba levo od stepeništa S2, 5 desno; None = ne zna se šta je.
+            *row(-65, -28, [(170, 259, "AR0"), (259, 295, "AR1"), (295, 331, None), (331, 386, "AR2"),
+                            (386, 420, "AR3"), (420, 452, None), (452, 497, "AR4"),
+                            (587, 630, "AR5"), (630, 665, None), (665, 700, None), (700, 735, None),
+                            (735, 832, "AR6")]),
             *col(170, 212, [(7, 48, None), (48, 89, None), (89, 130, None), (130, 207, None)]),
             R(287, 402, 7, 207, "Čitaonica", door=(287, 50)),  # FtnGO "Čitaonica (A0)"
             R(402, 545, 7, 207, "A1", doors=[(470, 7), (545, 188)]),  # Amfiteatar "Nikola Tesla"

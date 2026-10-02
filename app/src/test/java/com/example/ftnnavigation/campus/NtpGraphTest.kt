@@ -152,4 +152,11 @@ class NtpGraphTest {
         val route = checkNotNull(graph.route("K-U-NTP-4", room.id))
         assertTrue("${route.lengthM}", route.lengthM < 30)
     }
+
+    /** Evakuacioni putevi se ne koriste (korisnik, 02.10.2026): terasa V sprata ne spaja hodnik i desno jezgro. */
+    @Test
+    fun topFloorTerrace_notUsed() {
+        val route = checkNotNull(graph.route("NTP-5-T1600", checkNotNull(graph.room("NTP-504")).id))
+        assertTrue(route.nodes.any { it.floor == 4 })
+    }
 }

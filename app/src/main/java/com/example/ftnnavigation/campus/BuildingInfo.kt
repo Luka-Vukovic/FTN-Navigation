@@ -77,6 +77,7 @@ val ROOM_HOURS: Map<String, OpeningHours> = mapOf(
     "Biblioteka" to weekdays("07:00-19:00"),
     "Čitaonica" to hours("07:00-22:00").let { OpeningHours(weekday = it, saturday = it, sunday = it) },
     "Studentska služba" to weekdays("11:00-13:00"),
+    "Kiosk" to weekdays("07:00-18:00"), // Amfiteatri, suteren, pored stepeništa (teren 02.10.2026)
 )
 
 /** Po [CampusBuilding.id]; svaka zgrada sa nazivom treba da ima unos (proverava `CampusGraphTest`). */
