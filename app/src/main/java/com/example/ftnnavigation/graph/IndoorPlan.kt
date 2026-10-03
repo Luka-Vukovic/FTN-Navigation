@@ -72,7 +72,7 @@ sealed interface IndoorBuilding {
 }
 
 /** Sve zgrade sa planom, redom kao na Mapi. */
-val INDOOR_BUILDINGS: List<IndoorBuilding> by lazy { listOf(NbPlan, AmfPlan, KulaPlan, NtpPlan, FPlan) }
+val INDOOR_BUILDINGS: List<IndoorBuilding> by lazy { listOf(NbPlan, AmfPlan, KulaPlan, NtpPlan, FPlan, MiPlan) }
 
 fun indoorBuilding(buildingId: String): IndoorBuilding? = INDOOR_BUILDINGS.find { it.buildingId == buildingId }
 
@@ -184,6 +184,9 @@ object NtpPlan : IndoorBuilding {
     // Plan obuhvata ceo NTP (i poslovni deo), pa je FTN deo manji deo visine nego ranije (0,014 pri visini 1860 px).
     override val labelHeight get() = 0.01f
 
+    /** Natpis bez "NTP-" (na planu se zna da je NTP: "311", "C", "L1"), osim NTP-A (korisnik). */
+    override fun label(name: String) = if (name == "NTP-A") name else name.removePrefix("NTP-")
+
     /** Crtež sprata; spratovi I-IV su isti plan. */
     @DrawableRes
     override fun floorDrawable(floor: Int): Int = when (floor) {
@@ -195,9 +198,8 @@ object NtpPlan : IndoorBuilding {
 
 /**
  * F-blok: prizemlje ... III sprat, sa fotografija evakuacionih planova (tools/zgrade/build_f.py). Plan je okrenut
- * kao evakuacioni plan (korisnik): stepenište i pasarela dole (sever), levo istok, gore jug. Brojevi sala su po
- * pravilu korisnika (od sobe levo od stepeništa, u smeru kazaljke) - pretpostavka; u zgradu se ulazi samo
- * pasarelom iz Amfiteatara.
+ * kao evakuacioni plan (korisnik): stepenište i pasarela dole (sever), levo istok, gore jug. Brojevi sala su sa
+ * tabli na I i II spratu i 3D prikaza na njima (teren 03.10.2026); u zgradu se ulazi samo pasarelom iz Amfiteatara.
  */
 object FPlan : IndoorBuilding {
     const val BUILDING_ID = "F"
@@ -222,5 +224,34 @@ object FPlan : IndoorBuilding {
         2 -> R.drawable.floor_plan_f_2
         3 -> R.drawable.floor_plan_f_3
         else -> R.drawable.floor_plan_f_0
+    }
+}
+
+/**
+ * Mašinski institut: prizemlje i I sprat, sa fotografija evakuacionih planova (tools/zgrade/build_mi.py), u
+ * zajedničkom sistemu sa NB (desno sever, dole istok - glavni ulaz). Dugački deo sa tri krila (A|B, V|G, D|Đ);
+ * sale krila su na pravom krilu i spratu, ali mesto unutar krila je pretpostavka (planovi nemaju brojeve).
+ */
+object MiPlan : IndoorBuilding {
+    const val BUILDING_ID = "MI"
+    const val ROOM_PREFIX = "MI "
+
+    /** Glavni ulaz (portirnica), istočna strana. */
+    const val ENTRANCE_ID = "MI-0-ULAZ"
+    val FLOORS = 0..1
+
+    override val buildingId get() = BUILDING_ID
+    override val asset get() = "mi.json"
+    override val floors get() = FLOORS
+    override val entranceId get() = ENTRANCE_ID
+    // Plan je 1180 x 650 px (NB 750 x 275 sa 0,033) - ista veličina slova u metrima.
+    override val labelHeight get() = 0.014f
+
+    override fun label(name: String) = name.removePrefix(ROOM_PREFIX)
+
+    @DrawableRes
+    override fun floorDrawable(floor: Int): Int = when (floor) {
+        1 -> R.drawable.floor_plan_mi_1
+        else -> R.drawable.floor_plan_mi_0
     }
 }

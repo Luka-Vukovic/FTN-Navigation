@@ -226,6 +226,10 @@ def drawable(plan, viewport, wall, building_name, script, source="snimaka aplika
     if "roof" in plan:
         parts.append(("Krov (niži spratovi)", path(fill=C_ROOF, stroke="#FFBDBDBD", width=1, data=poly(plan["roof"]))))
     parts.append(("Unutrašnjost", path(fill=C_BG, data=" ".join(poly(o) for o in outlines))))
+    if plan.get("voids"):  # bez poda na ovom spratu (visoka hala ispod) - šrafirano kao na evakuacionom planu
+        parts.append(("Praznine", path(fill=C_ROOF, data=" ".join(rect(*v) for v in plan["voids"]))
+                      + path(stroke="#FFBDBDBD", width=0.8, data=" ".join(
+                          f"M{x0},{y} H{x1}" for x0, y0, x1, y1 in plan["voids"] for y in range(int(y0) + 6, int(y1), 6)))))
     parts.append(("Hodnici", path(fill=C_CORRIDOR, data=" ".join(poly(p) for p in plan["corridors"]))))
     if plan.get("entrances"):
         parts.append(("Ulazi", path(fill=C_ENTRANCE, data=" ".join(rect(*e) for e in plan["entrances"]))))

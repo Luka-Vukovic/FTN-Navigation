@@ -3,6 +3,7 @@ package com.example.ftnnavigation.campus
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
+import com.example.ftnnavigation.graph.MiPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
@@ -144,7 +145,9 @@ class CampusGraphTest {
         assertEquals(NodeType.PROSTORIJA, lab.node.type)
         listOf("F 315", "NTP-A", "A2", "NTP-307", "L6 (RC)", "F 318")
             .forEach { assertNotNull(it, resolveTarget(it, graph, campus)) }
-        assertEquals("K-Z-MI", resolveTarget("Mašinski institut", graph, campus)?.node?.id)
+        // MI ima plan od 03.10.2026 - "do zgrade" je glavni ulaz; zgrada bez plana je jedan čvor K-Z-...
+        assertEquals(MiPlan.ENTRANCE_ID, resolveTarget("Mašinski institut", graph, campus)?.node?.id)
+        assertEquals("K-Z-ITC", resolveTarget("Istraživačko-tehnološki centar", graph, campus)?.node?.id)
     }
 
     /** Svaka sala iz rasporeda ima zgradu, osim onih za koje se zna da je ne znamo. */

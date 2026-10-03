@@ -65,9 +65,58 @@ class MapMatcherTest {
     }
 
     @Test
+    fun wrongBranch_walkingAcross_movesToCorridor() {
+        // Tačka je 3 m u ogranku B-D (pogrešan krak), korisnik ide na zapad - popreko na ogranak, tačka stoji.
+        // Posle 6 koraka (4,2 m) hodnik A-B je 3 m od mesta gde bi korisnik bio, a ogranak 4,2 m -> prelazi
+        // (x = 50 - 4,2 m), pa još 4 koraka hodnikom.
+        val end = checkNotNull(matcher.start(0.5f, 0.47f)).walk(headingDeg = 270.0, steps = 10)
+        end.assertOn("A", "B", 0.43f, 0.5f)
+    }
+
+    @Test
     fun walkingPastCorridorEnd_stopsAtEndNode() {
         val end = checkNotNull(matcher.start(0.12f, 0.5f)).walk(headingDeg = 270.0, steps = 10)
         end.assertOn("A", "B", 0.1f, 0.5f)
+    }
+
+    /** Hodnik W-J-E (y = 50 m), iz J grana sale: vrata V 4 m severno, sala R još 3 m. */
+    private val roomMatcher: MapMatcher = run {
+        val nodes = listOf(
+            Node("W", "T", 0, 0.1f, 0.5f, NodeType.HODNIK), Node("J", "T", 0, 0.5f, 0.5f, NodeType.HODNIK),
+            Node("E", "T", 0, 0.9f, 0.5f, NodeType.HODNIK), Node("V", "T", 0, 0.5f, 0.46f, NodeType.VRATA),
+            Node("R", "T", 0, 0.5f, 0.43f, NodeType.PROSTORIJA, name = "R"),
+        )
+        val edges = listOf("W" to "J", "J" to "E", "J" to "V", "V" to "R").map { (a, b) -> Edge(a, b, EdgeType.HOD) }
+        MapMatcher(BuildingGraph(nodes, edges, FloorScale(100f, 100f)), "T", 0)
+    }
+
+    private fun MatchedPosition.walkIn(matcher: MapMatcher, headingDeg: Double, steps: Int): MatchedPosition {
+        val rad = Math.toRadians(headingDeg)
+        return (1..steps).fold(this) { pos, _ -> matcher.step(pos, 0.7 * sin(rad), -0.7 * cos(rad)) }
+    }
+
+    @Test
+    fun roomBranch_walkingAcross_returnsToCorridor() {
+        // Tačka je u sali (greška smera ju je odvela u granu), a korisnik ide hodnikom na zapad. Domet koraka
+        // (0,7 + 2 m) ne stiže od sale do hodnika (7 m) - bez izlaska bi tačka zauvek ostala u sali.
+        // Posle 4 koraka (2,8 m >= ROOM_ESCAPE_M) prelazi na raskrsnicu J pomerenu za 2,8 m, pa još 6 koraka.
+        val end = checkNotNull(roomMatcher.start(0.5f, 0.43f)).walkIn(roomMatcher, headingDeg = 270.0, steps = 10)
+        end.assertOn("W", "J", 0.43f, 0.5f)
+    }
+
+    @Test
+    fun corridorWithCompassDrift_passesRoomDoor() {
+        // Kompas vuče 20° ka sobama (sever): slobodna pozicija je posle ~8 koraka na toleranciji iznad hodnika,
+        // pa je kod vrata grana sale bliža od hodnika - tačka ipak ostaje u hodniku i prolazi pored vrata.
+        val end = checkNotNull(roomMatcher.start(0.8f, 0.5f)).walkIn(roomMatcher, headingDeg = 290.0, steps = 50)
+        val alongM = 50 * 0.7 * cos(Math.toRadians(20.0))
+        end.assertOn("W", "J", (0.8 - alongM / 100).toFloat(), 0.5f)
+    }
+
+    @Test
+    fun roomBranch_walkingDeeper_staysInRoom() {
+        val end = checkNotNull(roomMatcher.start(0.5f, 0.43f)).walkIn(roomMatcher, headingDeg = 0.0, steps = 10)
+        end.assertOn("V", "R", 0.5f, 0.43f)
     }
 
     @Test

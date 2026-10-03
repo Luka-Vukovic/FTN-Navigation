@@ -77,8 +77,13 @@ private const val KNOWN_VARIANCE_M2 = 4.0
 /** Ulazak: tačka bar ovoliko unutar obrisa zgrade sa planom ... */
 private const val ENTER_DEPTH_M = 1.5
 
-/** ... i ulaz te zgrade najviše ovoliko daleko (inače je to GPS greška uz zid, ne ulazak). */
-private const val ENTER_RADIUS_M = 12.0
+/**
+ * ... i ulaz te zgrade najviše ovoliko daleko (inače je to GPS greška uz zid, ne ulazak). Bilo 12 m: na terenu
+ * (03.10.2026, NTP) GPS i PDR su korisnika koji ide spolja uz zid držali ~4 m u obrisu, pa je ulazak okinuo
+ * ~12 m (10 s) pre vrata; sa 6 m na istom snimku ~5 m pre vrata (GPS je tu promašivao ~6 m). Manje od 5 m na
+ * tom snimku više ne okida - tada ostaje "Ovde sam".
+ */
+private const val ENTER_RADIUS_M = 6.0
 
 /** Tačka na grafu je na kraju hodnika (na čvoru prolaza/ulaza). */
 private const val AT_GATE_M = 0.3

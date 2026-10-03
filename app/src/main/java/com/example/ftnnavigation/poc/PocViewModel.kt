@@ -35,6 +35,7 @@ import com.example.ftnnavigation.graph.MatchedPosition
 import com.example.ftnnavigation.graph.AmfPlan
 import com.example.ftnnavigation.graph.IndoorBuilding
 import com.example.ftnnavigation.graph.FPlan
+import com.example.ftnnavigation.graph.MiPlan
 import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
@@ -95,6 +96,7 @@ enum class MapMode(val building: IndoorBuilding?) {
     KULA(KulaPlan),
     NTP(NtpPlan),
     F(FPlan),
+    MI(MiPlan),
 }
 
 /**

@@ -91,6 +91,24 @@ class NtpGraphTest {
             .forEach { assertEquals(it.name, NtpPlan.BUILDING_ID, buildingOfRoom(it.name!!)) }
     }
 
+    /**
+     * Oznake sa vrata (teren 03.10.2026): red kancelarija uz donji zid broji unazad sleva nadesno (I: 138 ... 125,
+     * IV: 433 ... 420), sobe sa više brojeva su jedna sala sa aliasima (119-123, 221/222), a podeljene dve sale.
+     */
+    @Test
+    fun fieldLabels_fromDoors() {
+        for ((floor, first) in mapOf(1 to 138, 2 to 238, 3 to 337, 4 to 433)) {
+            val row = (0 until 14).map { checkNotNull(graph.room("NTP-${first - it}")) { "NTP-${first - it}" } }
+            assertTrue(row.all { it.floor == floor })
+            assertEquals("sprat $floor", row.sortedBy { it.x }, row)
+            assertEquals(1, row.map { it.y }.distinct().size)
+        }
+        assertEquals(graph.room("NTP-119")!!.id, resolveTarget("NTP-120", graph, campus)!!.node.id)
+        assertEquals(graph.room("NTP-221")!!.id, resolveTarget("NTP-222", graph, campus)!!.node.id)
+        val (a, b) = listOf("NTP-115", "NTP-116").map { checkNotNull(graph.room(it)) }
+        assertTrue(a.id != b.id && a.floor == 1 && b.floor == 1)
+    }
+
     @Test
     fun routeToThirdFloor_changesFloorsOnce() {
         val route = checkNotNull(graph.route(NtpPlan.ENTRANCE_ID, graph.room("NTP-307")!!.id))
@@ -143,14 +161,21 @@ class NtpGraphTest {
         }
     }
 
-    /** NTP-A je u prizemlju poslovnog dela (teren 01.10.2026), blizu ulaza "ULAZ - FTN" sa Fruškogorske. */
+    /**
+     * NTP-A je u prizemlju poslovnog dela (teren 01.10.2026), blizu ulaza "ULAZ - FTN" sa Fruškogorske. Vrata su na
+     * zidu suprotnom od najbližeg zida zgrade (teren 03.10.2026) - južnom, dalje od zida zgrade nego sala.
+     */
     @Test
     fun ntpA_inBusinessPart_nearFruskogorskaEntrance() {
         val room = checkNotNull(graph.room("NTP-A"))
         assertEquals(0, room.floor)
         assertTrue(room.x in 0f..1f && room.y in 0f..1f)
         val route = checkNotNull(graph.route("K-U-NTP-4", room.id))
-        assertTrue("${route.lengthM}", route.lengthM < 30)
+        assertTrue("${route.lengthM}", route.lengthM < 40)
+        val door = graph.neighbors(room.id).single().first
+        assertEquals(NodeType.VRATA, door.type)
+        val outline = campus.building(NtpPlan.BUILDING_ID)!!
+        assertTrue(outline.distanceToWallM(graph.position(door)) > outline.distanceToWallM(graph.position(room)))
     }
 
     /** Evakuacioni putevi se ne koriste (korisnik, 02.10.2026): terasa V sprata ne spaja hodnik i desno jezgro. */

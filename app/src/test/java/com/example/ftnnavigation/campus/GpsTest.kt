@@ -98,15 +98,15 @@ class GpsTest {
         assertEquals("NB", detector.current?.id)
     }
 
-    /** Ruta od GPS lokacije kreće sa staze ili ulaza, ne iz unutrašnjosti zgrade bez plana (K-Z-MI). */
+    /** Ruta od GPS lokacije kreće sa staze ili ulaza, ne iz unutrašnjosti zgrade bez plana (K-Z-ITC; do 03.10.2026 MI). */
     @Test
     fun gpsRoute_startsOutdoors() {
         val plans = INDOOR_BUILDINGS.map { IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) }
         val graph = seedGraph(campus, plans).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
-        val inMi = labelOf("MI")
-        val x = (inMi.x / campus.widthM).toFloat()
-        val y = (inMi.y / campus.heightM).toFloat()
-        assertEquals("K-Z-MI", graph.nearestNode(CAMPUS_ID, 0, x, y)?.id)
+        val inItc = labelOf("ITC")
+        val x = (inItc.x / campus.widthM).toFloat()
+        val y = (inItc.y / campus.heightM).toFloat()
+        assertEquals("K-Z-ITC", graph.nearestNode(CAMPUS_ID, 0, x, y)?.id)
         val types = setOf(NodeType.STAZA, NodeType.ULAZ)
         val route = graph.routeFrom(CAMPUS_ID, 0, x, y, NbPlan.ENTRANCE_ID, startTypes = types)
         assertNotNull(route)

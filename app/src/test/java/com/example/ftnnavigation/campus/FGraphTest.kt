@@ -79,25 +79,26 @@ class FGraphTest {
     }
 
     /**
-     * Pravilo brojanja (korisnik): od sobe levo od stepeništa, u smeru kazaljke na planu (donji red nalevo, pa gornji
-     * nadesno). Plan je okrenut kao evakuacioni (levo istok): prva soba je najbliža stepeništu od soba levo od njega
-     * (sobe desno od pasarele su bliže, ali nisu "levo od stepenica"), a poslednja soba donjeg reda i prva gornjeg su
-     * na levom (istočnom) kraju.
+     * Brojevi sa tabli na spratovima (teren 03.10.2026): od sobe levo (istočno) od stepeništa donjim redom do istočnog
+     * kraja, pa gornjim redom nazad do zapadnog kraja. Plan je okrenut kao evakuacioni (levo istok, stepenište dole).
      */
     @Test
-    fun numbering_startsNextToStairs() {
-        for ((floor, lastBottom) in listOf(1 to 13, 2 to 8, 3 to 8)) {
+    fun numbering_fromFloorSigns() {
+        for ((floor, numbers) in mapOf(1 to listOf(101, 113, 114, 126), 2 to listOf(200, 208, 209, 224), 3 to listOf(301, 308, 309, 320))) {
+            val (first, eastEnd, southFirst, westEnd) = numbers.map { room("F $it") }
             val stairs = checkNotNull(graph.node("F-$floor-S"))
             val rooms = graph.rooms.filter { it.buildingId == FPlan.BUILDING_ID && it.floor == floor }
-            val firstLeftOfStairs = rooms.filter { it.x < stairs.x }.minBy { distance(it.id, stairs.id) }
-            assertEquals("$floor", room("F ${floor}01").id, firstLeftOfStairs.id)
-            val east = rooms.minOf { it.x }
-            listOf(lastBottom, lastBottom + 1).map { "F $floor${"%02d".format(it)}" }.forEach {
-                assertEquals(it, east, room(it).x, 1e-4f)
-            }
+            assertEquals("$floor", rooms.filter { it.x < stairs.x }.minBy { distance(it.id, stairs.id) }.id, first.id)
+            assertEquals("$floor", rooms.minOf { it.x }, eastEnd.x, 1e-4f)
+            // Gornji (južni) red: prvi broj je na istočnom kraju, poslednji na zapadnom.
+            val south = rooms.filter { it.y < 0.5f }
+            assertEquals("$floor", south.minBy { it.x }.id, southFirst.id)
+            assertEquals("$floor", south.maxBy { it.x }.id, westEnd.id)
             // Stepenište je dole na planu (korisnik: prirodnije kad se popne na sprat).
             assertTrue(stairs.y > 0.5f)
         }
+        assertEquals(room("F 202").id, resolveTarget("F 203", graph, campus)!!.node.id)
+        assertEquals(room("F 224").id, resolveTarget("F 225", graph, campus)!!.node.id)
     }
 
     /** Iz Amfiteatara na III sprat F-bloka: pasarelom (bez staza) pa stepeništem. */

@@ -145,6 +145,38 @@ class PdrLocatorTest {
         assertNotNull(locator.match)
     }
 
+    /**
+     * Teren 03.10.2026: na putu ka Kuli tačka je skrenula u granu sale 021 (vrata uz hol) i ostala u sali ~45
+     * koraka - prolaz nije okinuo. Iz sale, hodom pravcem hodnika ka prolazu, tačka se vraća u hodnik i prelazi.
+     */
+    @Test
+    fun trappedInRoomBesideCorridor_walkingOn_reachesKula() {
+        val locator = locatorAt("NB-0-021-3")
+        val azimuth = magneticAzimuth(graph.position(node("NB-0-H537_420")), graph.position(inner("NB-0-PROLAZ")))
+        val reasons = mutableListOf<PlaceReason>()
+        var steps = 0
+        while (locator.place != PdrPlace("KULA", 0)) {
+            locator.step(azimuth, stepM)?.let(reasons::add)
+            check(++steps < 60) { "nije stigao do Kule (na ${locator.place}, ${locator.match?.point})" }
+        }
+        assertEquals(listOf(PlaceReason.PROLAZ), reasons)
+    }
+
+    /** Teren 03.10.2026: u NB prizemlju kompas je vukao ~+22° ka salama uz hodnik - tačka mora ostati u hodniku do Kule. */
+    @Test
+    fun nbToKula_compassDraggingTowardRooms_staysInCorridor() {
+        val locator = locatorAt("NB-0-H633_420")
+        val azimuth = magneticAzimuth(graph.position(node("NB-0-H633_420")), graph.position(inner("NB-0-PROLAZ"))) + 22f
+        val reasons = mutableListOf<PlaceReason>()
+        var steps = 0
+        while (locator.place != PdrPlace("KULA", 0)) {
+            locator.step(azimuth, stepM)?.let(reasons::add)
+            assertTrue("u sali: ${locator.match?.point}", locator.match?.point?.let { it.from.type == NodeType.HODNIK || it.to.type == NodeType.HODNIK } ?: true)
+            check(++steps < 60) { "nije stigao do Kule (na ${locator.place}, ${locator.match?.point})" }
+        }
+        assertEquals(listOf(PlaceReason.PROLAZ), reasons)
+    }
+
     @Test
     fun nbToKula_throughFirstFloorPassage() {
         val locator = locatorAt(inner("NB-1-PROLAZ").id)

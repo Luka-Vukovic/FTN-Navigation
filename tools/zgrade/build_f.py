@@ -17,10 +17,19 @@ popne na sprat (prva verzija istog dana je bila u zajedničkom sistemu - uzak i 
 u zajedničkom sistemu NB/AMF/Kule: u njega ga prevodi to_shared (x = -130 + y_F, y = 433 - x_F, rotacija za 90°),
 a build_campus.py pravi smeštaj sa rotacijom NB - 90°.
 
-Brojevi sala NISU na planovima. Pravilo (korisnik, dok ne dobije tačan raspored): brojanje kreće od prostorije
-levo od stepeništa (gledano na planu, kad se stigne na sprat), pa u smeru kazaljke na satu: donji red nalevo,
-gornji red nadesno, desni kraj nadole. Toaleti i ostave nisu brojani. Tako ispadaju F 315, 317, 318, 319 (iz
-rasporeda) velike sobe od 5 m u gornjem redu III sprata, a F 208 donja leva ugaona soba II sprata - PRETPOSTAVKA.
+Brojevi sala NISU na evakuacionim planovima. Teren 03.10.2026: table sa brojevima na I i II spratu (šematske - sve
+sobe iste veličine) i 3D prikaz na njima (III sprat i delovi ostalih), teren/izveštaj3/IMG_20261003_1212*.jpg. Obrazac:
+od sobe levo (istočno) od stepeništa donjim (severnim) redom do istočnog kraja (x01..x13 na I, 200..208 na II, 301..308
+na III), pa gornjim (južnim) redom nazad ka zapadu (114..126, 209..224, 309..320); jugoistočni ugao je na I i III deo
+istočne krajnje sobe (na tabli I sprata 113 zauzima ceo kraj). Zapadno od stepeništa: I "1", toalet, "2", "3"; II
+226-228; III 326. Ranije pravilo korisnika (od sobe levo od stepeništa u smeru kazaljke) je za donji red bilo tačno,
+gornji red je bio pomeren za jednu sobu.
+II sprat: tabla ima 8 soba između stepeništa i istočnog kraja (200-207), crtež 7 - crtež je verovatno tačniji (korisnik),
+a jedina neobična soba crteža je široka 74 px (ostale 25/50): tu tabla ima dve sobe -> "F 202" sa aliasom 203
+(PRETPOSTAVKA). 224/225 je jedna soba (jugozapadni ugao, potvrđuje 3D). III sprat: na 3D-u piše "318" dvaput - druga je
+319 (u rasporedu postoji); uska soba (450-474) nema broj. Prizemlje: brojevi nisu na tablama; severni red 001-007 po
+obrascu, a od južnog reda 3D pokazuje samo 012 u jugozapadnom uglu (011, 011a, 010, 009, 008 ka istoku - šematski, ne
+mogu se vezati za sobe crteža), ostale sobe bez broja.
 
 Veza sa kampusom: samo pasarela iz Amfiteatara (korisnik: "uglavnom samo severni (prolaz ka amfiteatrima), ne znam
 da li se koristi stvarno neki spoljni ulaz"). Pasarela stiže na međunivo glavnog stepeništa (teren 01.10.2026: dole
@@ -54,8 +63,12 @@ def poly(*pts):
 
 
 def rooms(floor, y0, y1, spans):
-    """Red soba: [(x0, x1, broj ili None)]; broj 15 na 3. spratu -> "F 315"."""
-    return [R(a, b, y0, y1, f"F {floor}{n:02d}" if n else None) for a, b, n in spans]
+    """Red soba: [(x0, x1, broj ili None ili gotov naziv)]; broj 15 na 3. spratu -> "F 315", 0 na 2. -> "F 200"."""
+    def name(n):
+        if n is None or isinstance(n, str):
+            return n
+        return f"F {floor}{n:02d}"
+    return [R(a, b, y0, y1, name(n)) for a, b, n in spans]
 
 
 STAIRS_RECT = (402, 452, 114, 160)  # glavno stepenište, uz donji (severni) zid
@@ -84,13 +97,13 @@ def floor_0():
         "entrances": [box(452, 489, 163, 205)],  # pasarela
         "steps": [box(250, 299, 163, 205)],  # spoljne stepenice (sever)
         "rooms": [
-            *rooms(0, 0, 80, [(0, 51, 8), (51, 100, 9), (100, 151, 10), (151, 200, 11)]),
-            *rooms(0, 0, 63, [(200, 225, 12), (225, 250, 13), (250, 275, 14), (275, 299, 15)]),
-            *rooms(0, 0, 80, [(299, 348, 16)]),
-            *rooms(0, 0, 63, [(348, 373, 17), (373, 398, 18), (398, 422, 19), (422, 448, 20)]),
-            *rooms(0, 0, 80, [(448, 498, 21), (498, 548, 22), (548, 600, 23)]),
+            *rooms(0, 0, 80, [(0, 51, None), (51, 100, None), (100, 151, None), (151, 200, None)]),
+            *rooms(0, 0, 63, [(200, 225, None), (225, 250, None), (250, 275, None), (275, 299, None)]),
+            *rooms(0, 0, 80, [(299, 348, None)]),
+            *rooms(0, 0, 63, [(348, 373, None), (373, 398, None), (398, 422, None), (422, 448, None)]),
+            *rooms(0, 0, 80, [(448, 498, None), (498, 548, None), (548, 600, 12)]),
             *rooms(0, 113, 163, [(0, 51, 7), (51, 100, 6), (100, 151, 5), (151, 200, 4), (200, 250, 3),
-                                 (299, 323, 2), (323, 348, 1), (489, 548, 24), (548, 600, None)]),
+                                 (299, 323, 2), (323, 348, 1), (489, 548, None), (548, 600, None)]),
         ],
         "stairs": stairs(),
         "points": [("PROLAZ-AMF", PASSAGE, "PROLAZ")],
@@ -108,13 +121,13 @@ def floor_1():
         ],
         "entrances": [box(453, 489, 163, 205)],
         "rooms": [
-            *rooms(1, 0, 82, [(0, 51, 14), (51, 75, 15), (75, 100, 16), (100, 125, 17), (125, 150, 18),
-                              (150, 175, 19), (175, 200, 20), (200, 225, 21), (225, 250, 22), (250, 275, 23),
-                              (275, 300, 24), (300, 400, 25), (400, 500, 26), (500, 600, 27)]),
+            *rooms(1, 0, 82, [(0, 51, None), (51, 75, 14), (75, 100, 15), (100, 125, 16), (125, 150, 17),
+                              (150, 175, 18), (175, 200, 19), (200, 225, 20), (225, 250, 21), (250, 275, 22),
+                              (275, 300, 23), (300, 400, 24), (400, 500, 25), (500, 600, 26)]),
             *rooms(1, 113, 163, [(0, 51, 13), (51, 75, 12), (75, 100, 11), (100, 125, 10), (125, 150, 9),
                                  (150, 175, 8), (175, 200, 7), (200, 225, 6), (225, 250, 5), (250, 275, 4),
                                  (275, 300, 3), (300, 325, 2), (325, 352, 1),
-                                 (489, 509, 30), (509, 550, None), (550, 572, 29), (572, 600, 28)]),
+                                 (489, 509, "F 1"), (509, 550, None), (550, 572, "F 2"), (572, 600, "F 3")]),
         ],
         "stairs": stairs((405, 453, 114, 160)),
         "points": [("PROLAZ-AMF", PASSAGE, "PROLAZ")],
@@ -134,10 +147,10 @@ def floor_2():
             *rooms(2, 0, 82, [(0, 50, 9), (50, 99, 10), (99, 122, 11), (122, 149, 12), (149, 172, 13),
                               (172, 199, 14), (199, 247, 15), (247, 270, 16), (270, 297, 17), (297, 347, 18),
                               (347, 397, 19), (397, 421, 20), (421, 448, 21), (448, 498, 22), (498, 548, 23),
-                              (548, 600, 24)]),
+                              (548, 600, 24)]),  # 224 = i 225
             *rooms(2, 114, 163, [(0, 50, 8), (50, 100, 7), (100, 149, 6), (149, 198, 5), (198, 248, 4),
-                                 (248, 322, 3), (322, 347, 2), (347, 373, 1),
-                                 (489, 509, 27), (509, 548, None), (548, 573, 26), (573, 600, 25)]),
+                                 (248, 322, 2), (322, 347, 1), (347, 373, 0),  # 202 = i 203 (tabla: dve sobe)
+                                 (489, 509, 26), (509, 548, None), (548, 573, 27), (573, 600, 28)]),
         ],
         "stairs": stairs(),
     }
@@ -153,13 +166,13 @@ def floor_3():
             poly((446, 114), (465, 114), (465, 160), (446, 160)),  # podest stepeništa
         ],
         "rooms": [
-            *rooms(3, 0, 82, [(0, 52, 9), (52, 101, 10), (101, 126, 11), (126, 151, 12), (151, 175, 13),
-                              (175, 201, 14), (201, 251, 15), (251, 300, 16), (300, 350, 17), (350, 400, 18),
-                              (400, 450, 19), (450, 474, 20), (474, 548, 21), (548, 600, 22)]),
+            *rooms(3, 0, 82, [(0, 52, None), (52, 101, 9), (101, 126, 10), (126, 151, 11), (151, 175, 12),
+                              (175, 201, 13), (201, 251, 14), (251, 300, 15), (300, 350, 16), (350, 400, 17),
+                              (400, 450, 18), (450, 474, None), (474, 548, 19), (548, 600, 20)]),
             *rooms(3, 98, 163, [(0, 52, 8), (52, 101, 7), (101, 151, 6), (151, 201, 5), (201, 251, 4),
                                 (251, 301, 3), (301, 350, 2), (350, 374, 1)]),
             R(374, 387, 132, 163),  # ostava kod stepeništa
-            *rooms(3, 114, 163, [(465, 496, 24), (496, 537, None), (559, 600, 23)]),
+            *rooms(3, 114, 163, [(465, 496, 26), (496, 537, None), (559, 600, None)]),
         ],
         "stairs": stairs((398, 446, 114, 160)),
     }

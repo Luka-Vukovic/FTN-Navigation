@@ -112,6 +112,7 @@ import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.AmfPlan
 import com.example.ftnnavigation.graph.IndoorBuilding
 import com.example.ftnnavigation.graph.FPlan
+import com.example.ftnnavigation.graph.MiPlan
 import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NtpPlan
@@ -490,7 +491,7 @@ private fun FloorPlan(
     }
 }
 
-/** Svi spratovi zgrada sa planom (NB -1 ... 5, AMF -1 ... 1, Kula 0 ... 9, NTP 0 ... 5, F 0 ... 3). */
+/** Svi spratovi zgrada sa planom (NB -1 ... 5, AMF -1 ... 1, Kula 0 ... 9, NTP 0 ... 5, F 0 ... 3, MI 0 ... 1). */
 private val ALL_FLOORS = -1..9
 
 /** "Nastavni blok · %s" i sl. - podnaslov Mape za zgradu. */
@@ -501,6 +502,7 @@ private fun IndoorBuilding.locationRes(): Int = when (this) {
     KulaPlan -> R.string.kula_location
     NtpPlan -> R.string.ntp_location
     FPlan -> R.string.f_location
+    MiPlan -> R.string.mi_location
 }
 
 /** Spratovi kroz koje ruta prolazi u zgradi [buildingId]. */
@@ -859,6 +861,7 @@ private fun MapMode.labelRes(): Int = when (this) {
     MapMode.KULA -> R.string.map_mode_kula
     MapMode.NTP -> R.string.map_mode_ntp
     MapMode.F -> R.string.map_mode_f
+    MapMode.MI -> R.string.map_mode_mi
 }
 
 /**
