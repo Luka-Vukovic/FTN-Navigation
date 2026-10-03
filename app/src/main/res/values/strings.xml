@@ -129,9 +129,20 @@
     <string name="route_floor_change_up">↑ %1$s</string>
     <string name="route_floor_change_down">↓ %1$s</string>
     <string name="building_with_floor">%1$s · %2$s</string>
-    <string name="poc_hint_no_start">Postavi početnu poziciju da bi pokrenuo praćenje</string>
-    <string name="poc_hint_pick_start">Dodirni plan na mestu gde stojiš</string>
+    <string name="poc_hint_no_start">Dodirni „Ovde sam“ i označi gde si (napolju praćenje može i sa GPS-a)</string>
+    <string name="poc_hint_pick_start">Dodirni mapu na mestu gde stojiš</string>
     <string name="poc_hint_position_elsewhere">Pozicija je na planu: %1$s</string>
+    <string name="poc_hint_position_outside">Pozicija je napolju (mapa kampusa)</string>
+    <!-- Posle „Ovde sam“: greška smera (PDR − stvarni, bez ispravke) i PDR put u odnosu na stvarni. -->
+    <string name="poc_heading_check_measured">Greška smera %1$+d° · put %2$d %%</string>
+    <string name="poc_heading_check_corrected">Smer ispravljen</string>
+    <string name="poc_heading_check_corrected_again">Uz ispravku je bilo %1$+d° · ispravljeno</string>
+    <string name="poc_heading_check_not_applied">Ispravka je isključena - samo izmereno</string>
+    <string name="poc_heading_check_unreliable">Nepouzdano (zbrkan put?) - ne uči se</string>
+    <string name="poc_heading_check_short">Pozicija ispravljena · smer nije meren (put %1$d m, treba bar 10 m)</string>
+    <string name="poc_heading_check_interrupted">Pozicija ispravljena · smer nije meren (ispravka menjana usput)</string>
+    <string name="poc_heading_correction">Ispravi smer</string>
+    <string name="poc_heading_correction_value">Ispravi smer (greška %1$+d°)</string>
     <string name="poc_stat_steps">Koraci</string>
     <string name="poc_stat_heading">Smer</string>
     <string name="poc_stat_distance">Pređeno</string>
@@ -140,7 +151,7 @@
     <string name="poc_phone_offset_value">%1$+d°</string>
     <string name="poc_phone_offset_settling">…</string>
     <string name="poc_distance_value">%1$.1f m</string>
-    <string name="poc_set_start">Postavi start</string>
+    <string name="poc_set_position">Ovde sam</string>
     <string name="poc_cancel">Otkaži</string>
     <string name="poc_start">Start</string>
     <string name="poc_stop">Stop</string>

@@ -33,6 +33,15 @@ data class PlanPlacement(
         val dy = y * scale.heightM.toDouble()
         return PointM(originX + dx * cos - dy * sin, originY + dx * sin + dy * cos)
     }
+
+    /** Tačka u metrima u relativne koordinate plana (obrnuto od [toMeters]); van plana je van 0..1. */
+    fun toRelative(p: PointM): Pair<Float, Float> {
+        val ex = p.x - originX
+        val ey = p.y - originY
+        val dx = ex * cos + ey * sin
+        val dy = -ex * sin + ey * cos
+        return (dx / scale.widthM).toFloat() to (dy / scale.heightM).toFloat()
+    }
 }
 
 /**

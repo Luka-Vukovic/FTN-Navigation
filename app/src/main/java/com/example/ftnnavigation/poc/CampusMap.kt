@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import com.example.ftnnavigation.campus.BuildingCategory
+import com.example.ftnnavigation.campus.CAMPUS_ID
 import com.example.ftnnavigation.campus.CampusBuilding
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.CampusPoint
@@ -96,8 +97,8 @@ private fun Density.placeLabels(
 
 /**
  * Spoljna mapa kampusa (OpenStreetMap): okolne zgrade, ulice i staze za orijentaciju, FTN
- * zgrade i studentske službe (toplim tonom) sa natpisima, spojni prolazi, ulazi i ruta. [position] je PDR pozicija relativno na
- * plan zgrade [pdrBuildingId] - preslikava se u kampus preko smeštaja plana; [headingDeg] je smer u
+ * zgrade i studentske službe (toplim tonom) sa natpisima, spojni prolazi, ulazi i ruta. [position] je pozicija relativno na
+ * plan zgrade [pdrBuildingId] (ili na mapu kampusa, [CAMPUS_ID]) - preslikava se u kampus preko smeštaja plana; [headingDeg] je smer u
  * odnosu na "gore" tog plana. [gps] je GPS lokacija sa krugom tačnosti; kad postoji i PDR pozicija,
  * GPS je samo tačka (smer pripada PDR oznaci). Ruta se crta od mesta odakle kreće ([routeStart]).
  */
@@ -111,12 +112,15 @@ fun CampusMap(
     position: Offset?,
     gps: GpsFix?,
     headingDeg: Float,
+    isPickingPosition: Boolean,
+    onTap: (Offset) -> Unit,
     onBuildingLongPress: (CampusBuilding) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val zoom = rememberZoomPanState(maxScale = 8f)
     val colors = MaterialTheme.colorScheme
     val haptics = LocalHapticFeedback.current
+    val currentOnTap by rememberUpdatedState(onTap)
     val currentOnBuildingLongPress by rememberUpdatedState(onBuildingLongPress)
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium.copy(
@@ -137,8 +141,13 @@ fun CampusMap(
                 .aspectRatio(campus.widthM / campus.heightM)
                 .zoomPanLayer(zoom)
                 // Posle zoomPanLayer (graphicsLayer): dodir stiže u koordinatama mape (zum i pomeraj već skinuti).
-                // Pomeranje mape troši događaje, pa prekida i držanje.
-                .pointerInput(campus) {
+                // Pomeranje mape troši događaje, pa prekida i držanje. Dok se označava pozicija ("Ovde sam"),
+                // dodir je pozicija (relativno na mapu, kao čvorovi kampusa).
+                .pointerInput(campus, isPickingPosition) {
+                    if (isPickingPosition) {
+                        detectTapGestures { at -> currentOnTap(Offset(at.x / size.width, at.y / size.height)) }
+                        return@pointerInput
+                    }
                     detectTapGestures(
                         onLongPress = { at ->
                             val k = 1f / zoom.scale

@@ -170,15 +170,17 @@ fun PocRoute(
         target = viewModel.target,
         route = viewModel.route,
         routeStart = viewModel.routeStart,
+        canStartTracking = viewModel.canStartTracking,
         roomSchedule = roomSchedule,
         onModeChange = viewModel::selectMode,
         onFloorChange = viewModel::selectFloor,
         onDestinationChange = viewModel::selectDestination,
         onPickStartToggle = viewModel::togglePickStart,
-        onMapTap = viewModel::setStart,
+        onMapTap = viewModel::setPosition,
         onTrackingToggle = viewModel::toggleTracking,
         onReset = viewModel::reset,
         onSnapToggle = viewModel::toggleSnapToGraph,
+        onHeadingCorrectionToggle = viewModel::toggleHeadingCorrection,
     )
 }
 
@@ -195,6 +197,7 @@ fun PocScreen(
     target: RouteTarget?,
     route: Route?,
     routeStart: RouteStart,
+    canStartTracking: Boolean,
     roomSchedule: RoomSchedule?,
     onModeChange: (MapMode) -> Unit,
     onFloorChange: (Int) -> Unit,
@@ -204,6 +207,7 @@ fun PocScreen(
     onTrackingToggle: () -> Unit,
     onReset: () -> Unit,
     onSnapToggle: () -> Unit,
+    onHeadingCorrectionToggle: () -> Unit,
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     // Zgrada čiji je natpis držan na mapi kampusa - pop-up sa opisom.
@@ -224,17 +228,20 @@ fun PocScreen(
             MapModeSelector(mode, currentBuilding, onModeChange)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 val building = mode.building
-                val pdrHere = building == state.pdrBuilding && floor == state.pdrFloor
+                val place = state.pdrPlace
+                val pdrHere = building != null && building.buildingId == place.buildingId && floor == place.floor
                 when {
                     building == null -> if (campus != null) CampusMap(
                         campus = campus,
                         graph = graph,
                         route = route,
                         routeStart = routeStart,
-                        pdrBuildingId = state.pdrBuilding.buildingId,
+                        pdrBuildingId = place.buildingId,
                         position = state.position,
                         gps = gps,
                         headingDeg = state.headingDeg,
+                        isPickingPosition = state.isPickingStart,
+                        onTap = onMapTap,
                         onBuildingLongPress = { infoBuildingId = it.id },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -263,15 +270,14 @@ fun PocScreen(
                         )
                     }
                 }
-                // Start se postavlja samo na planu zgrade; ako je pozicija na drugom planu, piše gde je.
+                // Na planu: ako je pozicija na drugom planu (ili napolju), piše gde je. Kampus crta poziciju sa svakog plana.
                 val hint = when {
-                    building == null -> null
                     state.isPickingStart -> stringResource(R.string.poc_hint_pick_start)
+                    building == null -> null
                     state.position == null -> stringResource(R.string.poc_hint_no_start)
-                    !pdrHere -> stringResource(
-                        R.string.poc_hint_position_elsewhere,
-                        stringResource(state.pdrBuilding.locationRes(), floorName(state.pdrFloor)),
-                    )
+                    !pdrHere -> place.building?.let {
+                        stringResource(R.string.poc_hint_position_elsewhere, stringResource(it.locationRes(), floorName(place.floor)))
+                    } ?: stringResource(R.string.poc_hint_position_outside)
                     else -> null
                 }
                 Column(
@@ -291,18 +297,38 @@ fun PocScreen(
                     if (hint != null) HintBanner(hint)
                 }
                 if (mode.building != null) {
-                    FilterChip(
-                        selected = state.snapToGraph,
-                        onClick = onSnapToggle,
-                        label = { Text(stringResource(R.string.poc_snap_to_graph)) },
-                        colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
-                    )
+                    // Prekidači za teren, jedan iznad drugog (u redu ne staju pored birača sprata). Ispravka smera
+                    // tek kad postoji pozicija - pre toga nema šta da ispravi.
+                    val chipColors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface)
+                    Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
+                        if (state.rawPosition != null) {
+                            FilterChip(
+                                selected = state.applyHeadingCorrection,
+                                onClick = onHeadingCorrectionToggle,
+                                label = {
+                                    Text(
+                                        state.headingErrorDeg?.let {
+                                            stringResource(R.string.poc_heading_correction_value, it.roundToInt())
+                                        } ?: stringResource(R.string.poc_heading_correction),
+                                    )
+                                },
+                                colors = chipColors,
+                            )
+                        }
+                        FilterChip(
+                            selected = state.snapToGraph,
+                            onClick = onSnapToggle,
+                            label = { Text(stringResource(R.string.poc_snap_to_graph)) },
+                            colors = chipColors,
+                        )
+                    }
                 }
             }
             ControlPanel(
                 state = state,
                 hasDestination = destination != null,
+                canPickPosition = graph != null,
+                canStartTracking = canStartTracking,
                 onChooseDestination = { showDestinations = true },
                 onPickStartToggle = onPickStartToggle,
                 onTrackingToggle = onTrackingToggle,
@@ -972,6 +998,8 @@ private fun HintBanner(text: String, modifier: Modifier = Modifier) {
 private fun ControlPanel(
     state: PocUiState,
     hasDestination: Boolean,
+    canPickPosition: Boolean,
+    canStartTracking: Boolean,
     onChooseDestination: () -> Unit,
     onPickStartToggle: () -> Unit,
     onTrackingToggle: () -> Unit,
@@ -1014,20 +1042,21 @@ private fun ControlPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // "Ovde sam" radi i za vreme praćenja (rekalibracija).
                 OutlinedButton(
                     onClick = onPickStartToggle,
-                    enabled = !state.isTracking,
+                    enabled = canPickPosition,
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(
                         stringResource(
-                            if (state.isPickingStart) R.string.poc_cancel else R.string.poc_set_start,
+                            if (state.isPickingStart) R.string.poc_cancel else R.string.poc_set_position,
                         ),
                     )
                 }
                 Button(
                     onClick = onTrackingToggle,
-                    enabled = state.position != null && !state.isPickingStart,
+                    enabled = (state.isTracking || canStartTracking) && !state.isPickingStart,
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(if (state.isTracking) R.string.poc_stop else R.string.poc_start))
@@ -1073,6 +1102,7 @@ private fun PocScreenPreview() {
             target = null,
             route = null,
             routeStart = RouteStart.PDR,
+            canStartTracking = true,
             roomSchedule = null,
             onModeChange = {},
             onFloorChange = {},
@@ -1082,6 +1112,7 @@ private fun PocScreenPreview() {
             onTrackingToggle = {},
             onReset = {},
             onSnapToggle = {},
+            onHeadingCorrectionToggle = {},
         )
     }
 }
