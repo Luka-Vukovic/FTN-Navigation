@@ -93,7 +93,7 @@ class NtpGraphTest {
 
     /**
      * Oznake sa vrata (teren 03.10.2026): red kancelarija uz donji zid broji unazad sleva nadesno (I: 138 ... 125,
-     * IV: 433 ... 420), sobe sa više brojeva su jedna sala sa aliasima (119-123, 221/222), a podeljene dve sale.
+     * IV: 433 ... 420), sobe sa više brojeva su jedna sala sa aliasima (221/222), a podeljene dve sale.
      */
     @Test
     fun fieldLabels_fromDoors() {
@@ -103,7 +103,6 @@ class NtpGraphTest {
             assertEquals("sprat $floor", row.sortedBy { it.x }, row)
             assertEquals(1, row.map { it.y }.distinct().size)
         }
-        assertEquals(graph.room("NTP-119")!!.id, resolveTarget("NTP-120", graph, campus)!!.node.id)
         assertEquals(graph.room("NTP-221")!!.id, resolveTarget("NTP-222", graph, campus)!!.node.id)
         val (a, b) = listOf("NTP-115", "NTP-116").map { checkNotNull(graph.room(it)) }
         assertTrue(a.id != b.id && a.floor == 1 && b.floor == 1)
@@ -155,15 +154,29 @@ class NtpGraphTest {
     }
 
     /**
-     * I sprat ima svoj plan (teren 04.10.2026): 124 je donji deo sobe 17 i ulazi se iz T3 (soba bez oznake) sa kraja
-     * srednjeg hodnika; 119 je u T1, levo od pregrade (x 1575 px plana).
+     * I sprat, oznake korisnika (04.10.2026 uveče): 119 je hol istočno od desnog hodnika, iz njega 120 (T1, levo od
+     * pregrade na x 1575 px plana), 121 (T2) i 122 (T3); 123 je donja soba, ulazi se kroz 122; 124 je prostor iza
+     * dvokrilnih vrata donjeg hodnika, kroz njega se ulazi u 125 i 126. Jezgro sa S3 i L3 je otvoreno ka donjem hodniku.
      */
     @Test
-    fun firstFloor_room124ThroughT3_119InT1() {
-        val route = checkNotNull(graph.route(NtpPlan.ENTRANCE_ID, graph.room("NTP-124")!!.id)).nodes
-        assertTrue(route.any { it.id == "NTP-1-T3" })
+    fun firstFloor_suite119To124() {
+        val rooms = (119..124).map { checkNotNull(graph.room("NTP-$it")) { "NTP-$it" } }
+        assertTrue(rooms.all { it.floor == 1 })
+        assertEquals(6, rooms.map { it.id }.distinct().size)
         val partitionX = (1575f + 1650f) / 3790f // viewport plana NTP-a (build_ntp.py): x od -1650, širina 3790
-        assertTrue(graph.room("NTP-119")!!.x < partitionX)
+        assertTrue(rooms[1].x < partitionX && rooms[2].x > partitionX)
+        fun route(room: String) = checkNotNull(graph.route(NtpPlan.ENTRANCE_ID, graph.room(room)!!.id)).nodes
+        fun passOf(room: String) = graph.neighbors(graph.room(room)!!.id).single().first
+        val hall = setOf("NTP-1-C1494", "NTP-1-C1600") // čvorovi hodnika u holu 119
+        assertTrue(passOf("NTP-119").id in hall)
+        for (room in listOf("NTP-120", "NTP-121", "NTP-122", "NTP-123")) assertTrue(room, route(room).any { it.id in hall })
+        assertTrue(route("NTP-123").any { it.id == passOf("NTP-122").id })
+        for (room in listOf("NTP-125", "NTP-126")) assertTrue(room, route(room).any { it.id == passOf("NTP-124").id })
+        // Do 124 donjim hodnikom, ne kroz hol i 122.
+        assertFalse(route("NTP-124").any { it.id in hall })
+        for (core in listOf("NTP-1-S3", "NTP-1-L3")) {
+            assertTrue(core, graph.neighbors(core).any { it.first.id == "NTP-1-B1580" })
+        }
     }
 
     /** "318 je odmah pored 317, ide skroz do zida zgrade, ulaz je sa iste strane kao kod 317" (219 isto, pored 218). */

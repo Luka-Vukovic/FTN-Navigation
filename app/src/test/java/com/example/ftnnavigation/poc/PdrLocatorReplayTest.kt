@@ -86,7 +86,7 @@ class PdrLocatorReplayTest {
             when (f[0]) {
                 "S" -> {
                     steps++
-                    val reason = locator.step(f[2].toFloat(), stepM, f[3].toInt())
+                    val reason = locator.step(f[2].toFloat(), stepM, f[3].toInt(), t)
                     if (reason != null) log(t, "replay: $reason")
                     row(t, "S")
                 }

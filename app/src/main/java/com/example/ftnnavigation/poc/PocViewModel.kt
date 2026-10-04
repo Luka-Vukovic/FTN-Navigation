@@ -79,8 +79,9 @@ data class PocUiState(
     val applyHeadingCorrection: Boolean = true,
     /** Poslednja izmerena greška smera u zgradi u kojoj je korisnik (PDR − stvarni, bez ispravke); null = nije merena. */
     val headingErrorDeg: Float? = null,
+    /** Pređeno (m): koraci punom dužinom, a na stepeništu samo gazište ([PdrLocator.lastStepM]). */
+    val distanceM: Float = 0f,
 ) {
-    val distanceM: Float get() = steps * stepLengthM
 
     /** Pozicija na grafu ako je lepljenje uključeno (map-matching se računa i kad nije). */
     val shownMatch: MatchedPosition? get() = match.takeIf { snapToGraph }
@@ -135,6 +136,13 @@ private const val CAMPUS_ALT_M = 80f
  */
 internal fun planUpMagneticAzimuthDeg(placement: PlanPlacement, declinationDeg: Float): Float =
     normalizeDeg(placement.rotationDeg.toFloat() - declinationDeg)
+
+/** "suteren" / "prizemlje" / "3. sprat" (kao na Mapi). */
+private fun floorText(app: Application, floor: Int): String = when {
+    floor < 0 -> app.getString(R.string.floor_basement)
+    floor == 0 -> app.getString(R.string.floor_ground)
+    else -> app.getString(R.string.floor_number, floor)
+}
 
 /**
  * Toast posle označavanja: koliko je smer promašio i šta je urađeno. Najviše dva reda (Android 12+ seče duže
@@ -313,7 +321,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             ).declination
             val graph = loadGraph(application, campus)
             // Pozicija se ne može postaviti pre ovoga ("Ovde sam" i Start čekaju graf).
-            locator = PdrLocator(graph, campus, declination).apply { applyCorrection = state.applyHeadingCorrection }
+            locator = PdrLocator(graph, campus, declination).apply {
+                applyCorrection = state.applyHeadingCorrection
+                restoreStairTurns(AppSettings.stairTurns(application))
+            }
             this@PocViewModel.graph = graph
             lastAzimuthDeg?.let(::onHeading)
         }
@@ -383,9 +394,22 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val locator = locator ?: return
         if (locator.raw == null) return
         val before = locator.place
-        val reason = locator.step(step.headingDeg, state.stepLengthM, step.redoSteps)
-        state = state.copy(steps = state.steps + 1)
+        // Kad se smer na stepeništu ne zna, pretpostavlja se ka spratu odredišta.
+        locator.destination = target?.node?.let { PdrPlace(it.buildingId, it.floor) }
+        val reason = locator.step(step.headingDeg, state.stepLengthM, step.redoSteps, SystemClock.elapsedRealtimeNanos())
+        state = state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
         updatePosition(before, reason)
+        if (reason == PlaceReason.STEPENICE) onStairChange(locator)
+    }
+
+    /** Sprat promenjen na stepeništu: obaveštenje (i da sprat ispravi ako nije tačan) i čuvanje naučenog smera okreta. */
+    private fun onStairChange(locator: PdrLocator) {
+        val change = locator.lastStairChange ?: return
+        val app = getApplication<Application>()
+        AppSettings.setStairTurns(app, locator.learnedStairTurns)
+        val text = app.getString(R.string.poc_stairs_changed, floorText(app, change.fromFloor), floorText(app, change.toFloor)) +
+            if (change.guessed) "\n" + app.getString(R.string.poc_stairs_guessed) else ""
+        Toast.makeText(app, text, Toast.LENGTH_LONG).show()
     }
 
     /**
@@ -439,6 +463,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val place = if (building != null) PdrPlace(building.buildingId, floorOf(building)) else PdrPlace.CAMPUS
         val before = locator.place
         val check = locator.setPosition(place, point)
+        // Ispravka sprata posle stepeništa je mogla da nauči smer okreta.
+        AppSettings.setStairTurns(getApplication(), locator.learnedStairTurns)
         state = state.copy(isPickingStart = false)
         updatePosition(before, PlaceReason.RUCNO)
         if (check != null) {
