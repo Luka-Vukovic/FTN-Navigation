@@ -5,14 +5,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
 
-/** Prekidač Mape: kad se po GPS-u zna zgrada, samo kampus, ta zgrada i ono što je prikazano. */
+/** Prekidač Mape: kampus, zgrada u kojoj je korisnik po GPS-u i ono što je prikazano; ostalo u meniju. */
 class MapModesTest {
 
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
 
+    /** Korisnik (04.10.2026): van zgrada "kampus i ...", zgrade u padajućem meniju (ranije sve - natpisi odsečeni). */
     @Test
-    fun unknownOrOutside_allModes() {
-        assertEquals(MapMode.entries, shownModes(MapMode.NB, here = null))
+    fun outsideOrUnknown_onlyCampus() {
+        assertEquals(listOf(MapMode.KAMPUS), shownModes(MapMode.KAMPUS, here = null))
+    }
+
+    /** Zgrada izabrana iz menija ostaje na prekidaču dok je prikazana (da se vidi šta je izabrano). */
+    @Test
+    fun outside_shownBuildingStays() {
+        assertEquals(listOf(MapMode.KAMPUS, MapMode.NB), shownModes(MapMode.NB, here = null))
     }
 
     @Test

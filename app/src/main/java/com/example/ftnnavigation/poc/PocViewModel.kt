@@ -102,16 +102,13 @@ enum class MapMode(val building: IndoorBuilding?) {
 }
 
 /**
- * Izbori na prekidaču Mape. Kad se po GPS-u zna zgrada u kojoj je korisnik ([here]), samo kampus,
- * plan te zgrade i ono što je prikazano ([mode]); ostale zgrade su u meniju. Napolju, ili dok se
- * ne zna, sve.
+ * Izbori na prekidaču Mape: kampus, plan zgrade u kojoj je korisnik po GPS-u ([here]) i ono što je prikazano
+ * ([mode]); ostale zgrade su u meniju "…". Napolju (ili dok se ne zna) samo kampus i "…" - do 04.10.2026 su tada
+ * bile sve zgrade, pa su natpisi bili odsečeni ("Kam", "Amfi", "F-blo"); korisnik: "kampus i ..., gde ... daje
+ * padajući meni sa zgradama".
  */
 internal fun shownModes(mode: MapMode, here: CampusBuilding?): List<MapMode> =
-    if (here == null) {
-        MapMode.entries
-    } else {
-        MapMode.entries.filter { it == MapMode.KAMPUS || it == mode || it.building?.buildingId == here.id }
-    }
+    MapMode.entries.filter { it == MapMode.KAMPUS || it == mode || (here != null && it.building?.buildingId == here.id) }
 
 /** Odakle kreće ruta: pozicija (PDR, napolju i sa GPS-om), GPS lokacija (bez praćenja) ili glavni ulaz NB-a. */
 enum class RouteStart { PDR, GPS, ENTRANCE }

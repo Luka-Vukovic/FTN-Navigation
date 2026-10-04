@@ -907,9 +907,8 @@ private fun MapMode.labelRes(): Int = when (this) {
 }
 
 /**
- * Prekidač prikaza Mape: kampus (spolja) ili plan zgrade. Kad se po GPS-u zna u kojoj je zgradi
- * korisnik ([here]), prikazani su samo kampus i ta zgrada (sa oznakom lokacije), a ostale su u
- * meniju "…" ([shownModes]).
+ * Prekidač prikaza Mape: kampus (spolja) ili plan zgrade. Prikazani su kampus, zgrada u kojoj je korisnik po
+ * GPS-u ([here], sa oznakom lokacije) i prikazana zgrada; ostale su u meniju "…" ([shownModes]).
  */
 @Composable
 private fun MapModeSelector(mode: MapMode, here: CampusBuilding?, onModeChange: (MapMode) -> Unit) {
