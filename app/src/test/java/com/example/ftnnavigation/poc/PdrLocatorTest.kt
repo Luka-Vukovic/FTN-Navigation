@@ -177,6 +177,39 @@ class PdrLocatorTest {
         assertEquals(listOf(PlaceReason.PROLAZ), reasons)
     }
 
+    /**
+     * Teren 04.10.2026: kompas ~+35° (ka gornjoj strani plana), korisnik ide hodnikom NB prizemlja ka holu - tačka je
+     * na raskrsnici skrenula u krak ka prolazu u Amfiteatre (10,8 m naviše), prešla ga i okinula prolaz u AMF.
+     */
+    @Test
+    fun nbCorridor_compassDraggingTowardAmfBranch_noPassageToAmf() {
+        val locator = locatorAt("NB-0-H744_420")
+        val azimuth = magneticAzimuth(graph.position(node("NB-0-H744_420")), graph.position(inner("NB-0-PROLAZ"))) + 35f
+        val reasons = mutableListOf<PlaceReason>()
+        var steps = 0
+        while (locator.place != PdrPlace("KULA", 0)) {
+            locator.step(azimuth, stepM)?.let(reasons::add)
+            assertTrue("skrenula u krak ka AMF-u: ${locator.match?.point}", locator.place.buildingId != "AMF")
+            check(++steps < 70) { "nije stigao do Kule (na ${locator.place}, ${locator.match?.point})" }
+        }
+        assertEquals(listOf(PlaceReason.PROLAZ), reasons)
+    }
+
+    /** Pravo skretanje u krak ka AMF-u (i uz grešku kompasa ±20°) i dalje vodi u Amfiteatre. */
+    @Test
+    fun nbCorridor_turningIntoAmfBranch_withCompassError_passesToAmf() {
+        for (errorDeg in listOf(-20f, 20f)) {
+            val locator = locatorAt("NB-0-H744_420")
+            locator.walk(inner("NB-0-PROLAZ-AMF").id)
+            val azimuth = magneticAzimuth(graph.position(inner("NB-0-PROLAZ-AMF")), graph.position(node("NB-0-PROLAZ-AMF"))) + errorDeg
+            var steps = 0
+            while (locator.place.buildingId != "AMF") {
+                locator.step(azimuth, stepM)
+                check(++steps < 30) { "greška $errorDeg°: nije prešao u AMF (na ${locator.place}, ${locator.match?.point})" }
+            }
+        }
+    }
+
     @Test
     fun nbToKula_throughFirstFloorPassage() {
         val locator = locatorAt(inner("NB-1-PROLAZ").id)

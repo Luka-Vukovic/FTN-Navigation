@@ -27,9 +27,9 @@ gornji red je bio pomeren za jednu sobu.
 II sprat: tabla ima 8 soba između stepeništa i istočnog kraja (200-207), crtež 7 - crtež je verovatno tačniji (korisnik),
 a jedina neobična soba crteža je široka 74 px (ostale 25/50): tu tabla ima dve sobe -> "F 202" sa aliasom 203
 (PRETPOSTAVKA). 224/225 je jedna soba (jugozapadni ugao, potvrđuje 3D). III sprat: na 3D-u piše "318" dvaput - druga je
-319 (u rasporedu postoji); uska soba (450-474) nema broj. Prizemlje: brojevi nisu na tablama; severni red 001-007 po
-obrascu, a od južnog reda 3D pokazuje samo 012 u jugozapadnom uglu (011, 011a, 010, 009, 008 ka istoku - šematski, ne
-mogu se vezati za sobe crteža), ostale sobe bez broja.
+319 (u rasporedu postoji); uska soba (450-474) nema broj. Prizemlje: brojevi nisu na tablama; severni red 001-006 po
+obrascu; južni red sa boljeg snimka 3D prikaza (teren 04.10.2026): od zapada 012, 011, 011a, 010, 009, 008, 007 (vidi
+floor_0). Do 04.10. je 007 bio istočni kraj severnog reda.
 
 Veza sa kampusom: samo pasarela iz Amfiteatara (korisnik: "uglavnom samo severni (prolaz ka amfiteatrima), ne znam
 da li se koristi stvarno neki spoljni ulaz"). Pasarela stiže na međunivo glavnog stepeništa (teren 01.10.2026: dole
@@ -96,13 +96,19 @@ def floor_0():
         ],
         "entrances": [box(452, 489, 163, 205)],  # pasarela
         "steps": [box(250, 299, 163, 205)],  # spoljne stepenice (sever)
+        # Južni red (gore): 3D prikaz sa teren 04.10.2026 (IMG_20261004_104721) - od zapada 012, 011, 011a, 010, 009,
+        # 008, 007, istočni kraj bez broja. Pregrade 3D-a padaju na zidove crteža kod 007-009 i 011a; 010 i 011 su na
+        # 3D-u velike sobe, a na crtežu niše sa po 4 male - broj je na sobi niše najbližoj natpisu (PRETPOSTAVKA).
         "rooms": [
-            *rooms(0, 0, 80, [(0, 51, None), (51, 100, None), (100, 151, None), (151, 200, None)]),
-            *rooms(0, 0, 63, [(200, 225, None), (225, 250, None), (250, 275, None), (275, 299, None)]),
-            *rooms(0, 0, 80, [(299, 348, None)]),
-            *rooms(0, 0, 63, [(348, 373, None), (373, 398, None), (398, 422, None), (422, 448, None)]),
+            *rooms(0, 0, 80, [(0, 51, None), (51, 100, 7), (100, 151, 8), (151, 200, 9)]),
+            *rooms(0, 0, 63, [(200, 225, None), (225, 250, 10), (250, 275, None), (275, 299, None)]),
+            *rooms(0, 0, 80, [(299, 348, "F 011a")]),
+            *rooms(0, 0, 63, [(348, 373, None), (373, 398, None), (398, 422, 11), (422, 448, None)]),
             *rooms(0, 0, 80, [(448, 498, None), (498, 548, None), (548, 600, 12)]),
-            *rooms(0, 113, 163, [(0, 51, 7), (51, 100, 6), (100, 151, 5), (151, 200, 4), (200, 250, 3),
+            # Severni red: 001-006 po obrascu (od stepeništa ka istoku); 007 je po 3D-u u južnom redu, pa je istočni
+            # kraj severnog reda bez broja (na I spratu je istočni kraj poslednji broj severnog reda - 113 - pa bi
+            # ovde mogao biti 006, a ceo red pomeren; ne zna se).
+            *rooms(0, 113, 163, [(0, 51, None), (51, 100, 6), (100, 151, 5), (151, 200, 4), (200, 250, 3),
                                  (299, 323, 2), (323, 348, 1), (489, 548, None), (548, 600, None)]),
         ],
         "stairs": stairs(),

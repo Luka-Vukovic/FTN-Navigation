@@ -140,6 +140,44 @@ class NtpGraphTest {
         assertEquals(2, route.nodes.last().floor)
     }
 
+    /** Teren 04.10.2026 (korisnik): "u 323 se ulazi preko 322", "223 i 224 analogno" - ruta do druge vodi kroz prvu. */
+    @Test
+    fun secondHalf_enteredThroughFirstHalf() {
+        for ((first, second) in listOf("NTP-322" to "NTP-323", "NTP-223" to "NTP-224")) {
+            val toSecond = checkNotNull(graph.route(NtpPlan.ENTRANCE_ID, graph.room(second)!!.id)).nodes
+            val pass = toSecond[toSecond.size - 3]
+            assertEquals(second, NodeType.HODNIK, pass.type)
+            assertTrue(second, graph.neighbors(pass.id).any { it.first.id == graph.room(first)!!.id })
+            // Prva polovina ima svoj ulaz iz hodnika, ne preko druge.
+            val toFirst = checkNotNull(graph.route(NtpPlan.ENTRANCE_ID, graph.room(first)!!.id)).nodes
+            assertFalse(first, toFirst.any { it.id == graph.room(second)!!.id })
+        }
+    }
+
+    /**
+     * I sprat ima svoj plan (teren 04.10.2026): 124 je donji deo sobe 17 i ulazi se iz T3 (soba bez oznake) sa kraja
+     * srednjeg hodnika; 119 je u T1, levo od pregrade (x 1575 px plana).
+     */
+    @Test
+    fun firstFloor_room124ThroughT3_119InT1() {
+        val route = checkNotNull(graph.route(NtpPlan.ENTRANCE_ID, graph.room("NTP-124")!!.id)).nodes
+        assertTrue(route.any { it.id == "NTP-1-T3" })
+        val partitionX = (1575f + 1650f) / 3790f // viewport plana NTP-a (build_ntp.py): x od -1650, širina 3790
+        assertTrue(graph.room("NTP-119")!!.x < partitionX)
+    }
+
+    /** "318 je odmah pored 317, ide skroz do zida zgrade, ulaz je sa iste strane kao kod 317" (219 isto, pored 218). */
+    @Test
+    fun room318_beside317_towardFacade_sameCorridor() {
+        for ((upper, lower) in listOf("NTP-318" to "NTP-317", "NTP-219" to "NTP-218")) {
+            val a = graph.room(upper)!!
+            val b = graph.room(lower)!!
+            assertTrue(upper, a.y < b.y)
+            fun corridorOf(room: String) = graph.route(NtpPlan.ENTRANCE_ID, graph.room(room)!!.id)!!.nodes.dropLast(2).last()
+            assertEquals(upper, corridorOf(lower).x, corridorOf(upper).x, 1e-3f)
+        }
+    }
+
     /**
      * PDR u NTP-u (01.10.2026): na svakom spratu map-matching ima hodnike, a hod od glavnog ulaza
      * ostaje na spratu i blizu slobodne pozicije (tolerancija).
@@ -157,7 +195,8 @@ class NtpGraphTest {
             assertEquals(floor, position.point.from.floor)
             val dx = (position.x - position.point.x) * scale.widthM
             val dy = (position.y - position.point.y) * scale.heightM
-            assertTrue(hypot(dx, dy) <= MATCH_TOLERANCE_M + 1e-6)
+            // Relativne koordinate su Float: na planu od ~110 m zaokruživanje je do ~1e-5 m (I sprat: 2,0000012 m).
+            assertTrue("sprat $floor: ${hypot(dx, dy)} m od ivice", hypot(dx, dy) <= MATCH_TOLERANCE_M + 1e-4)
         }
     }
 

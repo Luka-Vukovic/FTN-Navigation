@@ -1,6 +1,7 @@
 package com.example.ftnnavigation.graph
 
 import java.util.PriorityQueue
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
 
@@ -49,6 +50,9 @@ private const val STUCK_ESCAPE_MARGIN_M = 1.0
 /** Tačka na ivici bliže čvoru od ovoga (m) je na čvoru. */
 private const val AT_NODE_M = 0.05
 
+/** Ivice čiji se pravci razlikuju za manje od ovoga su isti hodnik (bez skretanja). */
+private const val SAME_DIRECTION_DEG = 30.0
+
 private val ROOM_TYPES = setOf(NodeType.PROSTORIJA, NodeType.VRATA)
 
 /**
@@ -69,6 +73,13 @@ private val ROOM_TYPES = setOf(NodeType.PROSTORIJA, NodeType.VRATA)
  * Isto i van sala: ako tačka ne napreduje dok korisnik hoda [STUCK_ESCAPE_M] (na raskrsnici je
  * izabran pogrešan krak - NTP prizemlje posle ulaza, 03.10.2026), prelazi na dostižnu ivicu koja
  * bolje objašnjava taj hod.
+ *
+ * Skretanje na raskrsnici: na ivicu drugog pravca (> [SAME_DIRECTION_DEG]) tačka prelazi samo ako je
+ * korak bliži pravcu te ivice nego pravcu trenutne. Inače bi o skretanju odlučivala samo slobodna
+ * pozicija, a ona uz grešku smera stoji na toleranciji pored hodnika - kod svakog kraka na toj strani
+ * je krak bliži (teren 04.10.2026: NB prizemlje, kompas ~+35°, korisnik ide hodnikom ka holu, tačka
+ * skrenula u krak ka prolazu u Amfiteatre - korak 56° od kraka, 34° od hodnika - prešla ga celog i
+ * okinula prolaz).
  *
  * Računa se u metrima plana (relativne koordinate × dimenzije); rotacija i pomeraj smeštaja
  * plana ne menjaju rastojanja.
@@ -92,6 +103,14 @@ class MapMatcher(
         val isRoom = a.type in ROOM_TYPES || b.type in ROOM_TYPES
 
         fun other(node: Node) = if (node.id == a.id) b else a
+
+        /** |cos| ugla između ivice i vektora (bez smera ivice): 1 = duž ivice, 0 = popreko. */
+        fun alignment(dx: Double, dy: Double): Double {
+            val norm = length * hypot(dx, dy)
+            return if (norm == 0.0) 1.0 else abs((dx * (bx - ax) + dy * (by - ay)) / norm)
+        }
+
+        fun sameDirection(other: Segment) = alignment(other.bx - other.ax, other.by - other.ay) >= cos(Math.toRadians(SAME_DIRECTION_DEG))
 
         /** Udeo ivice (0..1) najbliži tački. */
         fun project(px: Double, py: Double): Double {
@@ -151,8 +170,13 @@ class MapMatcher(
         val px = from.x * scale.widthM + dxM
         val py = from.y * scale.heightM + dyM
         val stepM = hypot(dxM, dyM)
-        val inRoom = segmentOf(from.point).isRoom
-        val nearest = segmentsNear(from.point, stepM + toleranceM).filter { inRoom || !it.isRoom }.minBy { it.distance(px, py) }
+        val current = segmentOf(from.point)
+        val inRoom = current.isRoom
+        val along = current.alignment(dxM, dyM)
+        val nearest = segmentsNear(from.point, stepM + toleranceM)
+            .filter { inRoom || !it.isRoom }
+            .filter { it == current || current.sameDirection(it) || it.alignment(dxM, dyM) > along }
+            .minBy { it.distance(px, py) }
         val next = fix(nearest, px, py)
         if (stepM == 0.0 || distanceM(from.point, next.point) >= STUCK_PROGRESS * stepM) return next
         val stuckX = from.stuckXM + dxM

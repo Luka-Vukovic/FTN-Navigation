@@ -5,7 +5,7 @@ Upotreba (iz korena projekta):
     tools/raspored/.venv/Scripts/python tools/ntp/build_ntp.py [--check <folder sa w0..w5.png>]
 
 Pravi:
-  - app/src/main/res/drawable/floor_plan_ntp_{0,typical,5}.xml (prizemlje, I-IV, V sprat),
+  - app/src/main/res/drawable/floor_plan_ntp_{0..5}.xml (prizemlje ... V sprat),
   - app/src/main/assets/ntp.json (čvorovi, ivice, veze sa grafom kampusa),
   - uz --check: <folder>/check{0..5}.png - crtež i graf preko fotografija evakuacionih planova.
 
@@ -16,8 +16,9 @@ liftovi se na svim spratovima poklapaju na par px). Sve koordinate ispod su u to
 sistemu (px ispravljenog II sprata). Viewport plana obuhvata ceo OSM obris NTP-a (FTN deo + poslovni
 deo, crta se svetlo na svim spratovima), jer je NTP-A u poslovnom delu.
 
-Spratovi I-IV su isti crtež (ljuska, jezgra, hodnici i kancelarije se poklapaju; razlikuju se
-samo pregrade soba u sredini) - crta se jedan "tipičan sprat". Planovi nemaju brojeve sala; do
+Spratovi II-IV su isti crtež (ljuska, jezgra, hodnici i kancelarije se poklapaju; razlikuju se
+samo pregrade soba u sredini) - "tipičan sprat" (TYPICAL), uz pregrade podeljenih i spojene sobe po spratu
+(typical_plan). I sprat ima svoj crtež (FIRST, teren 04.10.2026 - nije isti kao II i III). Planovi nemaju brojeve sala; do
 03.10.2026 su sale iz rasporeda bile na izmišljenim mestima, a tada ih je korisnik očitao sa vrata
 na svim spratovima (TYPICAL_LABELS, TOP_LABELS, prizemlje). Na planu prizemlja piše L1, L2, L4, LAB,
 AMFITEATAR: NTP-L3 = LAB je pretpostavka, "AMFITEATAR" je u stvari učionica 001, a na vratima "L2" piše C.
@@ -124,10 +125,50 @@ TYPICAL = {
         *[[(a, 1660), (b, 1660), (b, 1830), (a, 1830)] for a, b in zip(
             [336, 451, 572, 693, 814, 930, 1048, 1167, 1285, 1402, 1523, 1638, 1759, 1880],
             [451, 572, 693, 814, 930, 1048, 1167, 1285, 1402, 1523, 1638, 1759, 1880, 2090])],
+        # Teren 04.10.2026 (dodato na kraj - indeksi soba iznad ostaju isti, na njih se oslanjaju TYPICAL_LABELS):
+        [(450, 715), (550, 715), (550, 815), (450, 815)],  # 35: toalet uz liftove ("svaki sprat osim prizemlja")
+        [(1073, 591), (1100, 610), (1301, 759), (1301, 817), (1073, 817)],  # 36: iznad 14, do fasade (318, 219)
     ],
     "stairs": [(445, 343, 616, 547), (451, 1397, 699, 1550), (1575, 1395, 1765, 1545)],
     "shafts": [(658, 338, 710, 547)],
     "lifts": [(460, 651, 512, 701), (515, 651, 567, 701), (270, 1470, 335, 1545), (1460, 1487, 1523, 1545)],
+}
+
+# I sprat (teren 04.10.2026, nova fotografija - korisnik: "nije skroz isto kao drugi i treći sprat"). Gornji hodnik se
+# posle šahta sužava (y 591-680) i završava dvokrilnim vratima (x 933) ka predvorju pod fasadom; iznad njega je soba do
+# fasade; sobe 7-9 su niže (680-827), a prostor 6 je otvoren ka hodniku (razvodni orman). Trougao desno od desnog
+# hodnika (na II-IV jedna soba, 16) ima pregrade na x 1575 i 1785: T1 i T2 (dvokrilna vrata dole, na pregradi) i T3
+# (desno, ulaz sa kraja srednjeg hodnika, koji se završava vratima na x 1785). Soba 17 je samo donji deo
+# (1825-2083 x 1400-1590), ulazi se iz T3 odozgo. Donji hodnik se iza dvokrilnih vrata (x 1765) nastavlja ispod sobe 17.
+# Polovine 14 i 15 (115-118) su ovde nacrtane.
+FIRST = {
+    "outline": TYPICAL["outline"],
+    "corridors": [
+        [(350, 332), (451, 332), (451, 1660), (350, 1660)],  # glavni hodnik (levo)
+        [(451, 547), (708, 547), (708, 591), (933, 591), (933, 680), (767, 680), (767, 827), (664, 827), (664, 640),
+         (451, 640)],  # gornji hodnik, sužen posle šahta, sa otvorenim prostorom 6
+        [(933, 591), (1073, 591), (1073, 680), (933, 680)],  # predvorje iza dvokrilnih vrata
+        [(451, 1280), (1785, 1280), (1785, 1389), (451, 1389)],  # srednji hodnik
+        [(1301, 800), (1402, 800), (1402, 1280), (1301, 1280)],  # desni hodnik
+        [(1305, 1389), (1397, 1389), (1397, 1556), (1305, 1556)],
+        [(1785, 1280), (1825, 1280), (1825, 1590), (1765, 1590), (1765, 1389), (1785, 1389)],  # prolaz ka donjem
+        [(451, 1556), (1765, 1556), (1765, 1590), (2083, 1590), (2081, 1660), (451, 1660)],  # donji hodnik
+    ],
+    "rooms": [
+        *TYPICAL["rooms"][0:6],  # levo krilo, kutija sa liftovima
+        [(710, 335), (933, 491), (933, 591), (710, 591)],  # iznad gornjeg hodnika, do fasade
+        *[[(a, 680), (b, 680), (b, 827), (a, 827)] for a, b in ((767, 867), (867, 967), (967, 1073))],
+        *TYPICAL["rooms"][10:14],  # srednji red, velika sala
+        *[[(1073, a), (1301, a), (1301, b), (1073, b)] for a, b in ((817, 929), (929, 1040), (1040, 1160), (1160, 1280))],
+        [(1402, 834), (1575, 962), (1575, 1280), (1402, 1280)],  # T1
+        [(1575, 962), (1747, 1090), (1785, 1123), (1785, 1280), (1575, 1280)],  # T2
+        [(1785, 1123), (2075, 1378), (2076, 1400), (1825, 1400), (1825, 1280), (1785, 1280)],  # T3
+        [(1825, 1400), (2076, 1400), (2083, 1590), (1825, 1590)],  # 17 (124)
+        *TYPICAL["rooms"][18:],  # donji srednji red, toaleti, kancelarije, toalet uz liftove, soba iznad 14
+    ],
+    "stairs": TYPICAL["stairs"],
+    "shafts": TYPICAL["shafts"],
+    "lifts": TYPICAL["lifts"],
 }
 
 TOP = {  # V sprat: manji, ispod srednjeg hodnika je krov sa dve evakuacione staze
@@ -230,8 +271,9 @@ TYPICAL_DOORS = {
     18: ((815, 1473), (815, 1389), "C815"), 19: ((983, 1473), (983, 1389), "C983"), 20: ((1170, 1473), (1170, 1389), "C1170"),
     **{21 + i: ((x, 1745), (x, 1660), "M1608" if x == 393 else f"B{x}") for i, x in enumerate(OFFICES)},
 }
-# Sobe podeljene na dve (korisnik: "razdvojeno", "razdvojeno staklom") - koja je polovina koja, nije zapisano (PRETPOSTAVKA:
-# gornja/leva prva). Pregrade nisu crtane (I-IV su isti crtež).
+# Sobe podeljene na dve (korisnik: "razdvojeno", "razdvojeno staklom"), prva je gornja/leva. Teren 04.10.2026 (korisnik)
+# potvrđuje redosled: "115 je najbliže zidu zgrade, pa redom do hodnika 115, 116, 117, 118"; "320 je bliže 317-319, onda
+# ide 321"; "322 je bliže 321, a 323 je bliže 324. U 323 se ulazi preko 322"; "223 i 224 analogno 322 i 323" (VIA_FIRST).
 SPLIT_DOORS = {
     14: [((1187, 873), (1301, 873), "R930"), ((1187, 985), (1301, 985), "R930")],
     15: [((1187, 1100), (1301, 1100), "R1160"), ((1187, 1220), (1301, 1220), "R1160")],
@@ -255,6 +297,21 @@ TYPICAL_LABELS = {
         *[(21 + i, 433 - i) for i in range(14)]],
 }
 SPLIT = {1: {14, 15}, 2: {17}, 3: {16, 17}}
+# Pregrade podeljenih soba na crtežu II-IV (I sprat ima svoje, FIRST): sredina između vrata polovina, do fasade.
+SPLIT_SHAPES = {
+    16: [[(1402, 834), (1612, 990), (1612, 1280), (1402, 1280)],
+         [(1612, 990), (1747, 1090), (1822, 1146), (1822, 1280), (1612, 1280)]],
+    17: [[(1822, 1146), (2055, 1360), (1822, 1360)],
+         [(1822, 1360), (2055, 1360), (2075, 1378), (2081, 1556), (1822, 1556)]],
+}
+# Soba 17 na II i III spratu: u drugu polovinu (224, 323) se ulazi kroz prvu (223, 322) - prva je prolaz (čvor hodnika
+# P17 u njoj; sala nije usputni čvor grafa), druga ima vrata u pregradi. Gornja polovina je uzan trougao pod fasadom.
+VIA_FIRST = {2, 3}
+VIA_17 = {"pass": (1865, 1334), "first": (1925, 1315), "door": (1940, 1360), "second": (1952, 1460)}
+# I sprat: 119-123 (jedna sala, aliasi) je za sada T1 (PRETPOSTAVKA - korisnik će označiti 119-123 na novom planu); 124
+# (soba 17) se ulazi iz T3, a T3 sa kraja srednjeg hodnika (čvor T3 u njoj, kao P17).
+FIRST_DOORS = {16: ((1490, 1120), (1550, 1280), "C1494")}
+FIRST_T3 = {"door": (1825, 1345), "pass": (1880, 1345), "room17": ((1950, 1495), (1885, 1400))}
 # 419 (IV sprat, kancelarija): korisnik je dodirnuo kraj donjeg hodnika desno (1971, 1597) - PRETPOSTAVKA: soba na
 # kraju hodnika, vrata ka hodniku.
 CORNER_419 = ((1990, 1600), (1925, 1608), "B1985")
@@ -314,17 +371,36 @@ def points(g, floor, spec):
         g.node(floor, key, x, y)
 
 
+def typical_plan(f):
+    """Crtež II-IV sprata: zajednička geometrija + pregrade podeljenih soba i spojene sobe tog sprata."""
+    rooms = list(TYPICAL["rooms"])
+    if f == 3:  # korisnik (04.10.2026): "može se uraditi merge prostorije NTP-312 i neobeležene prostorije ispod nje"
+        rooms[11] = [(451, 1000), (666, 1000), (666, 1280), (451, 1280)]
+        rooms[12] = None
+    for room in SPLIT.get(f, ()):
+        rooms[room] = None
+        rooms += SPLIT_SHAPES[room]
+    return {**TYPICAL, "rooms": [r for r in rooms if r]}
+
+
+def plan_for(f):
+    return GROUND if f == 0 else FIRST if f == 1 else TOP if f == 5 else typical_plan(f)
+
+
 def typical_floor(g, f):
+    # I sprat: gornji hodnik je niži (FIRST), pa i njegovi čvorovi.
+    top = {f"U{x}": (x, 636) for x in (690, 782, 882, 982, 1040)} if f == 1 else \
+        {f"U{x}": (x, 595) for x in (715, 817, 921, 1023)}
     points(g, f, {
         **{f"M{y}": (400, y) for y in (450, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608)},
-        **{f"U{x}": (x, 595) for x in (640, 715, 817, 921, 1023)},
+        "U640": (640, 595), **top,
         **{f"R{y}": (1350, y) for y in (830, 930, 1160)},
         **{f"C{x}": (x, 1334) for x in (560, 815, 870, 983, 1170, 1350, 1494, 1600, 1795)},
         "K1350": (1350, 1470), "K1795": (1795, 1470),
         **{f"B{x}": (x, 1608) for x in OFFICES[1:]},
     })
     g.chain(f, [f"M{y}" for y in (450, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608)])
-    g.chain(f, ["M595", "U640", "U715", "U817", "U921", "U1023"])
+    g.chain(f, ["M595", "U640", *sorted(top, key=lambda k: top[k][0])])
     g.chain(f, ["M1334", "C560", "C815", "C870", "C983", "C1170", "C1350", "C1494", "C1600", "C1795"])
     g.chain(f, ["R830", "R930", "R1160", "C1350", "K1350", "B1343"])
     g.chain(f, ["C1795", "K1795", "B1819"])
@@ -337,6 +413,24 @@ def typical_floor(g, f):
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), f"NTP-{f}-C1494")
     for room, numbers in TYPICAL_LABELS[f]:
         numbers = numbers if isinstance(numbers, tuple) else (numbers,)
+        if room == 17 and f in VIA_FIRST:
+            # Vrata iz hodnika vode u prvu polovinu (prolaz P17), a iz nje vrata u pregradi u drugu.
+            _, door, attach = SPLIT_DOORS[17][0]
+            d = g.node(f, f"V{door[0]}_{door[1]}", *door, kind="VRATA")
+            p = g.node(f, "P17", *VIA_17["pass"])
+            g.edge(f"{BUILDING}-{f}-{attach}", d)
+            g.edge(d, p)
+            g.edge(g.node(f, f"NTP-{numbers[0]}", *VIA_17["first"], kind="PROSTORIJA", name=f"NTP-{numbers[0]}"), p)
+            g.room(f, f"NTP-{numbers[1]}", VIA_17["second"], VIA_17["door"], "P17")
+            continue
+        if room == 17 and f == 1:
+            # 124: iz T3 (soba bez oznake), a u T3 sa kraja srednjeg hodnika.
+            d = g.node(f, "V{}_{}".format(*FIRST_T3["door"]), *FIRST_T3["door"], kind="VRATA")
+            t3 = g.node(f, "T3", *FIRST_T3["pass"])
+            g.edge(f"{BUILDING}-{f}-C1795", d)
+            g.edge(d, t3)
+            g.room(f, f"NTP-{numbers[0]}", *FIRST_T3["room17"], "T3")
+            continue
         if room in SPLIT.get(f, ()):
             for number, (center, door, attach) in zip(numbers, SPLIT_DOORS[room]):
                 g.room(f, f"NTP-{number}", center, door, attach)
@@ -345,6 +439,10 @@ def typical_floor(g, f):
             spec = ABOVE_RIGHT
         elif room == "corner":
             spec = CORNER_419
+        elif f == 1 and room in FIRST_DOORS:
+            spec = FIRST_DOORS[room]
+        elif f == 3 and room == 11:  # spojena sa sobom ispod (typical_plan)
+            spec = ((559, 1140), *TYPICAL_DOORS[11][1:])
         else:
             spec = TYPICAL_DOORS[room]
         g.room(f, f"NTP-{numbers[0]}", *spec)
@@ -557,7 +655,7 @@ def check_images(g, folder):
     from PIL import Image, ImageDraw
     colors = {"HOD": (0, 90, 255), "STEPENICE": (255, 0, 0), "LIFT": (255, 0, 0)}
     for f in FLOORS:
-        plan = GROUND if f == 0 else TOP if f == 5 else TYPICAL
+        plan = plan_for(f)
         img = Image.open(folder / f"w{f}.png").convert("RGB")
         d = ImageDraw.Draw(img, "RGBA")
         P = lambda p: (p[0] + 300, p[1])
@@ -590,8 +688,11 @@ def main():
     args = parser.parse_args()
     g = build()
     res = ROOT / "app/src/main/res/drawable"
-    for name, plan, title in (("0", GROUND, "Prizemlje"), ("typical", TYPICAL, "I-IV sprat (isti plan)"), ("5", TOP, "V sprat")):
-        (res / f"floor_plan_ntp_{name}.xml").write_text(drawable(plan, title), encoding="utf-8")
+    titles = ["Prizemlje", "I sprat", "II sprat", "III sprat", "IV sprat", "V sprat"]
+    for f in FLOORS:
+        (res / f"floor_plan_ntp_{f}.xml").write_text(drawable(plan_for(f), titles[f]), encoding="utf-8")
+    # Do 04.10.2026 su I-IV bili jedan crtež.
+    (res / "floor_plan_ntp_typical.xml").unlink(missing_ok=True)
     write_json(g, ROOT / "app/src/main/assets/ntp.json")
     rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA")
     print(f"NTP: {len(g.nodes)} čvorova, {len(g.edges)} ivica, {rooms} sala")

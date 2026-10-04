@@ -4,8 +4,9 @@ Priprema fotografija evakuacionih planova NTP-a za precrtavanje i proveru (build
 Upotreba (iz korena projekta):
     tools/raspored/.venv/Scripts/python tools/ntp/prepare_photos.py <izlazni folder>
 
-Ulaz: images/ntp0.jpg ... ntp5.jpg (prizemlje ... V sprat; van gita). Izlaz: w0.png ... w5.png -
-svaki sprat u zajedničkom sistemu (px ispravljenog II sprata), platno x -300..2140, y 0..1870.
+Ulaz: images/ntp0.jpg ... ntp5.jpg (prizemlje ... V sprat; van gita), osim I sprata: nova, oštrija fotografija sa
+terena 04.10.2026 (teren/izveštaj4/IMG_20261004_121103.jpg - SOURCES; ista tabla, pa poravnanje REG važi). Izlaz:
+w0.png ... w5.png - svaki sprat u zajedničkom sistemu (px ispravljenog II sprata), platno x -300..2140, y 0..1870.
 
 1. Perspektiva: spoljni (debeli) okvir plana (CORNERS, px originalne fotografije, očitano sa uvećanih
    isečaka) -> pravougaonik 3000 x 2121. Odnos √2 (papir A formata): sa pretpostavljenih 3:2 prsten
@@ -23,9 +24,14 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[2]
 W, H = 3000, 2121
 
+SOURCES = {1: "teren/izveštaj4/IMG_20261004_121103.jpg"}  # ostali: images/ntp<sprat>.jpg
+
 CORNERS = {  # TL, TR, BL, BR spoljnog okvira, px fotografije
     0: [(263, 767), (3038, 826), (334, 2513), (2796, 2675)],
-    1: [(179, 346), (4007, 437), (276, 2883), (3821, 2908)],
+    # Nova fotografija (04.10.2026); stara images/ntp1.jpg: [(179, 346), (4007, 437), (276, 2883), (3821, 2908)].
+    # Desni gornji ugao je na samoj ivici fotografije (x 4077 od 4080). Provereno preklopom sa II spratom: liftovi i
+    # stepeništa se poklapaju na ~8 px.
+    1: [(291, 343), (4077, 521), (397, 2849), (3802, 2852)],
     2: [(583, 673), (3798, 699), (667, 2743), (3648, 2802)],
     3: [(57, 265), (4030, 325), (277, 2823), (3777, 2809)],
     4: [(326, 350), (3952, 364), (520, 2770), (3794, 2641)],
@@ -66,7 +72,7 @@ def main():
     out = Path(sys.argv[1])
     out.mkdir(parents=True, exist_ok=True)
     for f, src in CORNERS.items():
-        photo = Image.open(ROOT / f"images/ntp{f}.jpg").convert("RGB")
+        photo = Image.open(ROOT / SOURCES.get(f, f"images/ntp{f}.jpg")).convert("RGB")
         flat = photo.transform((W, H), Image.PERSPECTIVE, homography(src, [(0, 0), (W, 0), (0, H), (W, H)]), Image.BICUBIC)
         s, tx, ty = REG[f]
         flat.transform(

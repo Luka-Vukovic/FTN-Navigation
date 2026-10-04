@@ -79,26 +79,35 @@ private data class PlacedLabel(val building: CampusBuilding, val layout: TextLay
     fun inLabelFrame(at: Offset, rotationDeg: Float): Offset = anchor + (at - anchor).rotated(rotationDeg)
 }
 
-/** [m] = px po metru, [k] = 1 / zum (natpisi ostaju iste veličine na ekranu). */
+/**
+ * Natpisi bez preklapanja ([placeWithoutOverlap]): prednost imaju FTN zgrade, pa službe sa obrisom, pa službe-tačke.
+ * Zgrada sa obrisom ima natpis na sredini, a ako tu nema mesta - sa strane, iznad ili ispod; služba-tačka uz tačku.
+ * Strana iz campus.json ([CampusBuilding.labelSide]) je samo prva od strana. Natpis za koji nema mesta se ne crta (vidi se na
+ * većem zumu). [m] = px po metru, [k] = 1 / zum (natpisi ostaju iste veličine na ekranu), [rotationDeg] = rotacija mape.
+ */
 private fun Density.placeLabels(
     campus: CampusData,
     textMeasurer: TextMeasurer,
     baseStyle: TextStyle,
     m: Float,
     k: Float,
+    rotationDeg: Float,
 ): List<PlacedLabel> {
     val style = baseStyle.copy(fontSize = (11.sp.toPx() * k).toSp())
     val gap = 6.dp.toPx() * k // natpis sa strane ne počinje baš na tački
-    return campus.namedBuildings.mapNotNull { building ->
-        val (x, y) = building.labelAt ?: return@mapNotNull null
-        val label = textMeasurer.measure(building.label ?: building.name.orEmpty(), style)
-        // Strana natpisa je na ekranu (u ravni natpisa), i na zarotiranoj mapi.
-        val left = when (building.labelSide) {
-            LabelSide.CENTER -> x * m - label.size.width / 2f
-            LabelSide.EAST -> x * m + gap
-            LabelSide.WEST -> x * m - gap - label.size.width
-        }
-        PlacedLabel(building, label, Offset(left, y * m - label.size.height / 2f), Offset(x * m, y * m))
+    val buildings = campus.namedBuildings.filter { it.labelAt != null }
+        .sortedWith(compareBy({ it.category == BuildingCategory.SLUZBA }, { it.outline.isEmpty() }))
+    val labels = buildings.map { textMeasurer.measure(it.label ?: it.name.orEmpty(), style) }
+    val requests = buildings.zip(labels) { building, label ->
+        val (x, y) = building.labelAt!!
+        val anchor = Offset(x * m, y * m)
+        val size = label.size.toSize()
+        LabelRequest(anchor, size, labelCandidates(anchor, size, centered = building.outline.isNotEmpty(), preferEast = building.labelSide != LabelSide.WEST, gap))
+    }
+    val dots = buildings.filter { it.outline.isEmpty() }.map { b -> b.labelAt!!.let { (x, y) -> Offset(x * m, y * m) } }
+    val chosen = placeWithoutOverlap(requests, dots, obstacleRadius = 4.dp.toPx() * k, padding = 1.5.dp.toPx() * k, rotationDeg)
+    return buildings.indices.mapNotNull { i ->
+        chosen[i]?.let { PlacedLabel(buildings[i], labels[i], it, requests[i].anchor) }
     }
 }
 
@@ -164,7 +173,7 @@ fun CampusMap(
                             val m = size.width / campus.widthM
                             val slop = LABEL_TOUCH_SLOP.toPx() * k
                             val rotation = zoom.rotationDeg
-                            val hit = placeLabels(campus, textMeasurer, labelStyle, m, k)
+                            val hit = placeLabels(campus, textMeasurer, labelStyle, m, k, rotation)
                                 .filter { Rect(it.topLeft, it.layout.size.toSize()).inflate(slop).contains(it.inLabelFrame(at, rotation)) }
                                 .minByOrNull {
                                     (it.topLeft + it.layout.size.toSize().center - it.inLabelFrame(at, rotation)).getDistanceSquared()
@@ -279,7 +288,7 @@ fun CampusMap(
                 // razlikuje stilove koji menjaju samo crtanje.
                 val halo = Stroke(2.5.dp.toPx() * k, join = StrokeJoin.Round)
                 val rotation = zoom.rotationDeg
-                for ((building, label, topLeft, anchor) in placeLabels(campus, textMeasurer, labelStyle, m, k)) {
+                for ((building, label, topLeft, anchor) in placeLabels(campus, textMeasurer, labelStyle, m, k, rotation)) {
                     val color = if (building.category == BuildingCategory.SLUZBA) OnService else colors.onPrimaryContainer
                     rotate(-rotation, pivot = anchor) {
                         drawText(label, color = Color.White, topLeft = topLeft, drawStyle = halo)

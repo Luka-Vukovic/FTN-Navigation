@@ -187,12 +187,15 @@ object NtpPlan : IndoorBuilding {
     /** Natpis bez "NTP-" (na planu se zna da je NTP: "311", "C", "L1"), osim NTP-A (korisnik). */
     override fun label(name: String) = if (name == "NTP-A") name else name.removePrefix("NTP-")
 
-    /** Crtež sprata; spratovi I-IV su isti plan. */
+    /** Crtež sprata (II-IV imaju isti plan, ali različite pregrade soba, pa svaki svoj crtež). */
     @DrawableRes
     override fun floorDrawable(floor: Int): Int = when (floor) {
         0 -> R.drawable.floor_plan_ntp_0
-        5 -> R.drawable.floor_plan_ntp_5
-        else -> R.drawable.floor_plan_ntp_typical
+        1 -> R.drawable.floor_plan_ntp_1
+        2 -> R.drawable.floor_plan_ntp_2
+        3 -> R.drawable.floor_plan_ntp_3
+        4 -> R.drawable.floor_plan_ntp_4
+        else -> R.drawable.floor_plan_ntp_5
     }
 }
 
