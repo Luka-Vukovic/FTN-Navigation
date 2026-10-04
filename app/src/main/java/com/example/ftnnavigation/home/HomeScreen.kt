@@ -68,7 +68,7 @@ fun HomeScreen(
     onOpenSchedule: () -> Unit,
     onOpenMap: () -> Unit,
     onShowRoute: () -> Unit,
-    onOpenNotifications: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -76,10 +76,10 @@ fun HomeScreen(
                 title = stringResource(R.string.app_name),
                 subtitle = stringResource(R.string.home_subtitle),
                 actions = {
-                    IconButton(onClick = onOpenNotifications) {
+                    IconButton(onClick = onOpenSettings) {
                         Icon(
-                            painterResource(R.drawable.ic_notifications),
-                            contentDescription = stringResource(R.string.notifications_title),
+                            painterResource(R.drawable.ic_settings),
+                            contentDescription = stringResource(R.string.settings_title),
                         )
                     }
                 },
@@ -278,7 +278,7 @@ private fun HomeScreenPreview() {
             onOpenSchedule = {},
             onOpenMap = {},
             onShowRoute = {},
-            onOpenNotifications = {},
+            onOpenSettings = {},
         )
     }
 }

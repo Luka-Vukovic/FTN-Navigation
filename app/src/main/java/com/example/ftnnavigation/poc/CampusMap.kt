@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +30,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -70,8 +70,14 @@ private const val MAX_DRAWN_ACCURACY_M = 100f
 /** Koliko oko natpisa se još računa kao držanje natpisa (natpisi su sitni). */
 private val LABEL_TOUCH_SLOP = 8.dp
 
-/** Natpis zgrade izmeren i smešten u px mape (pre zuma), za crtanje i za držanje prstom. */
-private data class PlacedLabel(val building: CampusBuilding, val layout: TextLayoutResult, val topLeft: Offset)
+/**
+ * Natpis zgrade izmeren i smešten u px mape (pre zuma), za crtanje i za držanje prstom. [topLeft] je u ravni
+ * natpisa: mapa zarotirana oko tačke natpisa [anchor] nazad za rotaciju mape, pa je natpis na ekranu uspravan.
+ */
+private data class PlacedLabel(val building: CampusBuilding, val layout: TextLayoutResult, val topLeft: Offset, val anchor: Offset) {
+    /** Tačka mape [at] u ravni natpisa (mapa zarotirana za [rotationDeg]). */
+    fun inLabelFrame(at: Offset, rotationDeg: Float): Offset = anchor + (at - anchor).rotated(rotationDeg)
+}
 
 /** [m] = px po metru, [k] = 1 / zum (natpisi ostaju iste veličine na ekranu). */
 private fun Density.placeLabels(
@@ -86,12 +92,13 @@ private fun Density.placeLabels(
     return campus.namedBuildings.mapNotNull { building ->
         val (x, y) = building.labelAt ?: return@mapNotNull null
         val label = textMeasurer.measure(building.label ?: building.name.orEmpty(), style)
+        // Strana natpisa je na ekranu (u ravni natpisa), i na zarotiranoj mapi.
         val left = when (building.labelSide) {
             LabelSide.CENTER -> x * m - label.size.width / 2f
             LabelSide.EAST -> x * m + gap
             LabelSide.WEST -> x * m - gap - label.size.width
         }
-        PlacedLabel(building, label, Offset(left, y * m - label.size.height / 2f))
+        PlacedLabel(building, label, Offset(left, y * m - label.size.height / 2f), Offset(x * m, y * m))
     }
 }
 
@@ -100,7 +107,8 @@ private fun Density.placeLabels(
  * zgrade i studentske službe (toplim tonom) sa natpisima, spojni prolazi, ulazi i ruta. [position] je pozicija relativno na
  * plan zgrade [pdrBuildingId] (ili na mapu kampusa, [CAMPUS_ID]) - preslikava se u kampus preko smeštaja plana; [headingDeg] je smer u
  * odnosu na "gore" tog plana. [gps] je GPS lokacija sa krugom tačnosti; kad postoji i PDR pozicija,
- * GPS je samo tačka (smer pripada PDR oznaci). Ruta se crta od mesta odakle kreće ([routeStart]).
+ * GPS je samo tačka (smer pripada PDR oznaci). Ruta se crta od mesta odakle kreće ([routeStart]). Uz [autoRotate]
+ * mapa se okreće po smeru korisnika [mapHeadingDeg] (u odnosu na sever; null = ne zna se).
  */
 @Composable
 fun CampusMap(
@@ -112,12 +120,15 @@ fun CampusMap(
     position: Offset?,
     gps: GpsFix?,
     headingDeg: Float,
+    autoRotate: Boolean,
+    mapHeadingDeg: Float?,
     isPickingPosition: Boolean,
     onTap: (Offset) -> Unit,
     onBuildingLongPress: (CampusBuilding) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val zoom = rememberZoomPanState(maxScale = 8f)
+    AutoRotateEffect(zoom, autoRotate && mapHeadingDeg != null, mapHeadingDeg ?: 0f)
     val colors = MaterialTheme.colorScheme
     val haptics = LocalHapticFeedback.current
     val currentOnTap by rememberUpdatedState(onTap)
@@ -138,9 +149,8 @@ fun CampusMap(
     ) {
         Box(
             Modifier
-                .aspectRatio(campus.widthM / campus.heightM)
-                .zoomPanLayer(zoom)
-                // Posle zoomPanLayer (graphicsLayer): dodir stiže u koordinatama mape (zum i pomeraj već skinuti).
+                .zoomPanLayer(zoom, aspect = campus.widthM / campus.heightM)
+                // Posle zoomPanLayer (graphicsLayer): dodir stiže u koordinatama mape (zum, rotacija i pomeraj već skinuti).
                 // Pomeranje mape troši događaje, pa prekida i držanje. Dok se označava pozicija ("Ovde sam"),
                 // dodir je pozicija (relativno na mapu, kao čvorovi kampusa).
                 .pointerInput(campus, isPickingPosition) {
@@ -153,9 +163,12 @@ fun CampusMap(
                             val k = 1f / zoom.scale
                             val m = size.width / campus.widthM
                             val slop = LABEL_TOUCH_SLOP.toPx() * k
+                            val rotation = zoom.rotationDeg
                             val hit = placeLabels(campus, textMeasurer, labelStyle, m, k)
-                                .filter { Rect(it.topLeft, it.layout.size.toSize()).inflate(slop).contains(at) }
-                                .minByOrNull { (it.topLeft + it.layout.size.toSize().center - at).getDistanceSquared() }
+                                .filter { Rect(it.topLeft, it.layout.size.toSize()).inflate(slop).contains(it.inLabelFrame(at, rotation)) }
+                                .minByOrNull {
+                                    (it.topLeft + it.layout.size.toSize().center - it.inLabelFrame(at, rotation)).getDistanceSquared()
+                                }
                             if (hit != null) {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 currentOnBuildingLongPress(hit.building)
@@ -265,10 +278,13 @@ fun CampusMap(
                 // Boja i stil obruba se zadaju pri crtanju: measure() kešira raspored i ne
                 // razlikuje stilove koji menjaju samo crtanje.
                 val halo = Stroke(2.5.dp.toPx() * k, join = StrokeJoin.Round)
-                for ((building, label, topLeft) in placeLabels(campus, textMeasurer, labelStyle, m, k)) {
+                val rotation = zoom.rotationDeg
+                for ((building, label, topLeft, anchor) in placeLabels(campus, textMeasurer, labelStyle, m, k)) {
                     val color = if (building.category == BuildingCategory.SLUZBA) OnService else colors.onPrimaryContainer
-                    drawText(label, color = Color.White, topLeft = topLeft, drawStyle = halo)
-                    drawText(label, color = color, topLeft = topLeft, drawStyle = Fill)
+                    rotate(-rotation, pivot = anchor) {
+                        drawText(label, color = Color.White, topLeft = topLeft, drawStyle = halo)
+                        drawText(label, color = color, topLeft = topLeft, drawStyle = Fill)
+                    }
                 }
             }
         }

@@ -241,6 +241,12 @@
     <string name="departure_from_room">Iz sale %1$s ~%2$d min</string>
     <string name="departure_from_place">Od: %1$s ~%2$d min</string>
 
+    <!-- Podešavanja -->
+    <string name="settings_title">Podešavanja</string>
+    <string name="settings_section_map">Mapa</string>
+    <string name="settings_auto_rotate_title">Auto-rotacija mape</string>
+    <string name="settings_auto_rotate_body">Mapa se okreće za po 90° tako da ono ispred tebe bude gore. Okreće se tek kad se okreneš za više od ~65° i tako ostaneš oko sekunde.</string>
+
     <!-- Podešavanja obaveštenja -->
     <string name="notifications_title">Obaveštenja</string>
     <string name="notifications_blocked">Telefon ne prikazuje obaveštenja ove aplikacije, pa podsetnik za polazak neće stići.</string>

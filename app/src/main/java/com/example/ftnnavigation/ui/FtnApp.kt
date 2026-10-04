@@ -35,7 +35,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.departure.DepartureScheduler
-import com.example.ftnnavigation.departure.DepartureSettingsScreen
+import com.example.ftnnavigation.settings.SettingsScreen
 import com.example.ftnnavigation.events.EventEditScreen
 import com.example.ftnnavigation.home.HomeScreen
 import com.example.ftnnavigation.onboarding.OnboardingScreen
@@ -52,7 +52,7 @@ import java.time.LocalDate
 @Serializable data object HomeRoute
 @Serializable data object MapRoute
 @Serializable data object ScheduleRoute
-@Serializable data object NotificationsRoute
+@Serializable data object SettingsRoute
 
 /** Izmena događaja [eventId], ili novi događaj (eventId 0) za dan [date] (ISO). */
 @Serializable data class EventEditRoute(val eventId: Long = 0, val date: String? = null)
@@ -104,8 +104,8 @@ fun FtnApp() {
         // pa ovde ostaje samo prostor za donju traku.
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            // Podekrani (podešavanja obaveštenja, izmena događaja) su bez donje trake - nazad vraća odakle se došlo.
-            val isSubscreen = currentDestination?.run { hasRoute(NotificationsRoute::class) || hasRoute(EventEditRoute::class) } == true
+            // Podekrani (Podešavanja, izmena događaja) su bez donje trake - nazad vraća odakle se došlo.
+            val isSubscreen = currentDestination?.run { hasRoute(SettingsRoute::class) || hasRoute(EventEditRoute::class) } == true
             if (!isSubscreen) {
                 NavigationBar {
                     // Podrazumevano je izabrani natpis u `secondary` (cijan), što na svetloj podlozi slabo čita.
@@ -150,7 +150,7 @@ fun FtnApp() {
                         mapViewModel.selectDestination(upcoming?.place)
                         navController.navigateToTopLevel(MapRoute)
                     },
-                    onOpenNotifications = { navController.navigate(NotificationsRoute) },
+                    onOpenSettings = { navController.navigate(SettingsRoute) },
                 )
             }
             composable<MapRoute> { PocRoute(mapViewModel, scheduleViewModel.data, scheduleViewModel.calendar) }
@@ -161,7 +161,13 @@ fun FtnApp() {
                     onEditEvent = { navController.navigate(EventEditRoute(eventId = it)) },
                 )
             }
-            composable<NotificationsRoute> { DepartureSettingsScreen(onBack = { navController.popBackStack() }) }
+            composable<SettingsRoute> {
+                SettingsScreen(
+                    autoRotateMap = mapViewModel.autoRotateMap,
+                    onAutoRotateMapChange = mapViewModel::updateAutoRotateMap,
+                    onBack = { navController.popBackStack() },
+                )
+            }
             composable<EventEditRoute> { entry ->
                 val route = entry.toRoute<EventEditRoute>()
                 val event = scheduleViewModel.event(route.eventId)

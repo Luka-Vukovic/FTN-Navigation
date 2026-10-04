@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -57,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.example.ftnnavigation.campus.CAMPUS_ID
 import com.example.ftnnavigation.campus.CampusBuilding
 import com.example.ftnnavigation.campus.GpsFix
 import androidx.compose.runtime.getValue
@@ -80,6 +80,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -123,6 +124,7 @@ import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.schedule.ScheduleData
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -173,6 +175,7 @@ fun PocRoute(
         routeStart = viewModel.routeStart,
         canStartTracking = viewModel.canStartTracking,
         roomSchedule = roomSchedule,
+        autoRotateMap = viewModel.autoRotateMap,
         onModeChange = viewModel::selectMode,
         onFloorChange = viewModel::selectFloor,
         onDestinationChange = viewModel::selectDestination,
@@ -200,6 +203,8 @@ fun PocScreen(
     routeStart: RouteStart,
     canStartTracking: Boolean,
     roomSchedule: RoomSchedule?,
+    /** Mapa se okreće po smeru korisnika (podešavanje). */
+    autoRotateMap: Boolean,
     onModeChange: (MapMode) -> Unit,
     onFloorChange: (Int) -> Unit,
     onDestinationChange: (String?) -> Unit,
@@ -231,6 +236,11 @@ fun PocScreen(
                 val building = mode.building
                 val place = state.pdrPlace
                 val pdrHere = building != null && building.buildingId == place.buildingId && floor == place.floor
+                // Smer je u odnosu na "gore" plana pozicije; za auto-rotaciju u odnosu na "gore" prikazane mape.
+                val mapHeadingDeg = graph?.let {
+                    val shownId = building?.buildingId ?: CAMPUS_ID
+                    state.headingDeg + (it.placement(place.buildingId).rotationDeg - it.placement(shownId).rotationDeg).toFloat()
+                }
                 when {
                     building == null -> if (campus != null) CampusMap(
                         campus = campus,
@@ -241,6 +251,8 @@ fun PocScreen(
                         position = state.position,
                         gps = gps,
                         headingDeg = state.headingDeg,
+                        autoRotate = autoRotateMap,
+                        mapHeadingDeg = mapHeadingDeg,
                         isPickingPosition = state.isPickingStart,
                         onTap = onMapTap,
                         onBuildingLongPress = { infoBuildingId = it.id },
@@ -256,6 +268,8 @@ fun PocScreen(
                             position = state.position.takeIf { pdrHere },
                             rawPosition = state.rawPosition.takeIf { pdrHere },
                             headingDeg = state.headingDeg,
+                            autoRotate = autoRotateMap,
+                            mapHeadingDeg = mapHeadingDeg,
                             isPickingStart = state.isPickingStart,
                             onTap = onMapTap,
                             onRoomLongPress = { infoRoomId = it.id },
@@ -385,6 +399,7 @@ fun PocScreen(
  * Slika sprata [floor] zgrade [building] sa pan/zoom gestovima, grafom tog sprata, rutom i
  * markerom korisnika. [position] je pozicija na grafu; [rawPosition] (čist PDR, bez
  * map-matching-a) je bleda tačka za poređenje. Zum ostaje pri promeni sprata iste zgrade.
+ * Uz [autoRotate] plan se okreće po smeru korisnika [mapHeadingDeg] (u odnosu na "gore" ovog plana; null = ne zna se).
  */
 @Composable
 private fun FloorPlan(
@@ -395,6 +410,8 @@ private fun FloorPlan(
     position: Offset?,
     rawPosition: Offset?,
     headingDeg: Float,
+    autoRotate: Boolean,
+    mapHeadingDeg: Float?,
     isPickingStart: Boolean,
     onTap: (Offset) -> Unit,
     onRoomLongPress: (Node) -> Unit,
@@ -404,6 +421,7 @@ private fun FloorPlan(
     val painter = painterResource(building.floorDrawable(floor))
     // Zum ostaje pri promeni sprata iste zgrade.
     val zoom = rememberZoomPanState(maxScale = 6f, buildingId)
+    AutoRotateEffect(zoom, autoRotate && mapHeadingDeg != null, mapHeadingDeg ?: 0f)
     val floorNames = ALL_FLOORS.associateWith { floorName(it) }
     val colors = MaterialTheme.colorScheme
     val textMeasurer = rememberTextMeasurer()
@@ -421,9 +439,8 @@ private fun FloorPlan(
         // Marker i tap koordinate su u koordinatama slike jer su unutar zoomPanLayer-a (graphicsLayer).
         Box(
             Modifier
-                .aspectRatio(painter.intrinsicSize.width / painter.intrinsicSize.height)
-                .zoomPanLayer(zoom)
-                // Posle zoomPanLayer (graphicsLayer): dodir stiže u koordinatama plana (zum i pomeraj već skinuti).
+                .zoomPanLayer(zoom, aspect = painter.intrinsicSize.width / painter.intrinsicSize.height)
+                // Posle zoomPanLayer (graphicsLayer): dodir stiže u koordinatama plana (zum, rotacija i pomeraj već skinuti).
                 .pointerInput(isPickingStart, onTap, rooms, building) {
                     if (isPickingStart) {
                         detectTapGestures { tap ->
@@ -434,12 +451,15 @@ private fun FloorPlan(
                             onLongPress = { at ->
                                 val k = 1f / zoom.scale
                                 val slop = LABEL_TOUCH_SLOP.toPx() * k
-                                val hit = placeRoomLabels(rooms, building, size.toSize(), textMeasurer, labelStyle)
+                                val rotation = zoom.rotationDeg
+                                val hit = placeRoomLabels(rooms, building, size.toSize(), textMeasurer, labelStyle, rotation)
                                     .filter {
-                                        Rect(it.topLeft, it.layout.size.toSize()).inflate(slop).contains(at) ||
+                                        Rect(it.topLeft, it.layout.size.toSize()).inflate(slop).contains(it.inLabelFrame(at, rotation)) ||
                                             (it.dot - at).getDistance() <= ROOM_DOT_RADIUS.toPx() * k + slop
                                     }
-                                    .minByOrNull { (it.topLeft + it.layout.size.toSize().center - at).getDistanceSquared() }
+                                    .minByOrNull {
+                                        (it.topLeft + it.layout.size.toSize().center - it.inLabelFrame(at, rotation)).getDistanceSquared()
+                                    }
                                 if (hit != null) {
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     currentOnRoomLongPress(hit.node)
@@ -457,7 +477,10 @@ private fun FloorPlan(
             )
             if (graph != null) {
                 Canvas(Modifier.fillMaxSize()) {
-                    drawGraph(graph, building, floor, rooms, colors.primary, colors.secondary, textMeasurer, labelStyle, 1f / zoom.scale)
+                    drawGraph(
+                        graph, building, floor, rooms, colors.primary, colors.secondary, textMeasurer, labelStyle,
+                        1f / zoom.scale, zoom.rotationDeg,
+                    )
                 }
             }
             if (route != null) {
@@ -470,7 +493,9 @@ private fun FloorPlan(
                 val down = stringResource(R.string.route_floor_change_down, "%s")
                 Canvas(Modifier.fillMaxSize()) {
                     drawRoute(route, buildingId, floor, position, colors.primary, colors.secondary, 1f / zoom.scale)
-                    drawFloorChanges(route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / zoom.scale) { from, to ->
+                    drawFloorChanges(
+                        route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / zoom.scale, zoom.rotationDeg,
+                    ) { from, to ->
                         (if (to > from) up else down).format(floorNames.getValue(to))
                     }
                 }
@@ -522,8 +547,14 @@ private val LABEL_TOUCH_SLOP = 8.dp
 
 private val ROOM_DOT_RADIUS = 5.dp
 
-/** Natpis sale izmeren i smešten u px plana (pre zuma), za crtanje i za držanje prstom; [dot] je tačka sale. */
-private data class PlacedRoomLabel(val node: Node, val layout: TextLayoutResult, val topLeft: Offset, val dot: Offset)
+/**
+ * Natpis sale izmeren i smešten u px plana (pre zuma), za crtanje i za držanje prstom; [dot] je tačka sale.
+ * [topLeft] je u ravni natpisa: plan zarotiran oko [dot] nazad za rotaciju mape, pa je natpis na ekranu uspravan.
+ */
+private data class PlacedRoomLabel(val node: Node, val layout: TextLayoutResult, val topLeft: Offset, val dot: Offset) {
+    /** Tačka plana [at] u ravni natpisa (mapa zarotirana za [rotationDeg]). */
+    fun inLabelFrame(at: Offset, rotationDeg: Float): Offset = dot + (at - dot).rotated(rotationDeg)
+}
 
 /** Sale sa nazivom na spratu [floor] zgrade [buildingId]. */
 private fun BuildingGraph.roomsOn(buildingId: String, floor: Int): List<Node> =
@@ -531,7 +562,8 @@ private fun BuildingGraph.roomsOn(buildingId: String, floor: Int): List<Node> =
 
 /**
  * Natpisi sala na planu veličine [size]. Natpis je deo plana (raste sa zumom, kao tekst na pravom planu) da bi
- * stao u sobu, i na strani sobe dalje od hodnika, da ga ivica ka hodniku ne preseca.
+ * stao u sobu, i na strani sobe dalje od hodnika, da ga ivica ka hodniku ne preseca. Na zarotiranoj mapi
+ * ([rotationDeg]) natpis ostaje uspravan, na istoj strani sobe.
  */
 private fun Density.placeRoomLabels(
     rooms: List<Node>,
@@ -539,6 +571,7 @@ private fun Density.placeRoomLabels(
     size: Size,
     textMeasurer: TextMeasurer,
     labelStyle: TextStyle,
+    rotationDeg: Float,
 ): List<PlacedRoomLabel> {
     val labelHeight = building.labelHeight
     val style = labelStyle.copy(fontSize = (size.height * labelHeight).toSp())
@@ -546,8 +579,12 @@ private fun Density.placeRoomLabels(
     return rooms.map { node ->
         val dot = Offset(node.x * size.width, node.y * size.height)
         val label = textMeasurer.measure(building.label(node.name.orEmpty()), style)
-        val dy = if (node.y < 0.5f) -gap - label.size.height else gap
-        PlacedRoomLabel(node, label, dot + Offset(-label.size.width / 2f, dy), dot)
+        val width = label.size.width.toFloat()
+        val height = label.size.height.toFloat()
+        // Gore ili dole na planu - na ekranu (u ravni natpisa) taj pravac je zarotiran sa mapom.
+        val away = Offset(0f, if (node.y < 0.5f) -1f else 1f).rotated(rotationDeg)
+        val center = dot + away * (gap + (abs(away.x) * width + abs(away.y) * height) / 2)
+        PlacedRoomLabel(node, label, center - Offset(width / 2, height / 2), dot)
     }
 }
 
@@ -562,6 +599,7 @@ private fun DrawScope.drawGraph(
     textMeasurer: TextMeasurer,
     labelStyle: TextStyle,
     k: Float,
+    rotationDeg: Float,
 ) {
     fun Node.toOffset() = Offset(x * size.width, y * size.height)
     val nodes = graph.nodes.filter { it.buildingId == building.buildingId && it.floor == floor }.associateBy { it.id }
@@ -580,8 +618,8 @@ private fun DrawScope.drawGraph(
             NodeType.STAZA, NodeType.ZGRADA -> Unit // ne postoje na planu zgrade
         }
     }
-    for (label in placeRoomLabels(rooms, building, size, textMeasurer, labelStyle)) {
-        drawText(label.layout, topLeft = label.topLeft)
+    for (label in placeRoomLabels(rooms, building, size, textMeasurer, labelStyle, rotationDeg)) {
+        rotate(-rotationDeg, pivot = label.dot) { drawText(label.layout, topLeft = label.topLeft) }
     }
 }
 
@@ -623,7 +661,8 @@ private fun DrawScope.drawRoute(
 
 /**
  * Gde ruta napušta sprat [floor] stepenicama ili liftom: oblačić sa spratom na kome se silazi sa
- * stepeništa/lifta ([label] od, do). Isto i na spratu kroz koji ruta samo prolazi.
+ * stepeništa/lifta ([label] od, do). Isto i na spratu kroz koji ruta samo prolazi. Na zarotiranoj mapi
+ * ([rotationDeg]) oblačić ostaje uspravan, iznad tačke.
  */
 private fun DrawScope.drawFloorChanges(
     route: Route,
@@ -633,6 +672,7 @@ private fun DrawScope.drawFloorChanges(
     textMeasurer: TextMeasurer,
     style: TextStyle,
     k: Float,
+    rotationDeg: Float,
     label: (from: Int, to: Int) -> String,
 ) {
     val nodes = route.nodes
@@ -647,13 +687,15 @@ private fun DrawScope.drawFloorChanges(
         val pad = 6.dp.toPx() * k
         val center = Offset(here.x * size.width, here.y * size.height)
         val topLeft = center + Offset(-text.size.width / 2f - pad, -text.size.height - 2 * pad - 14.dp.toPx() * k)
-        drawRoundRect(
-            color,
-            topLeft = topLeft,
-            size = Size(text.size.width + 2 * pad, text.size.height + 2 * pad),
-            cornerRadius = CornerRadius(8.dp.toPx() * k),
-        )
-        drawText(text, topLeft = topLeft + Offset(pad, pad))
+        rotate(-rotationDeg, pivot = center) {
+            drawRoundRect(
+                color,
+                topLeft = topLeft,
+                size = Size(text.size.width + 2 * pad, text.size.height + 2 * pad),
+                cornerRadius = CornerRadius(8.dp.toPx() * k),
+            )
+            drawText(text, topLeft = topLeft + Offset(pad, pad))
+        }
     }
 }
 
@@ -1107,6 +1149,7 @@ private fun PocScreenPreview() {
             routeStart = RouteStart.PDR,
             canStartTracking = true,
             roomSchedule = null,
+            autoRotateMap = false,
             onModeChange = {},
             onFloorChange = {},
             onDestinationChange = {},

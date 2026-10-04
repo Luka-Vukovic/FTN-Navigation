@@ -44,6 +44,7 @@ import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.PlanPlacement
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.AgendaItem
+import com.example.ftnnavigation.settings.AppSettings
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -186,6 +187,15 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     var mode by mutableStateOf(MapMode.NB)
         private set
+
+    /** Auto-rotacija mape (Podešavanja): mapa se okreće za po 90° po smeru korisnika. */
+    var autoRotateMap by mutableStateOf(AppSettings.autoRotateMap(application))
+        private set
+
+    fun updateAutoRotateMap(enabled: Boolean) {
+        autoRotateMap = enabled
+        AppSettings.setAutoRotateMap(getApplication(), enabled)
+    }
 
     /** Sprat koji Mapa prikazuje, po zgradi (podrazumevano prizemlje). PDR je na spratu gde je start. */
     private var floors by mutableStateOf(mapOf<String, Int>())
