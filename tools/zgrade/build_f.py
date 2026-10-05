@@ -40,7 +40,7 @@ sredina zgrade) su samo nacrtane; evakuacioni izlaz na zapadnom kraju se ne crta
 import argparse
 from pathlib import Path
 
-from common import R, build_graph, write_all
+from common import STEPS, R, build_graph, write_all
 
 VX, VY, VW, VH = VIEWPORT = (-15, -15, 630, 230)
 WALL = (0, 0, 600, 163)  # OSM obris (60,8 x 16,5 m)
@@ -73,7 +73,8 @@ def rooms(floor, y0, y1, spans):
 
 STAIRS_RECT = (402, 452, 114, 160)  # glavno stepenište, uz donji (severni) zid
 PASSAGE = (470, 163)  # pasarela ka Amfiteatrima, na međunivou stepeništa (prizemlje i I sprat)
-CAMPUS_LINKS = [("K-P-AMF-F", "F-0-PROLAZ-AMF"), ("K-P-AMF-F", "F-1-PROLAZ-AMF")]
+# Pasarela stiže na podest između P i I - do oba sprata pola sprata stepenicama (STEPS).
+CAMPUS_LINKS = [("K-P-AMF-F", "F-0-PROLAZ-AMF", STEPS), ("K-P-AMF-F", "F-1-PROLAZ-AMF", STEPS)]
 
 
 def stairs(rect=STAIRS_RECT):

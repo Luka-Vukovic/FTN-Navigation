@@ -19,9 +19,9 @@ data class IndoorPlan(
     /** Glavni ulaz (u prizemlju) - čvor koji predstavlja zgradu u ruti "do zgrade". */
     val entranceId: String,
     val nodes: List<IndoorNode>,
-    /** [od, do, EdgeType]. */
+    /** [od, do, EdgeType] ili [od, do, "HOD", [STEPS_MARK]] - hod krakom stepeništa ([Edge.steps]). */
     val edges: List<List<String>>,
-    /** [čvor kampusa (ulaz K-U-... ili prolaz K-P-...), čvor zgrade]. */
+    /** [čvor kampusa (ulaz K-U-... ili prolaz K-P-...), čvor zgrade], opciono + [STEPS_MARK] (pasarela F na podest). */
     val campusLinks: List<List<String>>,
     /** [čvor ove zgrade, čvor druge zgrade sa planom] - prolaz mimo kampusa (NB - Kula na I spratu). */
     val indoorLinks: List<List<String>> = emptyList(),
@@ -36,8 +36,8 @@ data class IndoorPlan(
     }
 
     fun graphEdges(): List<Edge> =
-        edges.map { (a, b, type) -> Edge(a, b, EdgeType.valueOf(type)) } +
-            (campusLinks + indoorLinks).map { (a, b) -> Edge(a, b, EdgeType.HOD) }
+        edges.map { e -> Edge(e[0], e[1], EdgeType.valueOf(e[2]), steps = e.getOrNull(3) == STEPS_MARK) } +
+            (campusLinks + indoorLinks).map { l -> Edge(l[0], l[1], EdgeType.HOD, steps = l.getOrNull(2) == STEPS_MARK) }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }

@@ -184,6 +184,9 @@
     <string name="route_in_building">Zgrada: %1$s</string>
     <string name="route_to_building">Sala nije ucrtana · ruta do zgrade %1$s</string>
     <string name="route_summary">~%1$d min · %2$d m</string>
+    <!-- Ruta po podešavanju "Bez stepenica" / "Bez lifta" ne postoji - prikazana je ruta bez izbegavanja. -->
+    <string name="route_fallback_stairs">Nema puta bez stepenica - ruta ide i stepenicama</string>
+    <string name="route_fallback_lift">Nema puta bez lifta - ruta ide i liftom</string>
     <string name="route_from_position">od tvoje pozicije</string>
     <string name="route_from_gps">od tvoje lokacije (GPS)</string>
     <string name="route_from_entrance">od glavnog ulaza</string>
@@ -253,6 +256,14 @@
     <string name="settings_section_map">Mapa</string>
     <string name="settings_auto_rotate_title">Auto-rotacija mape</string>
     <string name="settings_auto_rotate_body">Mapa se okreće za po 90° tako da ono ispred tebe bude gore. Okreće se tek kad se okreneš za više od ~65° i tako ostaneš oko sekunde.</string>
+    <string name="settings_section_route">Ruta</string>
+    <string name="settings_floor_change_title">Promena sprata</string>
+    <string name="settings_floor_change_fastest">Najbrže</string>
+    <string name="settings_floor_change_fastest_body">Stepenice ili lift - šta stiže brže (uz lift se računa i čekanje).</string>
+    <string name="settings_floor_change_no_stairs">Bez stepenica</string>
+    <string name="settings_floor_change_no_stairs_body">Liftom (kolica, povreda, prtljag). Amfiteatri, F-blok i MI nemaju lift, a na V sprat Nastavnog bloka se ide samo stepenicama - tamo ruta ide stepenicama, uz napomenu.</string>
+    <string name="settings_floor_change_no_lift">Bez lifta</string>
+    <string name="settings_floor_change_no_lift_body">Samo stepenicama.</string>
 
     <!-- Podešavanja obaveštenja -->
     <string name="notifications_title">Obaveštenja</string>

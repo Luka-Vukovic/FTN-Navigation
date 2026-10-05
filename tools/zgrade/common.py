@@ -36,6 +36,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 M_PER_PX = 63.4 / 625  # NB: OSM obris 63,4 m = 625 px plana
 
+# Oznaka HOD ivice sa stepenicima (krak do podesta/međunivoa, pasarela na podest) - ruta "bez stepenica" je ne koristi.
+STEPS = "STEPENICI"
+
 
 def R(x0, x1, y0, y1, name=None, door=None, doors=None):
     """Soba; vrata: [door] (jedna tačka), [doors] (više ulaza) ili sredina zida prema hodniku."""
@@ -85,6 +88,7 @@ class Graph:
         self.building = building
         self.nodes = {}  # id -> (sprat, x, y, tip, naziv)
         self.edges = {}  # (a, b) -> tip
+        self.steps = set()  # (a, b) HOD ivica sa stepenicima (krak do podesta/međunivoa) - "bez stepenica" ih ne koristi
 
     def nid(self, floor, key):
         return f"{self.building}-{'m' + str(-floor) if floor < 0 else floor}-{key}"
@@ -94,10 +98,12 @@ class Graph:
         self.nodes.setdefault(n, (floor, round(x, 1), round(y, 1), kind, name))
         return n
 
-    def edge(self, a, b, kind="HOD"):
+    def edge(self, a, b, kind="HOD", steps=False):
         assert a in self.nodes and b in self.nodes, (a, b)
         if a != b and (b, a) not in self.edges:
             self.edges.setdefault((a, b), kind)
+            if steps:
+                self.steps.add((a, b))
 
 
 class Network:
@@ -186,12 +192,13 @@ def build_floor(g, f, plan, down_keys=(), up_keys=None):
             g.edge(n, net.attach(at))
             continue
         # Tačka van mreže hodnika: (ključ postojećeg čvora, [(ključ, tačka), ...]) - npr. prolaz sa međupodesta
-        # stepeništa (NB -> Amfiteatri): od čvora stepeništa preko podesta do prolaza.
+        # stepeništa (NB -> Amfiteatri): od čvora stepeništa preko podesta do prolaza. (ključ, tačka, STEPS): ivica do te
+        # tačke ide krakom stepeništa (HOD, ali sa stepenicima - za rutu "bez stepenica").
         anchor, chain = via[0]
         prev = g.nid(f, anchor)
-        for k, p in chain:
+        for k, p, *mark in chain:
             cur = g.node(f, k, *p)
-            g.edge(prev, cur)
+            g.edge(prev, cur, steps=STEPS in mark)
             prev = cur
         g.edge(prev, n)
     net.finish()
@@ -238,7 +245,9 @@ def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=(
             {"id": n, "floor": f, "x": rel(x, y)[0], "y": rel(x, y)[1], "type": kind, **({"name": name} if name else {})}
             for n, (f, x, y, kind, name) in g.nodes.items()
         ],
-        "edges": [[a, b, kind] for (a, b), kind in g.edges.items()],
+        # [a, b, tip] ili [a, b, "HOD", STEPS] - hod krakom stepeništa (do podesta/međunivoa)
+        "edges": [[a, b, kind] + ([STEPS] if (a, b) in g.steps else []) for (a, b), kind in g.edges.items()],
+        # [čvor kampusa, čvor zgrade] ili [..., STEPS] - npr. pasarela F-bloka stiže na podest između spratova
         "campusLinks": [list(link) for link in campus_links],
         # [čvor ove zgrade, čvor druge zgrade sa planom] - prolaz mimo kampusa (npr. NB - Kula na I spratu)
         **({"indoorLinks": [list(link) for link in indoor_links]} if indoor_links else {}),

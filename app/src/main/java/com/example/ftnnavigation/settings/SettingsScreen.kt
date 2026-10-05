@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -15,6 +17,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -32,11 +35,16 @@ import com.example.ftnnavigation.R
 import com.example.ftnnavigation.departure.DepartureSettings
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 
-/** Podešavanja aplikacije (podekran sa Početne): mapa (auto-rotacija) i obaveštenja o polasku ([DepartureSettings]). */
+/**
+ * Podešavanja aplikacije (podekran sa Početne): mapa (auto-rotacija), ruta (stepenice / lift) i obaveštenja o polasku
+ * ([DepartureSettings]).
+ */
 @Composable
 fun SettingsScreen(
     autoRotateMap: Boolean,
     onAutoRotateMapChange: (Boolean) -> Unit,
+    floorChange: FloorChange,
+    onFloorChangeChange: (FloorChange) -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -66,6 +74,8 @@ fun SettingsScreen(
                 checked = autoRotateMap,
                 onCheckedChange = onAutoRotateMapChange,
             )
+            SectionHeader(stringResource(R.string.settings_section_route))
+            FloorChangeCard(floorChange, onFloorChangeChange)
             SectionHeader(stringResource(R.string.notifications_title))
             DepartureSettings()
         }
@@ -80,6 +90,43 @@ private fun SectionHeader(text: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() },
     )
+}
+
+/** Kako ruta menja sprat: jedan od tri izbora (dodir na red bira). */
+@Composable
+private fun FloorChangeCard(selected: FloorChange, onSelect: (FloorChange) -> Unit) {
+    SettingsCard {
+        Text(stringResource(R.string.settings_floor_change_title), style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.selectableGroup()) {
+            for (option in FloorChange.entries) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .selectable(selected = option == selected, role = Role.RadioButton, onClick = { onSelect(option) })
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = option == selected, onClick = null)
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(stringResource(option.labelRes()), style = MaterialTheme.typography.bodyLarge)
+                        CardBody(stringResource(option.bodyRes()))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun FloorChange.labelRes(): Int = when (this) {
+    FloorChange.NAJBRZE -> R.string.settings_floor_change_fastest
+    FloorChange.BEZ_STEPENICA -> R.string.settings_floor_change_no_stairs
+    FloorChange.BEZ_LIFTA -> R.string.settings_floor_change_no_lift
+}
+
+private fun FloorChange.bodyRes(): Int = when (this) {
+    FloorChange.NAJBRZE -> R.string.settings_floor_change_fastest_body
+    FloorChange.BEZ_STEPENICA -> R.string.settings_floor_change_no_stairs_body
+    FloorChange.BEZ_LIFTA -> R.string.settings_floor_change_no_lift_body
 }
 
 /** Kartica sa naslovom, opisom i prekidačem; dodir bilo gde na kartici menja prekidač. */

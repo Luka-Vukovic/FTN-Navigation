@@ -8,6 +8,7 @@ import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.RoutingProfile
+import com.example.ftnnavigation.graph.routeOrFallback
 import com.example.ftnnavigation.schedule.ScheduleData
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -129,6 +130,18 @@ class NbGraphTest {
         val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, graph.room("AH9")!!.id))
         assertTrue(route.nodes.any { it.type == NodeType.STEPENISTE && it.floor == 5 })
         assertNull(graph.route(NbPlan.ENTRANCE_ID, graph.room("AH9")!!.id, RoutingProfile(avoidStairs = true)))
+        // Podešavanje "Bez stepenica": ruta ipak postoji, stepenicama, uz napomenu.
+        val fallback = checkNotNull(routeOrFallback(RoutingProfile(avoidStairs = true)) { graph.route(NbPlan.ENTRANCE_ID, graph.room("AH9")!!.id, it) })
+        assertTrue(fallback.fallback)
+        assertTrue(fallback.nodes.any { it.type == NodeType.STEPENISTE && it.floor == 5 })
+    }
+
+    /** Bez lifta: na IV sprat (inače liftom ako je brži) stepenicama. */
+    @Test
+    fun avoidLift_takesStairs() {
+        val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, graph.room("AH3")!!.id, RoutingProfile(avoidLift = true)))
+        assertFalse(route.nodes.any { it.type == NodeType.LIFT })
+        assertEquals(4, route.nodes.last().floor)
     }
 
     /** Suteren: stepeništem iz prizemlja. */

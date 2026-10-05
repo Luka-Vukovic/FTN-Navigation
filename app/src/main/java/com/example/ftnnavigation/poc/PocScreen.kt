@@ -122,6 +122,7 @@ import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.AcademicCalendar
 import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.schedule.ScheduleData
+import com.example.ftnnavigation.settings.FloorChange
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
 import kotlin.math.abs
@@ -176,6 +177,7 @@ fun PocRoute(
         canStartTracking = viewModel.canStartTracking,
         roomSchedule = roomSchedule,
         autoRotateMap = viewModel.autoRotateMap,
+        floorChange = viewModel.floorChange,
         onModeChange = viewModel::selectMode,
         onFloorChange = viewModel::selectFloor,
         onDestinationChange = viewModel::selectDestination,
@@ -201,6 +203,8 @@ fun PocScreen(
     target: RouteTarget?,
     route: Route?,
     routeStart: RouteStart,
+    /** Promena sprata iz Podešavanja - baner piše kad je ruta po njoj nemoguća. */
+    floorChange: FloorChange = FloorChange.NAJBRZE,
     canStartTracking: Boolean,
     roomSchedule: RoomSchedule?,
     /** Mapa se okreće po smeru korisnika (podešavanje). */
@@ -306,6 +310,7 @@ fun PocScreen(
                             target = target,
                             route = route,
                             routeStart = routeStart,
+                            floorChange = floorChange,
                             onClear = { onDestinationChange(null) },
                         )
                     }
@@ -732,7 +737,7 @@ internal fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: 
  * sale - ako sala nije ucrtana, ruta vodi samo do zgrade.
  */
 @Composable
-private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?, routeStart: RouteStart, onClear: () -> Unit) {
+private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?, routeStart: RouteStart, floorChange: FloorChange, onClear: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         shadowElevation = 3.dp,
@@ -764,6 +769,16 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Podešavanje "Bez stepenica" / "Bez lifta" na ovoj ruti nije moguće.
+                if (route?.fallback == true) {
+                    Text(
+                        stringResource(
+                            if (floorChange == FloorChange.BEZ_LIFTA) R.string.route_fallback_lift else R.string.route_fallback_stairs,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 val building = target?.building?.name
                 if (route != null && building != null && building != destination) {
                     // Sala u zgradi sa spratovima: i sprat.

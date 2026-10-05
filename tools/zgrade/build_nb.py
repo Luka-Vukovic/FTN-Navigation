@@ -35,7 +35,7 @@ Teren 01.10.2026 (korisnik + fotografija evakuacionog plana I sprata):
 import argparse
 from pathlib import Path
 
-from common import Flights, R, build_graph, check_images, rect_poly, row, write_all
+from common import STEPS, Flights, R, build_graph, check_images, rect_poly, row, write_all
 
 VX, VY, VW, VH = VIEWPORT = (305, 305, 750, 275)  # viewport plana (px plana)
 WALL = (413, 311, 1038, 519)  # spoljni zid: 625 x 208 px = OSM obris 63,4 x 21,1 m
@@ -60,7 +60,7 @@ PASSAGE_KULA = (322, 422)
 PASSAGE_AMF = (680, 313)
 # Prolaz ka Amfiteatrima je sa međupodesta glavnog stepeništa (FtnGO: "stepenicama naviše"; plan: otvor iznad desnog
 # kraja međupodesta). Do 05.10.2026 je bio grana pravo iz hodnika - kroz desni krak (silazak u suteren).
-AMF_VIA = ("S", [("PODEST", (633, 320)), ("PODEST-AMF", (680, 320))])
+AMF_VIA = ("S", [("PODEST", (633, 320), STEPS), ("PODEST-AMF", (680, 320))])
 CAMPUS_LINKS = [("K-U-NB-1", "NB-0-ULAZ"), ("K-P-NB-KULA", "NB-0-PROLAZ"), ("K-P-AMF-NB", "NB-0-PROLAZ-AMF")]
 # Veze sa drugom zgradom mimo kampusa (zastakljen prolaz NB - Kula na I spratu, evakuacioni plan).
 INDOOR_LINKS = [("NB-1-PROLAZ", "KULA-1-PROLAZ-NB")]

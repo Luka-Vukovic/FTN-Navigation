@@ -7,7 +7,10 @@ import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.EdgeType
+import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.graph.RoutingProfile
+import com.example.ftnnavigation.graph.routeOrFallback
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -153,5 +156,51 @@ class AmfKulaGraphTest {
         val (pk, ps) = listOf(kiosk, checkNotNull(graph.node("AMF-m1-S1"))).map(graph::position)
         assertTrue(hypot(pk.x - ps.x, pk.y - ps.y) < 4f)
         assertNotNull(ROOM_HOURS["Kiosk"])
+    }
+
+    // "Bez stepenica": krakovi do podesta/međunivoa su HOD ivice sa stepenicima (Edge.steps) i ne koriste se.
+
+    private val stepEdges = graph.edges.filter { it.steps }.flatMap { listOf(it.fromId to it.toId, it.toId to it.fromId) }.toSet()
+
+    private fun Route.stepsUsed(): List<Pair<String, String>> =
+        nodes.zipWithNext { a, b -> a.id to b.id }.filter { it in stepEdges || graph.neighbors(it.first).any { (n, t) -> n.id == it.second && t == EdgeType.STEPENICE } }
+
+    /** Označeni su NB prolaz ka AMF-u sa podesta, krakovi S1 AMF-a do podesta trema i pasarela F-bloka na podest. */
+    @Test
+    fun stepEdges_marked() {
+        assertEquals(
+            setOf(
+                "NB-0-S" to "NB-0-PODEST", "AMF-m1-S1" to "AMF-m1-PODEST-S1", "AMF-0-S1-D-KRAK" to "AMF-0-PODEST-S1-D",
+                "K-P-AMF-F" to "F-0-PROLAZ-AMF", "K-P-AMF-F" to "F-1-PROLAZ-AMF",
+            ),
+            graph.edges.filter { it.steps }.map { it.fromId to it.toId }.toSet(),
+        )
+        assertTrue(graph.edges.filter { it.steps }.all { it.type == EdgeType.HOD })
+    }
+
+    /** Bez stepenica se ne prelazi nijedan stepenik - ni krakom do podesta - ka bilo kojoj sali. */
+    @Test
+    fun avoidStairs_neverUsesStepEdges() {
+        val noStairs = RoutingProfile(avoidStairs = true)
+        for (target in graph.rooms) {
+            val route = graph.route(NbPlan.ENTRANCE_ID, target.id, noStairs) ?: continue
+            assertEquals(target.name, emptyList<Pair<String, String>>(), route.stepsUsed())
+        }
+    }
+
+    /**
+     * Ranije (pre oznake) "bez stepenica" je vodilo NB -> A2 liftom pa krakom do podesta i staklenim prolazom; sada staklenim
+     * prolazom ne ide, a do F-bloka puta nema (pasarela na podest, bez lifta) -> stepenicama uz napomenu.
+     */
+    @Test
+    fun avoidStairs_noGlassPassageToAmf_fBlockOnlyWithNote() {
+        val noStairs = RoutingProfile(avoidStairs = true)
+        val toA2 = routeOrFallback(noStairs) { graph.route(room("101").id, room("A2").id, it) }
+        assertNotNull(toA2)
+        if (!toA2!!.fallback) assertFalse(toA2.nodes.any { it.id == "NB-0-PODEST" })
+        assertNull(graph.route(room("101").id, room("F 315").id, noStairs))
+        assertTrue(routeOrFallback(noStairs) { graph.route(room("101").id, room("F 315").id, it) }!!.fallback)
+        // Bez podešavanja ruta i dalje ide staklenim prolazom (kraće).
+        assertTrue(graph.route(room("101").id, room("A2").id)!!.nodes.any { it.id == "NB-0-PODEST" })
     }
 }

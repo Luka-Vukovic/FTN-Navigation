@@ -166,6 +166,8 @@ fun FtnApp() {
                 SettingsScreen(
                     autoRotateMap = mapViewModel.autoRotateMap,
                     onAutoRotateMapChange = mapViewModel::updateAutoRotateMap,
+                    floorChange = mapViewModel.floorChange,
+                    onFloorChangeChange = mapViewModel::updateFloorChange,
                     onBack = { navController.popBackStack() },
                 )
             }

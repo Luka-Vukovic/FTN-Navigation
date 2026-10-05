@@ -67,6 +67,35 @@ class BuildingGraphTest {
     }
 
     @Test
+    fun avoidLift_usesStairsEvenWhereLiftIsFaster() {
+        // Na 5. sprat je lift brži (65 s naspram 90 s) - bez lifta ipak stepenicama.
+        val route = routeTo("R5", RoutingProfile(avoidLift = true))
+        assertTrue((0..5).all { route.uses("S$it") })
+        assertTrue(route.nodes.none { it.type == NodeType.LIFT })
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun avoidStairsAndLift_rejected() {
+        RoutingProfile(avoidStairs = true, avoidLift = true)
+    }
+
+    @Test
+    fun routeOrFallback_withoutAvoidanceOnlyWhenNoOtherWay() {
+        // Lift samo do 3. sprata: bez stepenica na 3. liftom, na 5. nema puta -> stepenicama uz napomenu.
+        val shortLift = BuildingGraph(graph.nodes, graph.edges.filterNot { it.type == EdgeType.LIFT && (it.toId == "L4" || it.toId == "L5") }, scale)
+        val noStairs = RoutingProfile(avoidStairs = true)
+        val toThird = checkNotNull(routeOrFallback(noStairs) { shortLift.route("E", "R3", it) })
+        assertFalse(toThird.fallback)
+        assertTrue(toThird.uses("L3"))
+        val toFifth = checkNotNull(routeOrFallback(noStairs) { shortLift.route("E", "R5", it) })
+        assertTrue(toFifth.fallback)
+        assertTrue(toFifth.uses("S5"))
+        // Bez izbegavanja nema ni napomene; nepoznat cilj ostaje bez rute.
+        assertFalse(checkNotNull(routeOrFallback(RoutingProfile()) { shortLift.route("E", "R5", it) }).fallback)
+        assertNull(routeOrFallback(noStairs) { shortLift.route("E", "nema", it) })
+    }
+
+    @Test
     fun goingDown_isFasterThanGoingUp() {
         assertTrue(graph.route("R2", "R0")!!.durationSec < graph.route("R0", "R2")!!.durationSec)
     }
@@ -124,7 +153,9 @@ class BuildingGraphTest {
         val nb = IndoorPlan.parse(File("src/main/assets/nb.json").readText())
         val nbIds = nb.nodes.map { it.id }.toSet()
         val nbGraph = BuildingGraph(nb.graphNodes(), nb.graphEdges().filter { it.fromId in nbIds && it.toId in nbIds }, FloorScale(76f, 27.9f))
-        val profiles = listOf(RoutingProfile(), RoutingProfile(avoidStairs = true), RoutingProfile(crowdFactor = 1.7))
+        val profiles = listOf(
+            RoutingProfile(), RoutingProfile(avoidStairs = true), RoutingProfile(avoidLift = true), RoutingProfile(crowdFactor = 1.7),
+        )
         for ((g, step) in listOf(graph to 1, nbGraph to 5)) {
             for (profile in profiles) {
                 for (from in g.nodes.filterIndexed { i, _ -> i % step == 0 }) {

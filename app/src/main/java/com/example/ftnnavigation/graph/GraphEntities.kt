@@ -64,4 +64,12 @@ data class Edge(
     val fromId: String,
     val toId: String,
     val type: EdgeType,
+    /**
+     * HOD ivica sa stepenicima: krak do podesta/međunivoa (NB prolaz ka Amfiteatrima, trem Kule na stepeništu S1 AMF-a),
+     * pasarela F-bloka na podest. Za PDR i map-matching je hod; ruta "bez stepenica" je ne koristi.
+     */
+    val steps: Boolean = false,
 )
+
+/** Oznaka [Edge.steps] u JSON-u plana (generatori `tools/zgrade`: `STEPS`). */
+const val STEPS_MARK = "STEPENICI"

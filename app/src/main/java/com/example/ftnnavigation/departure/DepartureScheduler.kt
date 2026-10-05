@@ -15,7 +15,9 @@ import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.graph.RoutingProfile
 import com.example.ftnnavigation.schedule.Agenda
+import com.example.ftnnavigation.settings.AppSettings
 import com.example.ftnnavigation.schedule.TIME_FORMAT
 import com.example.ftnnavigation.schedule.ScheduleStore
 import java.time.Instant
@@ -103,8 +105,14 @@ object DepartureScheduler {
         maxOf(System.currentTimeMillis(), prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0))
 
     /** Raspored, kampus i graf za računanje polazaka; učitavanje traje, pa jednom po zakazivanju. */
-    private class Planner(private val agenda: Agenda, private val campus: CampusData, private val graph: BuildingGraph) {
-        private fun route(from: String?, to: String): Route? = routeBetween(graph, campus, from, to)
+    private class Planner(
+        private val agenda: Agenda,
+        private val campus: CampusData,
+        private val graph: BuildingGraph,
+        /** Promena sprata iz Podešavanja (bez stepenica / bez lifta menja vreme polaska). */
+        private val profile: RoutingProfile,
+    ) {
+        private fun route(from: String?, to: String): Route? = routeBetween(graph, campus, from, to, profile)
 
         fun next(after: LocalDateTime): Departure? = nextDeparture(agenda::on, after, ::route)
 
@@ -121,7 +129,10 @@ object DepartureScheduler {
         companion object {
             suspend fun load(context: Context): Planner {
                 val campus = loadCampus(context)
-                return Planner(ScheduleStore(context).loadAgenda(), campus, loadGraph(context, campus))
+                return Planner(
+                    ScheduleStore(context).loadAgenda(), campus, loadGraph(context, campus),
+                    AppSettings.floorChange(context).profile,
+                )
             }
         }
     }

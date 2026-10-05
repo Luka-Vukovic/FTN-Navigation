@@ -35,7 +35,7 @@ grafu - na mapi kampusa je služba (build_campus.py SERVICES).
 import argparse
 from pathlib import Path
 
-from common import Flights, R, build_graph, check_images, col, rect_poly, row, write_all
+from common import STEPS, Flights, R, build_graph, check_images, col, rect_poly, row, write_all
 
 VX, VY, VW, VH = VIEWPORT = (30, -80, 820, 310)
 WALL = (168, -65, 835, 210)  # OSM obris u zajedničkom sistemu (67,7 x 27,9 m)
@@ -64,8 +64,9 @@ S1_VOID = S1_MID
 S1_FLIGHTS_0 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, down_node=S1_TOP, draw_up=False),
                 Flights(S1_MID, S1_LEFT, S1_LANDING, S1_PATH_L, down_node=S1_TOP, draw_up=False)]
 # Trem iz Kule: sa podesta S1 (na -1 uz srednji krak, u prizemlju niz bočni krak).
-KULA_VIA_M1 = ("S1", [("PODEST-S1", (250, 207))])
-KULA_VIA_0 = ("S1-D", [("S1-D-KRAK", (277, 176)), ("PODEST-S1-D", (277, 207)), ("PODEST-S1", (250, 207))])
+# Krakovi do podesta su HOD ivice sa stepenicima (STEPS) - ruta "bez stepenica" ne ide tuda.
+KULA_VIA_M1 = ("S1", [("PODEST-S1", (250, 207), STEPS)])
+KULA_VIA_0 = ("S1-D", [("S1-D-KRAK", (277, 176)), ("PODEST-S1-D", (277, 207), STEPS), ("PODEST-S1", (250, 207))])
 PASSAGE_KULA = (250, 214)
 
 # S2 (uz zapadni zid, između AR4 i AR5): pravo stepenište - dva kraka u nizu sa podestom između. Iz prizemlja se ulazi

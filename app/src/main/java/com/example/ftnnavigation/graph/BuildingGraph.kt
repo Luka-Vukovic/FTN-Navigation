@@ -56,18 +56,37 @@ data class RoutingProfile(
     val liftSecPerFloor: Double = 4.0,
     /** Npr. kolica ili povreda - stepenice se ne koriste, ostaje lift. */
     val avoidStairs: Boolean = false,
+    /** Lift se ne koristi (podešavanje "Bez lifta") - samo stepenice. */
+    val avoidLift: Boolean = false,
     val crowdFactor: Double = 1.0,
 ) {
     init {
         require(walkingSpeedMps > 0) { "walkingSpeedMps mora biti > 0" }
         require(crowdFactor >= 1.0) { "crowdFactor mora biti >= 1" }
+        require(!(avoidStairs && avoidLift)) { "bez stepenica i bez lifta - nema promene sprata" }
     }
+
+    /** Isti profil bez izbegavanja stepenica/lifta. */
+    fun withoutAvoidance(): RoutingProfile = copy(avoidStairs = false, avoidLift = false)
 }
 
-/** Ruta kroz [nodes]; [lengthM] je pređeni put po spratovima (bez vertikale stepenica/lifta). */
-data class Route(val nodes: List<Node>, val durationSec: Double, val lengthM: Double) {
+/**
+ * Ruta kroz [nodes]; [lengthM] je pređeni put po spratovima (bez vertikale stepenica/lifta). [fallback]: po profilu
+ * puta nema (npr. bez stepenica do sprata bez lifta), pa je ruta bez izbegavanja ([routeOrFallback]).
+ */
+data class Route(val nodes: List<Node>, val durationSec: Double, val lengthM: Double, val fallback: Boolean = false) {
     /** Trajanje za prikaz: minuti zaokruženi naviše, najmanje 1. */
     val minutes: Int get() = ceil(durationSec / 60).toInt().coerceAtLeast(1)
+}
+
+/**
+ * Ruta po [profile] ([find] je bilo koji poziv rute grafa); ako je nema, a profil izbegava stepenice ili lift, ruta bez
+ * izbegavanja sa [Route.fallback] - AMF, F-blok i MI nemaju lift, a na V sprat NB-a se stiže samo stepenicama.
+ */
+inline fun routeOrFallback(profile: RoutingProfile, find: (RoutingProfile) -> Route?): Route? {
+    find(profile)?.let { return it }
+    if (!profile.avoidStairs && !profile.avoidLift) return null
+    return find(profile.withoutAvoidance())?.copy(fallback = true)
 }
 
 /**
@@ -88,6 +107,10 @@ class BuildingGraph(
     private val byId = nodes.associateBy { it.id }
     private val positions = nodes.associate { it.id to placement(it.buildingId).toMeters(it.x, it.y) }
     private val adjacency: Map<String, List<Pair<Node, EdgeType>>>
+
+    /** HOD ivice sa stepenicima ([Edge.steps]), u oba smera - "bez stepenica" ih ne koristi. */
+    private val stepEdges: Set<Pair<String, String>> =
+        edges.filter { it.steps }.flatMap { listOf(it.fromId to it.toId, it.toId to it.fromId) }.toSet()
 
     init {
         val adj = HashMap<String, MutableList<Pair<Node, EdgeType>>>()
@@ -205,13 +228,16 @@ class BuildingGraph(
 
     /** Vreme prolaska ivice u sekundama; null = profil je ne dozvoljava. */
     internal fun cost(from: Node, to: Node, type: EdgeType, profile: RoutingProfile): Double? = when (type) {
-        EdgeType.HOD -> distanceM(from, to) / profile.walkingSpeedMps * profile.crowdFactor
+        // Krak do podesta / pasarela na podest: vreme kao hod (kratko), ali sa stepenicima.
+        EdgeType.HOD -> if (profile.avoidStairs && (from.id to to.id) in stepEdges) null else {
+            distanceM(from, to) / profile.walkingSpeedMps * profile.crowdFactor
+        }
         EdgeType.STEPENICE -> if (profile.avoidStairs) null else {
             val floors = to.floor - from.floor
             val perFloor = if (floors > 0) profile.stairsUpSecPerFloor else profile.stairsDownSecPerFloor
             abs(floors) * perFloor * profile.crowdFactor
         }
-        EdgeType.LIFT -> profile.liftWaitSec + abs(to.floor - from.floor) * profile.liftSecPerFloor
+        EdgeType.LIFT -> if (profile.avoidLift) null else profile.liftWaitSec + abs(to.floor - from.floor) * profile.liftSecPerFloor
     }
 
     /**

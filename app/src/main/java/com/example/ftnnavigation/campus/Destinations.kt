@@ -4,6 +4,8 @@ import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.graph.RoutingProfile
+import com.example.ftnnavigation.graph.routeOrFallback
 
 private val F_BLOCK_ROOM = Regex("""F[ -]\d+""") // F 315, F-208 (ne "Fizika")
 private val AMPHITHEATRE = Regex("""A\d""")
@@ -131,10 +133,17 @@ fun resolveTarget(destination: String, graph: BuildingGraph, campus: CampusData)
 
 /**
  * Ruta između dve sale iz rasporeda ([fromRoom] null = od glavnog ulaza Nastavnog bloka),
- * ili null ako se ne zna gde je neka od njih. Neucrtana sala se zamenjuje svojom zgradom.
+ * ili null ako se ne zna gde je neka od njih. Neucrtana sala se zamenjuje svojom zgradom. Promena sprata po [profile]
+ * (podešavanje), a gde po njemu puta nema - bez izbegavanja ([routeOrFallback]).
  */
-fun routeBetween(graph: BuildingGraph, campus: CampusData, fromRoom: String?, toRoom: String): Route? {
+fun routeBetween(
+    graph: BuildingGraph,
+    campus: CampusData,
+    fromRoom: String?,
+    toRoom: String,
+    profile: RoutingProfile = RoutingProfile(),
+): Route? {
     val to = resolveTarget(toRoom, graph, campus) ?: return null
     val from = if (fromRoom == null) NbPlan.ENTRANCE_ID else resolveTarget(fromRoom, graph, campus)?.node?.id
-    return graph.route(from ?: return null, to.node.id)
+    return routeOrFallback(profile) { graph.route(from ?: return null, to.node.id, it) }
 }

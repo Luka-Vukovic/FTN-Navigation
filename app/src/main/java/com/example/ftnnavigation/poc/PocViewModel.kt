@@ -31,6 +31,7 @@ import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.departure.Departure
+import com.example.ftnnavigation.departure.DepartureScheduler
 import com.example.ftnnavigation.departure.departureFor
 import com.example.ftnnavigation.events.PlaceOptions
 import com.example.ftnnavigation.graph.BuildingGraph
@@ -46,8 +47,10 @@ import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.PlanPlacement
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.graph.routeOrFallback
 import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.settings.AppSettings
+import com.example.ftnnavigation.settings.FloorChange
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -215,6 +218,18 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         AppSettings.setAutoRotateMap(getApplication(), enabled)
     }
 
+    /** Promena sprata na ruti (Podešavanja): najbrže, bez stepenica ili bez lifta. */
+    var floorChange by mutableStateOf(AppSettings.floorChange(application))
+        private set
+
+    /** Menja i vreme polaska - obaveštenje se zakazuje iznova. */
+    fun updateFloorChange(value: FloorChange) {
+        floorChange = value
+        val app = getApplication<Application>()
+        AppSettings.setFloorChange(app, value)
+        viewModelScope.launch { DepartureScheduler.reschedule(app) }
+    }
+
     /** Sprat koji Mapa prikazuje, po zgradi (podrazumevano prizemlje). PDR je na spratu gde je start. */
     private var floors by mutableStateOf(mapOf<String, Int>())
 
@@ -298,7 +313,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Ruta do odredišta: od pozicije na grafu (kroz bolji kraj njene ivice), od GPS lokacije (preko
      * najbliže staze ili ulaza), inače od glavnog ulaza. Ponovo se računa pri svakom koraku i
-     * lokaciji - graf je mali, A* traje ispod milisekunde.
+     * lokaciji - graf je mali, A* traje ispod milisekunde. Promena sprata po podešavanju ([floorChange]); gde po
+     * njemu puta nema, ruta bez izbegavanja ([Route.fallback] - baner to piše).
      */
     val route: Route? by derivedStateOf {
         val graph = graph ?: return@derivedStateOf null
@@ -308,19 +324,21 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val raw = state.rawPosition
         val gps = routeGps
         val place = state.pdrPlace
-        when {
-            match != null -> graph.routeFrom(match.point, target.node.id)
-            raw != null -> graph.routeFrom(
-                place.buildingId, place.floor, raw.x, raw.y, target.node.id,
-                startTypes = GPS_START_TYPES.takeIf { place.isCampus },
-            )
-            gps != null -> graph.routeFrom(
-                CAMPUS_ID, 0,
-                (gps.point.x / campus.widthM).toFloat(), (gps.point.y / campus.heightM).toFloat(),
-                target.node.id,
-                startTypes = GPS_START_TYPES,
-            )
-            else -> graph.route(NbPlan.ENTRANCE_ID, target.node.id)
+        routeOrFallback(floorChange.profile) { profile ->
+            when {
+                match != null -> graph.routeFrom(match.point, target.node.id, profile)
+                raw != null -> graph.routeFrom(
+                    place.buildingId, place.floor, raw.x, raw.y, target.node.id, profile,
+                    startTypes = GPS_START_TYPES.takeIf { place.isCampus },
+                )
+                gps != null -> graph.routeFrom(
+                    CAMPUS_ID, 0,
+                    (gps.point.x / campus.widthM).toFloat(), (gps.point.y / campus.heightM).toFloat(),
+                    target.node.id, profile,
+                    startTypes = GPS_START_TYPES,
+                )
+                else -> graph.route(NbPlan.ENTRANCE_ID, target.node.id, profile)
+            }
         }
     }
 
@@ -350,8 +368,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     fun departureFor(item: AgendaItem, day: List<AgendaItem>): Departure? {
         val graph = graph
         val campus = campus
+        val profile = floorChange.profile
         return departureFor(item, day, route = { from, to ->
-            if (graph != null && campus != null) routeBetween(graph, campus, from, to) else null
+            if (graph != null && campus != null) routeBetween(graph, campus, from, to, profile) else null
         })
     }
 
