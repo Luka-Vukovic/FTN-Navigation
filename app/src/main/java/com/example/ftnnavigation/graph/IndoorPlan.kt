@@ -25,8 +25,15 @@ data class IndoorPlan(
     val campusLinks: List<List<String>>,
     /** [čvor ove zgrade, čvor druge zgrade sa planom] - prolaz mimo kampusa (NB - Kula na I spratu). */
     val indoorLinks: List<List<String>> = emptyList(),
+    /** Stepeništa sa dva kraka i međupodestom, po spratu (nisu deo grafa - za kretanje tačke po stepeništu). */
+    val stairwells: List<IndoorStairwell> = emptyList(),
 ) {
     fun graphNodes(): List<Node> = nodes.map { Node(it.id, buildingId, it.floor, it.x, it.y, it.type, it.name) }
+
+    /** Putanje stepeništa, ključ "zgrada/stepenište" kao [com.example.ftnnavigation.poc.stairKey]. */
+    fun stairPaths(): List<StairPath> = stairwells.map { s ->
+        StairPath("$buildingId/${s.key}", s.floor, s.path.map { (x, y) -> PlanPoint(x, y) })
+    }
 
     fun graphEdges(): List<Edge> =
         edges.map { (a, b, type) -> Edge(a, b, EdgeType.valueOf(type)) } +
@@ -38,6 +45,20 @@ data class IndoorPlan(
         fun parse(text: String): IndoorPlan = json.decodeFromString(text)
     }
 }
+
+/** Stepenište sa krakovima na spratu [floor]: [path] = dno kraka naviše, okret, okret, dno kraka naniže (relativno). */
+@Serializable
+data class IndoorStairwell(val key: String, val floor: Int, val path: List<List<Float>>)
+
+/** Tačka relativno na plan (0..1). */
+data class PlanPoint(val x: Float, val y: Float)
+
+/**
+ * Putanja kroz stepenište [stairKey] na planu sprata [floor] (relativne koordinate): dno kraka naviše, okret na
+ * međupodestu iznad njega, okret iznad kraka naniže, dno kraka naniže. Penje se od prve tačke do poslednje (poslednji
+ * krak je već sprat iznad), silazi obrnuto.
+ */
+data class StairPath(val stairKey: String, val floor: Int, val points: List<PlanPoint>)
 
 @Serializable
 data class IndoorNode(

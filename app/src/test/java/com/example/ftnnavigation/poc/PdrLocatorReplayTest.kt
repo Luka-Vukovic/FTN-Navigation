@@ -12,6 +12,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.util.Locale
+import kotlin.math.hypot
 
 /**
  * Pušta snimak sa telefona ([SensorRecorder]) kroz [PdrLocator]: koraci (S - smer i ponavljanje kako ih je dao
@@ -26,7 +27,9 @@ import java.util.Locale
 class PdrLocatorReplayTest {
 
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
-    private val graph = seedGraph(campus, INDOOR_BUILDINGS.map { IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) })
+    private val plans = INDOOR_BUILDINGS.map { IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) }
+    private val stairPaths = plans.flatMap { it.stairPaths() }
+    private val graph = seedGraph(campus, plans)
         .let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private val declination = 5.5f
@@ -40,7 +43,7 @@ class PdrLocatorReplayTest {
         val files = if (input.isDirectory) input.listFiles { f -> f.extension == "csv" }!!.sorted() else listOf(input)
         val outDir = File("build/pdr-replay").apply { mkdirs() }
         // Snimci iste sesije (bez Reset-a) dele locator - naučena zakrenutost smera prelazi u sledeći snimak.
-        val locator = PdrLocator(graph, campus, declination)
+        val locator = PdrLocator(graph, campus, declination, stairPaths)
         for (file in files) {
             val (events, track) = replay(file, locator)
             File(outDir, file.nameWithoutExtension + "-mesto.txt").writeText(events)
@@ -103,7 +106,21 @@ class PdrLocatorReplayTest {
                     val bias = f[7].toFloat()
                     if (bias != 0f) locator.applyCorrection = true
                     else if (place.buildingId == locator.place.buildingId && locator.headingErrorDeg?.let { it != 0f } == true) locator.applyCorrection = false
-                    if (reason == PlaceReason.RUCNO) {
+                    if (reason == PlaceReason.START) {
+                        // Pozicija na Start (od 05.10.2026): replay kreće odatle ako je drugde (Ovde sam pre Start-a).
+                        val at = Offset(f[5].toFloat(), f[6].toFloat())
+                        val now = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw
+                        val scale = graph.placement(place.buildingId).scale
+                        val apart = now?.let { hypot((it.x - at.x) * scale.widthM, (it.y - at.y) * scale.heightM) }
+                        if (place != locator.place || apart == null || apart > 0.5) {
+                            locator.setPosition(place, at, measure = false)
+                            log(t, "START ${place.buildingId} ${place.floor} (postavljeno)")
+                        } else {
+                            log(t, "START ${place.buildingId} ${place.floor}")
+                        }
+                        steps = 0
+                        row(t, "L")
+                    } else if (reason == PlaceReason.RUCNO) {
                         // Prekidač ispravke: iz H reda koji odmah sledi (ako ga ima).
                         lines.getOrNull(i + 1)?.takeIf { it[0] == "H" && it[4] == "MERENO" }?.let { locator.applyCorrection = it[10].toBoolean() }
                         val check = locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()))

@@ -24,6 +24,7 @@ import com.example.ftnnavigation.campus.GpsFix
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
+import com.example.ftnnavigation.campus.loadStairPaths
 import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
@@ -318,7 +319,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             ).declination
             val graph = loadGraph(application, campus)
             // Pozicija se ne može postaviti pre ovoga ("Ovde sam" i Start čekaju graf).
-            locator = PdrLocator(graph, campus, declination).apply {
+            locator = PdrLocator(graph, campus, declination, loadStairPaths(application)).apply {
                 applyCorrection = state.applyHeadingCorrection
                 restoreStairTurns(AppSettings.stairTurns(application))
             }
@@ -533,6 +534,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         locator.clearRedo()
         val app = getApplication<Application>()
         if (BuildConfig.DEBUG) recorder = SensorRecorder.start(app.filesDir)
+        // Gde je tačka (na grafu, ako je zalepljena) - replay odatle kreće.
+        val shown = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw
+        recorder?.place(SystemClock.elapsedRealtimeNanos(), PlaceReason.START, locator.place, shown, locator.headingBiasDeg)
         session = PdrSensorSession(
             app.getSystemService(SensorManager::class.java),
             walkingDirection,

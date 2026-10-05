@@ -16,6 +16,14 @@ Opis sprata (dict):
   rooms       - R(...): pravougaonik, naziv (None = bez čvora), vrata (podrazumevano sredina zida prema
                 najbližoj liniji hodnika)
   stairs      - [(ključ, pravougaonik ili None, čvor)] - stepeništa; ključ povezuje spratove (vertical)
+  flights     - {ključ stepeništa: Flights(...)} - stepenište sa dva kraka i međupodestom (teren 05.10.2026):
+                krak naviše i krak naniže polaze sa podesta sprata, oba vode na međupodest. Čvor stepeništa je
+                dno kraka naviše; na svakom spratu osim najnižeg ima i čvor <ključ>-D na dnu kraka naniže (tu se
+                stiže odozdo), a ivica STEPENICE spaja <ključ> sprata sa <ključ>-D sprata iznad. Putanja (dno
+                naviše, okret, okret, dno naniže) ide u JSON ("stairwells") - po njoj se tačka kreće na stepeništu.
+                Može i lista varijanti (AMF S1: sa podesta levim ili desnim bočnim krakom); čvor -D je iz prve.
+                Na najvišem spratu stepeništa nema čvora <ključ> (krak naviše ne postoji). Pravo stepenište
+                (AMF S2: dva kraka u nizu) - sve četiri tačke putanje na jednoj liniji
   lifts       - [(ključ, pravougaonik, čvor)]
   points      - [(ključ, (x, y), tip)] - ulazi, prolazi (tip ULAZ/PROLAZ/HODNIK)
   columns, entrances, steps - samo crtež
@@ -32,6 +40,23 @@ M_PER_PX = 63.4 / 625  # NB: OSM obris 63,4 m = 625 px plana
 def R(x0, x1, y0, y1, name=None, door=None, doors=None):
     """Soba; vrata: [door] (jedna tačka), [doors] (više ulaza) ili sredina zida prema hodniku."""
     return {"rect": (x0, y0, x1, y1), "name": name, "doors": doors or ([door] if door else None)}
+
+
+def Flights(up, down, landing, path, draw_down=True, down_node=None, draw_up=True):
+    """
+    Krakovi stepeništa (vidi "flights" gore): up/down/landing - pravougaonici kraka naviše, kraka naniže i
+    međupodesta (crtež); path - [dno kraka naviše, okret na međupodestu iznad njega, okret iznad kraka naniže,
+    dno kraka naniže]. draw_down=False: krak naniže se ne crta (najniži sprat - ispod nema ničega). down_node: čvor
+    <ključ>-D drugde od kraja putanje (AMF S1: gde se hodnik spaja sa oba bočna kraka). draw_up=False: krak naviše se
+    ne crta (AMF S1 u prizemlju: srednji krak je ispod galerije, sa nje se vidi samo ograda nad praznim prostorom).
+    """
+    return {"up": up, "down": down, "landing": landing, "path": path, "draw_down": draw_down,
+            "down_node": down_node or path[3], "draw_up": draw_up}
+
+
+def variants(flights):
+    """Varijante krakova stepeništa (Flights ili lista Flights)."""
+    return flights if isinstance(flights, list) else [flights]
 
 
 def row(y0, y1, spans):
@@ -130,7 +155,11 @@ def default_door(room, net):
     return min(sides, key=lambda p: net._nearest(p)[0])
 
 
-def build_floor(g, f, plan):
+def build_floor(g, f, plan, down_keys=(), up_keys=None):
+    """
+    down_keys: stepeništa koja imaju sprat ispod ovog (čvor <ključ>-D na dnu kraka naniže, ako ima krakove);
+    up_keys: stepeništa koja imaju sprat iznad (None = sva) - stepenište sa krakovima bez sprata iznad nema čvor <ključ>.
+    """
     net = Network(g, f, plan["paths"])
     for room in plan["rooms"]:
         if not room["name"]:
@@ -142,11 +171,29 @@ def build_floor(g, f, plan):
             g.edge(r, d)
             g.edge(d, net.attach(door))
     for key, _, at in plan.get("stairs", []):
+        if key in plan.get("flights", {}) and up_keys is not None and key not in up_keys:
+            continue
         g.edge(g.node(f, key, *at, kind="STEPENISTE"), net.attach(at))
+    for key, flights in plan.get("flights", {}).items():
+        if key in down_keys:
+            foot = variants(flights)[0]["down_node"]
+            g.edge(g.node(f, key + "-D", *foot, kind="STEPENISTE"), net.attach(foot))
     for key, _, at in plan.get("lifts", []):
         g.edge(g.node(f, key, *at, kind="LIFT"), net.attach(at))
-    for key, at, kind in plan.get("points", []):
-        g.edge(g.node(f, key, *at, kind=kind), net.attach(at))
+    for key, at, kind, *via in plan.get("points", []):
+        n = g.node(f, key, *at, kind=kind)
+        if not via:
+            g.edge(n, net.attach(at))
+            continue
+        # Tačka van mreže hodnika: (ključ postojećeg čvora, [(ključ, tačka), ...]) - npr. prolaz sa međupodesta
+        # stepeništa (NB -> Amfiteatri): od čvora stepeništa preko podesta do prolaza.
+        anchor, chain = via[0]
+        prev = g.nid(f, anchor)
+        for k, p in chain:
+            cur = g.node(f, k, *p)
+            g.edge(prev, cur)
+            prev = cur
+        g.edge(prev, n)
     net.finish()
 
 
@@ -154,10 +201,13 @@ def build_graph(building, plans, stairs, lifts):
     """stairs: {ključ: [spratovi]} (susedni se povezuju), lifts: {ključ: [spratovi]} (svaka dva)."""
     g = Graph(building)
     for f, plan in plans.items():
-        build_floor(g, f, plan)
+        build_floor(g, f, plan, {key for key, floors in stairs.items() if f in floors and f != floors[0]},
+                    {key for key, floors in stairs.items() if f in floors and f != floors[-1]})
     for key, floors in stairs.items():
         for a, b in zip(floors, floors[1:]):
-            g.edge(g.nid(a, key), g.nid(b, key), "STEPENICE")
+            # Stepeništem sa krakovima se sa sprata ispod stiže na dno kraka naniže ("<ključ>-D").
+            arrive = g.nid(b, key + "-D")
+            g.edge(g.nid(a, key), arrive if arrive in g.nodes else g.nid(b, key), "STEPENICE")
     for key, floors in lifts.items():
         for i, a in enumerate(floors):
             for b in floors[i + 1:]:
@@ -167,7 +217,13 @@ def build_graph(building, plans, stairs, lifts):
 
 # --- Izlaz -------------------------------------------------------------------------------------
 
-def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=()):
+def stairwells_json(plans, rel):
+    """Putanje stepeništa sa krakovima po spratu (relativno na viewport) - za kretanje tačke po stepeništu."""
+    return [{"key": key, "floor": f, "path": [list(rel(*p)) for p in v["path"]]}
+            for f, plan in plans.items() for key, fl in plan.get("flights", {}).items() for v in variants(fl)]
+
+
+def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=(), stairwells=()):
     vx, vy, vw, vh = viewport
 
     def rel(x, y):
@@ -186,6 +242,7 @@ def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=(
         "campusLinks": [list(link) for link in campus_links],
         # [čvor ove zgrade, čvor druge zgrade sa planom] - prolaz mimo kampusa (npr. NB - Kula na I spratu)
         **({"indoorLinks": [list(link) for link in indoor_links]} if indoor_links else {}),
+        **({"stairwells": stairwells_json(stairwells, rel)} if stairwells else {}),
     }
     path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
@@ -233,10 +290,17 @@ def drawable(plan, viewport, wall, building_name, script, source="snimaka aplika
     parts.append(("Hodnici", path(fill=C_CORRIDOR, data=" ".join(poly(p) for p in plan["corridors"]))))
     if plan.get("entrances"):
         parts.append(("Ulazi", path(fill=C_ENTRANCE, data=" ".join(rect(*e) for e in plan["entrances"]))))
-    stairs = [s[1] for s in plan.get("stairs", []) if s[1]] + plan.get("steps", [])
-    if stairs:
-        parts.append(("Stepeništa", path(fill=C_STAIRS, data=" ".join(rect(*s) for s in stairs))
-                      + path(stroke=C_TREAD, width=0.8, data=" ".join(treads(*s) for s in stairs))))
+    flights = plan.get("flights", {})
+    stairs = [s[1] for s in plan.get("stairs", []) if s[1] and s[0] not in flights] + plan.get("steps", [])
+    all_variants = [v for fl in flights.values() for v in variants(fl)]
+    runs = list(dict.fromkeys(r for v in all_variants for r in ([v["up"]] if v["draw_up"] else []) + ([v["down"]] if v["draw_down"] else [])))
+    if stairs or runs:
+        parts.append(("Stepeništa", path(fill=C_STAIRS, data=" ".join(rect(*s) for s in stairs + runs))
+                      + path(stroke=C_TREAD, width=0.8, data=" ".join(treads(*s) for s in stairs + runs))))
+    if flights:
+        landings = list(dict.fromkeys(v["landing"] for v in all_variants))
+        parts.append(("Međupodesti", path(fill=C_STAIRS, stroke=C_TREAD, width=0.8,
+                                          data=" ".join(rect(*l) for l in landings))))
     lifts = [l[1] for l in plan.get("lifts", []) if l[1]]
     if lifts:
         parts.append(("Liftovi", path(fill=C_LIFT, stroke=C_WALL, width=1.5, data=" ".join(rect(*l) for l in lifts))
@@ -278,7 +342,8 @@ def write_all(g, plans, viewport, wall, building_name, script, prefix, entrance,
     for f, plan in plans.items():
         (res / f"{floor_res(prefix, f)}.xml").write_text(drawable(plan, viewport, wall, building_name, script, source), encoding="utf-8")
     asset = ROOT / f"app/src/main/assets/{g.building.lower()}.json"
-    write_json(g, asset, viewport, list(plans), entrance, campus_links, indoor_links)
+    write_json(g, asset, viewport, list(plans), entrance, campus_links, indoor_links,
+               plans if any(p.get("flights") for p in plans.values()) else ())
     rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA")
     print(f"{g.building}: {len(g.nodes)} čvorova, {len(g.edges)} ivica, {rooms} sala -> {asset.name}")
 

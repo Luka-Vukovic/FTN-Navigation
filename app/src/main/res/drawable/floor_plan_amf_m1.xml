@@ -22,16 +22,23 @@
         <!-- Hodnici -->
         <path
             android:fillColor="#FFE8EEF4"
-            android:pathData="M170,-17 L832,-17 L832,3 L170,3 Z M203,-65 L283,-65 L283,-17 L203,-17 Z M230,3 L285,3 L285,207 L230,207 Z" />
+            android:pathData="M170,-17 L832,-17 L832,3 L170,3 Z M203,-65 L283,-65 L283,-17 L203,-17 Z M230,3 L285,3 L285,207 L230,207 Z M518,-31 L590,-31 L590,-17 L518,-17 Z" />
 
         <!-- Stepeništa -->
         <path
             android:fillColor="#FFFFE0B2"
-            android:pathData="M232,177 L262,177 L262,207 L232,207 Z M518,-65 L587,-65 L587,-40 L518,-40 Z" />
+            android:pathData="M234,172 L265,172 L265,205 L234,205 Z M556,-53 L587,-53 L587,-31 L556,-31 Z M518,-53 L548,-53 L548,-31 L518,-31 Z" />
         <path
             android:strokeColor="#FF8D6E63"
             android:strokeWidth="0.8"
-            android:pathData="M238,177 V207 M244,177 V207 M250,177 V207 M256,177 V207 M524,-65 V-40 M530,-65 V-40 M536,-65 V-40 M542,-65 V-40 M548,-65 V-40 M554,-65 V-40 M560,-65 V-40 M566,-65 V-40 M572,-65 V-40 M578,-65 V-40 M584,-65 V-40" />
+            android:pathData="M234,178 H265 M234,184 H265 M234,190 H265 M234,196 H265 M234,202 H265 M562,-53 V-31 M568,-53 V-31 M574,-53 V-31 M580,-53 V-31 M586,-53 V-31 M524,-53 V-31 M530,-53 V-31 M536,-53 V-31 M542,-53 V-31" />
+
+        <!-- Međupodesti -->
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M212,205 L287,205 L287,213 L212,213 Z M548,-53 L556,-53 L556,-31 L548,-31 Z" />
 
         <!-- Prostorije -->
         <path

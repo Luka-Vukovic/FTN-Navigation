@@ -344,6 +344,29 @@ TOP_LABELS = {
 LIFTS = {"L1": (513, 676), "L2": (302, 1505), "L3": (1492, 1516)}
 STAIRS = ["S1", "S2", "S3"]
 
+# Stepeništa sa dva kraka (evakuacioni planovi svih spratova, ispravljene fotografije; teren 05.10.2026): sa podesta
+# sprata (levo, uz hodnik) gornji red je krak naviše (na njemu je linija preseka), donji red krak naniže, oba vode na
+# međupodest desno. Isto pokazuju snimci 05.10.2026 (S1): prizemlje -> I i I -> II okret udesno, I -> prizemlje ulevo.
+# up/down: pravougaonici krakova (crtež); path: dno kraka naviše, okret iznad njega, okret iznad kraka naniže, dno
+# kraka naniže. Čvor stepeništa je dno kraka naviše, a <ključ>-D (I-V sprat) dno kraka naniže - tu se stiže odozdo.
+FLIGHTS = {
+    "S1": {"up": (445, 343, 571, 418), "down": (445, 469, 571, 547),
+           "path": [(452, 380), (593, 380), (593, 508), (452, 508)]},
+    "S2": {"up": (519, 1397, 628, 1466), "down": (519, 1486, 628, 1550),
+           "path": [(524, 1432), (663, 1432), (663, 1518), (524, 1518)]},
+    "S3": {"up": (1593, 1395, 1702, 1466), "down": (1593, 1484, 1702, 1545),
+           "path": [(1598, 1430), (1733, 1430), (1733, 1515), (1598, 1515)]},
+}
+
+
+def stair_nodes(g, f, attach):
+    """Čvorovi stepeništa sprata f (dno kraka naviše i, osim u prizemlju, naniže), vezani za čvor hodnika attach[ključ]."""
+    for key in STAIRS:
+        path = FLIGHTS[key]["path"]
+        g.edge(g.node(f, key, *path[0], "STEPENISTE"), f"NTP-{f}-{attach[key]}")
+        if f > 0:
+            g.edge(g.node(f, f"{key}-D", *path[3], "STEPENISTE"), f"NTP-{f}-{attach[key]}")
+
 # Ulazi (ULAZ) prizemlja -> ulaz u grafu kampusa (build_campus.py pravi K-U-NTP-n na istim tačkama).
 ENTRANCES = {
     "ULAZ-PASAZ-I": ((1350, 1830), "K-U-NTP-1"),  # PASAŽ, istočni kraj (parking)
@@ -425,9 +448,7 @@ def typical_floor(g, f):
         g.chain(f, ["M1334", "C560", "C815", "C870", "C983", "C1170", "C1350", "C1494", "C1600", "C1795"])
         g.chain(f, ["C1795", "K1795", "B1819"])
     g.chain(f, ["M1608", *[f"B{x}" for x in OFFICES[1:]]])
-    g.edge(g.node(f, "S1", 530, 445, "STEPENISTE"), f"NTP-{f}-M450")
-    g.edge(g.node(f, "S2", 575, 1470, "STEPENISTE"), f"NTP-{f}-M1470")
-    g.edge(g.node(f, "S3", 1670, 1470, "STEPENISTE"), f"NTP-{f}-{FIRST_CORE if f == 1 else 'C1600'}")
+    stair_nodes(g, f, {"S1": "M450", "S2": "M1470", "S3": FIRST_CORE if f == 1 else "C1600"})
     g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), f"NTP-{f}-U640")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), f"NTP-{f}-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), f"NTP-{f}-{FIRST_CORE if f == 1 else 'C1494'}")
@@ -495,9 +516,7 @@ def top_floor(g):
     g.chain(f, ["M1334", "C560", "C815", "C870", "C1025", "C1115", "C1212"])
     g.chain(f, ["T1350", "T1494", "T1600"])
     g.chain(f, ["R856", "R945", "R1035", "R1130", "R1230", "C1115"])
-    g.edge(g.node(f, "S1", 530, 445, "STEPENISTE"), "NTP-5-M450")
-    g.edge(g.node(f, "S2", 575, 1470, "STEPENISTE"), "NTP-5-M1470")
-    g.edge(g.node(f, "S3", 1680, 1470, "STEPENISTE"), "NTP-5-T1600")
+    stair_nodes(g, f, {"S1": "M450", "S2": "M1470", "S3": "T1600"})
     g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-5-U640")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), "NTP-5-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), "NTP-5-T1494")
@@ -529,9 +548,7 @@ def ground_floor(g):
     g.chain(f, ["ULAZ-PASAZ-Z", "PA", "PB", "PC", "P1300", "P1420", "P1690", "ULAZ-PASAZ-I"])
     g.chain(f, ["P1300", "LB1494", "LB1600", "LB1790"])
     g.chain(f, ["M1782", "BB510", "BB630", "BB750"])
-    g.edge(g.node(f, "S1", 530, 445, "STEPENISTE"), "NTP-0-H450")
-    g.edge(g.node(f, "S2", 606, 1473, "STEPENISTE"), "NTP-0-M1470")
-    g.edge(g.node(f, "S3", 1678, 1468, "STEPENISTE"), "NTP-0-LB1600")
+    stair_nodes(g, f, {"S1": "H450", "S2": "M1470", "S3": "LB1600"})
     g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-0-U560")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), "NTP-0-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), "NTP-0-LB1494")
@@ -561,8 +578,8 @@ def build():
         typical_floor(g, f)
     top_floor(g)
     for f in range(5):
-        for s in STAIRS:
-            g.edge(f"NTP-{f}-{s}", f"NTP-{f + 1}-{s}", "STEPENICE")
+        for s in STAIRS:  # krakom naviše sa sprata f stiže se na dno kraka naniže sprata iznad
+            g.edge(f"NTP-{f}-{s}", f"NTP-{f + 1}-{s}-D", "STEPENICE")
     for lift in LIFTS:
         for a in FLOORS:
             for b in FLOORS:
@@ -589,6 +606,9 @@ def write_json(g, path):
         ],
         "edges": [[a, b, kind] for (a, b), kind in g.edges.items()],
         "campusLinks": [[campus, f"{BUILDING}-0-{key}"] for key, (_, campus) in ENTRANCES.items()],
+        # Putanje stepeništa sa krakovima (FLIGHTS) - po njima se tačka kreće na stepeništu.
+        "stairwells": [{"key": key, "floor": f, "path": [list(rel(*p)) for p in FLIGHTS[key]["path"]]}
+                       for f in FLOORS for key in STAIRS],
     }
     path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
@@ -652,8 +672,12 @@ def drawable(plan, title):
                       + path(stroke=C_TREAD, width=2, data=hatch(x0, y0, x1, y1))))
     if plan.get("entrances"):
         parts.append(("Ulazi", path(fill=C_ENTRANCE, data=" ".join(rect(*e) for e in plan["entrances"]))))
+    # Prva tri su S1-S3 (gazišta samo na krakovima, između krakova okno); ostala (jezgro prizemlja) cela sa gazištima.
+    runs = [r for key in STAIRS for r in (FLIGHTS[key]["up"], FLIGHTS[key]["down"])] + plan["stairs"][len(STAIRS):]
+    wells = [(fl["up"][0], fl["up"][3], fl["up"][2], fl["down"][1]) for fl in FLIGHTS.values()]
     parts.append(("Stepeništa", path(fill=C_STAIRS, data=" ".join(rect(*s) for s in plan["stairs"]))
-                  + path(stroke=C_TREAD, width=2, data=" ".join(treads(*s) for s in plan["stairs"]))))
+                  + path(stroke=C_TREAD, width=2, data=" ".join(treads(*s) for s in runs))
+                  + path(fill=C_BG, stroke=C_WALL, width=2, data=" ".join(rect(*w) for w in wells))))
     parts.append(("Šahtovi", path(fill="#FFB0BEC5", data=" ".join(rect(*s) for s in plan["shafts"]))))
     parts.append(("Liftovi", path(fill=C_LIFT, stroke=C_WALL, width=4, data=" ".join(rect(*l) for l in plan["lifts"]))
                   + path(stroke=C_WALL, width=2, data=" ".join(

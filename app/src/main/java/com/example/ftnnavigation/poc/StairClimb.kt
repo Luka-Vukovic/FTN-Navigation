@@ -7,6 +7,7 @@ import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.PointM
 import com.example.ftnnavigation.graph.indoorBuilding
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.min
 
 // Promena sprata na stepeništu (04.10.2026). Telefon nema barometar. Korisnik: "u većini slučajeva su stepenice za
@@ -66,23 +67,53 @@ private const val EXTRA_FLIGHT_STEPS = 3
  */
 val STAIR_UP_TURN = mapOf("NB/S" to 1, "F/S" to -1)
 
-/** Stepenište zgrade: čvor po spratu i čvor hodnika uz njega (stepenište je list grafa na svakom spratu). */
-class Stair(val key: String, val buildingId: String, val nodes: Map<Int, Node>, val corridors: Map<Int, Node>)
+/** Sufiks čvora na dnu kraka naniže (stepenište sa krakovima, teren 05.10.2026): NB-1-S-D. */
+const val DOWN_FOOT_SUFFIX = "-D"
+
+/**
+ * Stepenište zgrade: čvor po spratu ([nodes] - kod stepeništa sa krakovima dno kraka naviše, a na najvišem spratu dno
+ * kraka naniže; [downNodes] - dno kraka naniže, na svakom spratu osim najnižeg) i čvor hodnika uz svaki (stepenište je
+ * list grafa na svakom spratu).
+ */
+class Stair(
+    val key: String,
+    val buildingId: String,
+    val nodes: Map<Int, Node>,
+    val downNodes: Map<Int, Node>,
+    private val corridorOf: Map<String, Node>,
+) {
+    /** Čvor hodnika uz čvor stepeništa [node]. */
+    fun corridor(node: Node): Node = corridorOf.getValue(node.id)
+
+    val corridors: Map<Int, Node> get() = nodes.mapValues { corridor(it.value) }
+
+    /** Čvorovi stepeništa na spratu [floor] (dno kraka naviše i naniže, koliko ih ima). */
+    fun nodesOn(floor: Int): List<Node> = listOfNotNull(nodes[floor], downNodes[floor]).distinct()
+}
 
 /** Stepeništa sa bar dva nivoa u zgradama sa planom, po ključu "zgrada/stepenište". */
 fun stairsOf(graph: BuildingGraph): Map<String, Stair> =
     graph.nodes.filter { it.type == NodeType.STEPENISTE && indoorBuilding(it.buildingId) != null }
         .groupBy { stairKey(it) }
-        .mapNotNull { (key, nodes) ->
-            val corridors = nodes.associate { s ->
-                s.floor to graph.neighbors(s.id).first { (n, type) -> type == EdgeType.HOD && n.floor == s.floor }.first
+        .mapNotNull { (key, all) ->
+            val (down, up) = all.partition { it.id.endsWith(DOWN_FOOT_SUFFIX) }
+            // Na najvišem spratu stepeništa sa krakovima nema dna kraka naviše (AMF S1, S2) - tu je čvor sprata dno kraka naniže.
+            val byFloor = up.associateBy { it.floor } + down.filter { d -> up.none { it.floor == d.floor } }.associateBy { it.floor }
+            // Čvor hodnika je najbliži sused na istom spratu; dalji je put preko međupodesta (NB: prolaz ka Amfiteatrima).
+            val corridorOf = all.associate { s ->
+                s.id to graph.neighbors(s.id)
+                    .filter { (n, type) -> type == EdgeType.HOD && n.floor == s.floor }
+                    .minBy { (n, _) -> hypot(graph.position(n).x - graph.position(s).x, graph.position(n).y - graph.position(s).y) }
+                    .first
             }
-            Stair(key, nodes.first().buildingId, nodes.associateBy { it.floor }, corridors).takeIf { nodes.size >= 2 }
+            Stair(key, all.first().buildingId, byFloor, down.associateBy { it.floor }, corridorOf)
+                .takeIf { byFloor.size >= 2 }
         }
         .associateBy { it.key }
 
-/** "NB/S" za NB-m1-S, NB-0-S ... (id je zgrada-sprat-ključ). */
-fun stairKey(node: Node): String = node.buildingId + "/" + node.id.removePrefix(node.buildingId + "-").substringAfter('-')
+/** "NB/S" za NB-m1-S, NB-0-S, NB-1-S-D ... (id je zgrada-sprat-ključ). */
+fun stairKey(node: Node): String =
+    node.buildingId + "/" + node.id.removePrefix(node.buildingId + "-").substringAfter('-').removeSuffix(DOWN_FOOT_SUFFIX)
 
 /**
  * Hod po stepeništu od ulaska: smer svakog koraka. Letovi su nizovi od bar [FLIGHT_STEPS] koraka istog smera; sprat se
@@ -185,18 +216,38 @@ class StairWalk {
         // Prva promena: let pre okreta nije duži hod (hodnik), a okret se hodao (na podestu se okreće u hodu kroz više
         // koraka; u hodniku se korisnik okrene u mestu) - šetnja hodnikom gore-dole pored stepeništa nije stepenište.
         if (anchor == null && (from - flightFirst(from) + 1 > MAX_FLIGHT_STEPS || current.first - from < MIN_TURN_STEPS)) return 0
-        if ((from + 1..current.first).any(::pauseBefore)) return 0 // okret u mestu, za vreme pauze
+        // Okret u mestu, za vreme pauze - samo pre prve promene. Posle nje je korisnik na stepeništu, a na podestu sme da
+        // zastane (teren 05.10.2026: NB I -> III i NTP I -> II, zastao 2,2-3,3 s - pa ovo pravilo, dok je važilo za ceo
+        // hod, nijedan sledeći sprat više nije prihvatalo).
+        if (anchor == null && (from + 1..current.first).any(::pauseBefore)) return 0
         val sums = FloatArray(headings.size)
         for (i in 1 until headings.size) sums[i] = sums[i - 1] + angleDiffDeg(headings[i], headings[i - 1])
         val need = STAIR_TURN_DEG + STAIR_TURN_PER_FLOOR_DEG * changes
+        // Ukupan okret: od srednjeg smera leta pre okreta do srednjeg smera trenutnog leta. Poslednji korak leta je već
+        // deo okreta (teren 05.10.2026, NTP II -> I: od njega 133°, od srednjeg smera leta 149°; pravi okret 180°).
+        val fromRun = runs.first { from in it }
+        fun mean(run: IntRange) = run.map { sums[it] }.average().toFloat()
         for (s in if (sense != 0) listOf(sense) else listOf(1, -1)) {
             if (s * (sums[current.first] - sums[from]) < need - TURN_SLACK_DEG) continue
-            if (s * (sums.last() - sums[from]) < need) continue
+            if (s * (mean(current) - mean(fromRun)) < need) continue
             pendingAnchor = from
             return s
         }
         return 0
     }
+
+    /**
+     * Isti koraci, bez promene sprata - za hod van stepeništa posle silaska sa njega bez promene (teren 05.10.2026, NTP
+     * I -> P: tačka je sišla i odmah opet ušla, a let pre okreta je ostao u starom hodu).
+     */
+    fun detached(): StairWalk = StairWalk().also {
+        it.headings += headings
+        it.times += times
+        it.positions += positions
+    }
+
+    /** Koraka u trenutnom nizu istog smera (let posle okreta). */
+    fun currentRunSteps(): Int = runs().lastOrNull()?.count() ?: 0
 
     /** Sprat je promenjen po poslednjem [floorTurn]. */
     fun confirmChange() {

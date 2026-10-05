@@ -6,6 +6,7 @@ import com.example.ftnnavigation.graph.GraphDatabase
 import com.example.ftnnavigation.graph.GraphRepository
 import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
+import com.example.ftnnavigation.graph.StairPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -23,6 +24,10 @@ suspend fun loadCampus(context: Context): CampusData = withContext(Dispatchers.I
 suspend fun loadIndoorPlan(context: Context, asset: String): IndoorPlan = withContext(Dispatchers.IO) {
     IndoorPlan.parse(context.assets.open(asset).bufferedReader().use { it.readText() })
 }
+
+/** Putanje stepeništa sa krakovima iz planova zgrada (nisu u bazi - za kretanje tačke po stepeništu). */
+suspend fun loadStairPaths(context: Context): List<StairPath> =
+    INDOOR_BUILDINGS.flatMap { loadIndoorPlan(context, it.asset).stairPaths() }
 
 /** Graf kampusa i zgrada iz baze; prazna baza se prvo puni ([seedGraph]). */
 suspend fun loadGraph(context: Context, campus: CampusData): BuildingGraph {

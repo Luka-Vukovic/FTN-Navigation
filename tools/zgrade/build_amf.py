@@ -35,14 +35,50 @@ grafu - na mapi kampusa je služba (build_campus.py SERVICES).
 import argparse
 from pathlib import Path
 
-from common import R, build_graph, check_images, col, rect_poly, row, write_all
+from common import Flights, R, build_graph, check_images, col, rect_poly, row, write_all
 
 VX, VY, VW, VH = VIEWPORT = (30, -80, 820, 310)
 WALL = (168, -65, 835, 210)  # OSM obris u zajedničkom sistemu (67,7 x 27,9 m)
 BUILDING = "AMF"
 
-S1 = ("S1", (232, 177, 262, 207), (247, 190))  # dole levo, kod trema ka Kuli
-S3 = ("S3", (693, 212, 711, 240), (700, 212))  # sa kraja prolaza iz NB-a naviše, u L1
+# Stepeništa po evakuacionom planu prizemlja (teren/izveštaj2/IMG_20261002_103156.jpg; teren 05.10.2026: "nije dobra
+# pozicija stepenica na AMF prizemlju"). Plan je u istoj orijentaciji kao ovaj; razmera ~0,78 px plana po px fotografije.
+#
+# S1 (dole levo, kod trema ka Kuli): preko cele širine hodnika tri kraka. Sa podesta na početku trema (međunivo, teren
+# 01.10.2026) dva bočna kraka vode gore u prizemlje (ka severu), a srednji dole u suteren (ka severu, ispod hodnika
+# prizemlja). "amf stepenište.png" (virtuelna tura) je baš ovo stepenište, snimljeno sa podesta - do 05.10.2026 je
+# pogrešno pripisano S2, a S1 je bio kvadrat 3 x 3 m na sredini hodnika. Na -1 ispod desnog bočnog kraka je Kiosk, ispod
+# levog soba. Putanja: dno srednjeg kraka (-1) -> podest -> bočni krak -> vrh bočnog kraka (prizemlje); dve varijante,
+# levim ili desnim bočnim krakom (bira strana okreta na podestu). Trem iz Kule stiže na podest.
+S1_MID, S1_LEFT, S1_RIGHT, S1_LANDING = (234, 172, 265, 205), (212, 172, 233, 205), (266, 172, 287, 205), (212, 205, 287, 213)
+S1_PATH_R = [(250, 174), (250, 209), (277, 209), (277, 174)]
+S1_PATH_L = [(250, 174), (250, 209), (222, 209), (222, 174)]
+S1 = ("S1", None, S1_PATH_R[0])
+S1_FLIGHTS_M1 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, draw_down=False),
+                 Flights(S1_MID, S1_LEFT, S1_LANDING, S1_PATH_L, draw_down=False)]
+# Čvor S1-D (prizemlje) je gde se hodnik spaja sa oba bočna kraka - hodnik vodi pravo na krakove (replay 04.10.: AMF -> Kula).
+S1_TOP = (250, 172)
+# Prizemlje (teren 05.10.2026, korisnik + "amf stepenice kod citaonice.png"): sa kraja hodnika levi i desni krak naniže uz
+# zidove, između njih ograda nad praznim prostorom (dole stakleni trem) - srednji krak je ispod galerije, u prizemlju se ne crta.
+S1_VOID = S1_MID
+S1_FLIGHTS_0 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, down_node=S1_TOP, draw_up=False),
+                Flights(S1_MID, S1_LEFT, S1_LANDING, S1_PATH_L, down_node=S1_TOP, draw_up=False)]
+# Trem iz Kule: sa podesta S1 (na -1 uz srednji krak, u prizemlju niz bočni krak).
+KULA_VIA_M1 = ("S1", [("PODEST-S1", (250, 207))])
+KULA_VIA_0 = ("S1-D", [("S1-D-KRAK", (277, 176)), ("PODEST-S1-D", (277, 207)), ("PODEST-S1", (250, 207))])
+PASSAGE_KULA = (250, 214)
+
+# S2 (uz zapadni zid, između AR4 i AR5): pravo stepenište - dva kraka u nizu sa podestom između. Iz prizemlja se ulazi
+# sleva (niša pored AR4) i silazi nadesno; dole (-1) desni kraj, uz evakuacioni izlaz. Bez okreta - sprat se menja
+# pređenim putem (PdrLocator, pravo stepenište).
+S2_PATH = [(584, -42), (556, -42), (548, -42), (521, -42)]
+S2_FLIGHTS = Flights(up=(556, -53, 587, -31), down=(518, -53, 548, -31), landing=(548, -53, 556, -31), path=S2_PATH)
+S2 = ("S2", None, S2_PATH[0])
+
+# Kraj staklenog prolaza iz NB-a (evakuacioni plan): širi krak niz prolaz u hodnik iza amfiteatara (deo prolaza - crtež)
+# i uži krak desno od njega, naviše - u L1 (korisnik: "po oznaci na vratima").
+S3 = ("S3", (688, 226, 704, 247), (696, 228))
+NB_PASSAGE_STEPS = (670, 226, 688, 264)
 CAMPUS_LINKS = [
     ("K-U-AMF-1", "AMF-m1-ULAZ"),
     ("K-U-AMF-2", "AMF-m1-ULAZ-GRID"),
@@ -62,8 +98,9 @@ def floor_m1():
         # Sredina (ispod amfiteatara) nije deo sprata; Skriptarnica izlazi levo, ka F-bloku.
         "outline": [[(168, -65), (835, -65), (835, 210), (732, 210), (732, 3), (402, 3), (402, 210), (168, 210)],
                     rect_poly(30, -30, 168, 0)],
-        "paths": [[(175, -7), (825, -7)], [(257, -7), (257, 200)]],
-        "corridors": [rect_poly(170, -17, 832, 3), rect_poly(203, -65, 283, -17), rect_poly(230, 3, 285, 207)],
+        "paths": [[(175, -7), (825, -7)], [(257, -7), (257, 170)]],  # hodnik do dna srednjeg kraka S1
+        "corridors": [rect_poly(170, -17, 832, 3), rect_poly(203, -65, 283, -17), rect_poly(230, 3, 285, 207),
+                      rect_poly(518, -31, 590, -17)],  # ispod S2
         "rooms": [
             R(30, 170, -30, 0, "Skriptarnica", door=(170, -10)),  # FtnGO "Skriptarnica (B015)"
             R(170, 203, -65, -30, "FTN Student"),
@@ -77,20 +114,22 @@ def floor_m1():
             R(285, 402, 43, 207, "Biblioteka", door=(285, 120)),  # FtnGO "Biblioteka (B009)"
             R(732, 832, 3, 207, "GRID-2", door=(760, 3)),
         ],
-        "stairs": [S1, ("S2", (518, -65, 587, -40), (552, -35))],
+        "stairs": [S1, S2],
+        "flights": {"S1": S1_FLIGHTS_M1, "S2": S2_FLIGHTS},
         "points": [("ULAZ", (245, -65), "ULAZ"), ("ULAZ-GRID", (723, -65), "ULAZ"),
-                   ("PROLAZ-KULA", (257, 210), "PROLAZ")],
+                   ("PROLAZ-KULA", PASSAGE_KULA, "PROLAZ", KULA_VIA_M1)],
     }
 
 
 def floor_0():
     return {
         "title": "Prizemlje",
-        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, 200)], [(555, 188), (690, 188)]],
-        "corridors": [rect_poly(170, -28, 832, 7), rect_poly(212, 7, 287, 207),
+        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, 170)], [(555, 188), (690, 188)]],  # do vrha krakova S1
+        "corridors": [rect_poly(170, -28, 832, 7), rect_poly(212, 7, 287, 172),  # hodnik do ograde iznad S1
                       rect_poly(30, -32, 170, 5),  # prolaz ka F-bloku
                       rect_poly(553, 168, 693, 207),  # hodnik iza amfiteatara, iz prolaza iz NB-a
-                      rect_poly(664, 207, 711, 240)],  # kraj staklenog prolaza iz NB-a (OSM spojni deo)
+                      rect_poly(667, 207, 704, 265),  # kraj staklenog prolaza iz NB-a (evakuacioni plan)
+                      rect_poly(497, -53, 518, -28)],  # niša ispred S2
         "rooms": [
             # Evakuacioni plan (teren 02.10.2026): 7 soba levo od stepeništa S2, 5 desno; None = ne zna se šta je.
             *row(-65, -28, [(170, 259, "AR0"), (259, 295, "AR1"), (295, 331, None), (331, 386, "AR2"),
@@ -104,9 +143,12 @@ def floor_0():
             R(693, 832, 7, 110, "A3"),
             R(693, 832, 110, 207, "A4", door=(693, 188)),
         ],
-        "stairs": [S1, ("S2", (497, -65, 587, -28), (542, -30)), S3],
+        "stairs": [S1, S2, S3],
+        "flights": {"S1": S1_FLIGHTS_0, "S2": S2_FLIGHTS},
+        "steps": [NB_PASSAGE_STEPS],
+        "voids": [S1_VOID],  # iza ograde na kraju hodnika (ispod: podest i srednji krak S1)
         "points": [("PROLAZ-F", (40, -13), "PROLAZ"), ("PROLAZ-ITC", (832, -10), "PROLAZ"),
-                   ("PROLAZ-NB", (680, 207), "PROLAZ"), ("PROLAZ-KULA", (250, 210), "PROLAZ")],
+                   ("PROLAZ-NB", (680, 207), "PROLAZ"), ("PROLAZ-KULA", PASSAGE_KULA, "PROLAZ", KULA_VIA_0)],
     }
 
 

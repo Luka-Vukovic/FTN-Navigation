@@ -27,11 +27,18 @@
         <!-- Stepeništa -->
         <path
             android:fillColor="#FFFFE0B2"
-            android:pathData="M624,318 L642,318 L642,377 L624,377 Z" />
+            android:pathData="M624,330 L643,330 L643,377 L624,377 Z M664,330 L691,330 L691,377 L664,377 Z" />
         <path
             android:strokeColor="#FF8D6E63"
             android:strokeWidth="0.8"
-            android:pathData="M624,324 H642 M624,330 H642 M624,336 H642 M624,342 H642 M624,348 H642 M624,354 H642 M624,360 H642 M624,366 H642 M624,372 H642" />
+            android:pathData="M624,336 H643 M624,342 H643 M624,348 H643 M624,354 H643 M624,360 H643 M624,366 H643 M624,372 H643 M664,336 H691 M664,342 H691 M664,348 H691 M664,354 H691 M664,360 H691 M664,366 H691 M664,372 H691" />
+
+        <!-- Međupodesti -->
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M624,311 L691,311 L691,330 L624,330 Z" />
 
         <!-- Liftovi -->
         <path

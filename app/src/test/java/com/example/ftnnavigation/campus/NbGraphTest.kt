@@ -141,7 +141,7 @@ class NbGraphTest {
     /** Iz Kule (spojni prolaz) do sale na I spratu: kroz hol prizemlja pa stepeništem. */
     @Test
     fun passageFromKula_leadsIntoHall() {
-        val route = checkNotNull(graph.route(NbPlan.PASSAGE_ID, graph.room("101")!!.id))
+        val route = checkNotNull(graph.route(NbPlan.PASSAGE_ID, graph.room("109")!!.id))
         assertEquals(0, route.nodes[1].floor)
         assertEquals(NodeType.HODNIK, route.nodes[1].type)
         assertEquals(1, route.nodes.last().floor)

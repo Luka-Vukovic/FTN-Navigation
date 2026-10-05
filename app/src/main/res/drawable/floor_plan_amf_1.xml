@@ -34,11 +34,11 @@
         <!-- Stepeništa -->
         <path
             android:fillColor="#FFFFE0B2"
-            android:pathData="M693,212 L711,212 L711,240 L693,240 Z" />
+            android:pathData="M688,226 L704,226 L704,247 L688,247 Z" />
         <path
             android:strokeColor="#FF8D6E63"
             android:strokeWidth="0.8"
-            android:pathData="M693,218 H711 M693,224 H711 M693,230 H711 M693,236 H711" />
+            android:pathData="M688,232 H704 M688,238 H704 M688,244 H704" />
 
         <!-- Prostorije -->
         <path

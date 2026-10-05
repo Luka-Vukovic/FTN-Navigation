@@ -27,7 +27,9 @@ import kotlin.random.Random
 class PdrLocatorTest {
 
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
-    private val graph = seedGraph(campus, INDOOR_BUILDINGS.map { IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) })
+    private val plans = INDOOR_BUILDINGS.map { IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) }
+    private val stairPaths = plans.flatMap { it.stairPaths() }
+    private val graph = seedGraph(campus, plans)
         .let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private val declination = 5.5f
@@ -42,7 +44,7 @@ class PdrLocatorTest {
     private fun placeOf(node: Node) = if (node.buildingId == CAMPUS_ID) PdrPlace.CAMPUS else PdrPlace(node.buildingId, node.floor)
 
     /** Locator sa pozicijom na čvoru. */
-    private fun locatorAt(id: String) = PdrLocator(graph, campus, declination).apply {
+    private fun locatorAt(id: String) = PdrLocator(graph, campus, declination, stairPaths).apply {
         setPosition(placeOf(node(id)), Offset(node(id).x, node(id).y))
     }
 
@@ -89,7 +91,7 @@ class PdrLocatorTest {
         // 6 m ispred ulaza, pa pravo ka sredini zgrade.
         val len = distance(entrance, inside)
         val start = PointM(entrance.x - (inside.x - entrance.x) / len * 6, entrance.y - (inside.y - entrance.y) / len * 6)
-        val locator = PdrLocator(graph, campus, declination).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
         val reasons = mutableListOf<PlaceReason>()
         repeat(12) { locator.step(magneticAzimuth(start, inside), stepM)?.let(reasons::add) }
         assertEquals(listOf(PlaceReason.ULAZ), reasons)
@@ -195,21 +197,6 @@ class PdrLocatorTest {
         assertEquals(listOf(PlaceReason.PROLAZ), reasons)
     }
 
-    /** Pravo skretanje u krak ka AMF-u (i uz grešku kompasa ±20°) i dalje vodi u Amfiteatre. */
-    @Test
-    fun nbCorridor_turningIntoAmfBranch_withCompassError_passesToAmf() {
-        for (errorDeg in listOf(-20f, 20f)) {
-            val locator = locatorAt("NB-0-H744_420")
-            locator.walk(inner("NB-0-PROLAZ-AMF").id)
-            val azimuth = magneticAzimuth(graph.position(inner("NB-0-PROLAZ-AMF")), graph.position(node("NB-0-PROLAZ-AMF"))) + errorDeg
-            var steps = 0
-            while (locator.place.buildingId != "AMF") {
-                locator.step(azimuth, stepM)
-                check(++steps < 30) { "greška $errorDeg°: nije prešao u AMF (na ${locator.place}, ${locator.match?.point})" }
-            }
-        }
-    }
-
     @Test
     fun nbToKula_throughFirstFloorPassage() {
         val locator = locatorAt(inner("NB-1-PROLAZ").id)
@@ -264,7 +251,7 @@ class PdrLocatorTest {
     private val east = 90f - declination
 
     private fun outdoorLocator() =
-        PdrLocator(graph, campus, declination).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+        PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
 
     /** Hoda [steps] koraka sa kompasom zakrenutim za [compassErrorDeg] od pravog istoka, pa označi stvarno mesto. */
     private fun PdrLocator.walkEastAndMark(from: PointM, steps: Int, compassErrorDeg: Float): HeadingCheck? {
@@ -376,7 +363,7 @@ class PdrLocatorTest {
     fun gps_keepsDriftingPdrOnTrack() {
         val random = Random(7)
         fun walkEast(withGps: Boolean): Double {
-            val locator = PdrLocator(graph, campus, declination).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+            val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
             var truth = outdoor
             repeat(60) { i ->
                 locator.step(90f - declination + 15f, stepM)
@@ -396,7 +383,7 @@ class PdrLocatorTest {
 
     @Test
     fun gps_singleJumpIgnored_persistentJumpTrusted() {
-        val locator = PdrLocator(graph, campus, declination).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
         val far = PointM(outdoor.x, outdoor.y + 60)
         assertNull(locator.onGps(GpsFix(far, 8f), tracking = true))
         assertTrue(distance(locator.position(), outdoor) < 0.01)
@@ -409,10 +396,35 @@ class PdrLocatorTest {
     /** Bez praćenja (nema koraka) pozicija napolju je GPS lokacija. */
     @Test
     fun gps_withoutTracking_followsGps() {
-        val locator = PdrLocator(graph, campus, declination).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
         val there = PointM(outdoor.x + 10, outdoor.y)
         locator.onGps(GpsFix(there, 8f), tracking = false)
         assertTrue(distance(locator.position(), there) < 0.01)
+    }
+
+    /**
+     * Teren 05.10.2026 (NTP, "uđe ali nestane"): posle ulaska GPS par sekundi stoji ispred vrata - to nije izlazak (bilo:
+     * ulaz -> GPS izlaz -> ulaz ... 5 puta za 20 s). Tek GPS dalje od zgrade izvodi napolje.
+     */
+    @Test
+    fun gpsJustOutsideWall_afterEntering_noExit_fartherOut_exits() {
+        val ntp = campus.building("NTP")!!
+        val door = graph.position(node("NTP-0-ULAZ-FTN"))
+        /** Tačka napolju, oko vrata, čija je udaljenost od zida NTP-a najbliža [wallM] (i dalja od drugih zgrada). */
+        fun outside(wallM: Double): PointM = (0 until 360 step 2).flatMap { a ->
+            (1..40).map { r -> PointM(door.x + r * Math.cos(Math.toRadians(a.toDouble())), door.y + r * Math.sin(Math.toRadians(a.toDouble()))) }
+        }.filter { p -> campus.buildings.none { it.contains(p) } && campus.buildings.all { it.distanceToWallM(p) >= 3.5 } }
+            .minBy { kotlin.math.abs(ntp.distanceToWallM(it) - wallM) }
+        val locator = locatorAt(inner("NTP-0-ULAZ-FTN").id)
+        // Kao na snimku: GPS 4 m, pa 10 m ispred zgrade (tačnost 3 m).
+        for (wallM in listOf(4.0, 10.0)) {
+            val near = outside(wallM)
+            assertTrue(List(5) { locator.onGps(GpsFix(near, 3f), tracking = true) }.all { it == null })
+            assertEquals(PdrPlace("NTP", 0), locator.place)
+        }
+        val far = outside(20.0)
+        assertTrue(PlaceReason.GPS_IZLAZ in List(3) { locator.onGps(GpsFix(far, 3f), tracking = true) })
+        assertTrue(locator.place.isCampus)
     }
 
     /** PDR nije video izlaz (stoji kod ulaza), GPS potvrdi napolju -> kampus, na ulazu. */
@@ -439,7 +451,7 @@ class PdrLocatorTest {
     /** Ponovljeni koraci (ispravljen smer hoda) se računaju od pozicije pre njih, i u PDR putu za ispravku smera. */
     @Test
     fun redoSteps_replaceEarlierSteps() {
-        val locator = PdrLocator(graph, campus, declination).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
         val north = -declination
         repeat(3) { locator.step(north + 180f, stepM) }
         locator.step(north, stepM, redoSteps = 3)
@@ -452,16 +464,37 @@ class PdrLocatorTest {
     }
 
     // Stepenice (04.10.2026): okret na podestu između dva leta menja sprat, strana okreta je gore ili dole.
+    // Od 05.10.2026 NB S i NTP S1-S3 imaju krakove ([StairPath]): tačka ide krakom, preko međupodesta, drugim krakom.
 
     private val stairs = stairsOf(graph)
 
-    /** Locator na hodniku uz stepenište [key] na spratu [floor], pa hod do čvora stepeništa; vraća pravac hodnik -> stepenište. */
-    private fun atStairs(key: String, floor: Int, turns: Map<String, Int> = emptyMap()): Pair<PdrLocator, Float> {
-        val stair = stairs.getValue(key)
-        val corridor = stair.corridors.getValue(floor)
+    /** Locator na hodniku uz čvor stepeništa [nodeId], pa hod do njega; vraća pravac hodnik -> stepenište. */
+    private fun atStairNode(nodeId: String, turns: Map<String, Int> = emptyMap()): Pair<PdrLocator, Float> {
+        val foot = node(nodeId)
+        val corridor = stairs.getValue(stairKey(foot)).corridor(foot)
         val locator = locatorAt(corridor.id).apply { restoreStairTurns(turns) }
-        locator.walk(stair.nodes.getValue(floor).id)
-        return locator to magneticAzimuth(graph.position(corridor), graph.position(stair.nodes.getValue(floor)))
+        locator.walk(foot.id)
+        return locator to magneticAzimuth(graph.position(corridor), graph.position(foot))
+    }
+
+    private fun atStairs(key: String, floor: Int, turns: Map<String, Int> = emptyMap()) =
+        atStairNode(stairs.getValue(key).nodes.getValue(floor).id, turns)
+
+    /** Putanja stepeništa [key] na spratu [floor] u metrima kampusa (dno naviše, okret, okret, dno naniže). */
+    private fun stairPath(key: String, floor: Int, variant: Int = 0): List<PointM> {
+        val path = stairPaths.filter { it.stairKey == key && it.floor == floor }[variant]
+        return path.points.map { graph.placement(key.substringBefore('/')).toMeters(it.x, it.y) }
+    }
+
+    /** Magnetski azimut kraka naviše stepeništa [key] (od dna ka međupodestu). */
+    private fun upFlightAzimuth(key: String, floor: Int) = stairPath(key, floor).let { magneticAzimuth(it[0], it[1]) }
+
+    /** Rastojanje tačke [p] od duži [a]-[b] (m). */
+    private fun distanceToSegment(p: PointM, a: PointM, b: PointM): Double {
+        val dx = b.x - a.x
+        val dy = b.y - a.y
+        val t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)).coerceIn(0.0, 1.0)
+        return distance(p, PointM(a.x + t * dx, a.y + t * dy))
     }
 
     /** Let od [first] koraka, okret za [turnDeg] u hodu (4 koraka), let od [second] koraka; razlozi prelaza. */
@@ -470,44 +503,119 @@ class PdrLocatorTest {
         return headings.mapNotNull { step(it, stepM) }
     }
 
+    /**
+     * Teren 05.10.2026 (crtež korisnika): sa podesta I sprata levim krakom gore, iza lifta udesno, desnim krakom na II -
+     * tačka ide tim putem, a na novom spratu je na desnom kraku (ranije: na čvoru levog - "pogrešne stepenice").
+     */
     @Test
-    fun nbStairs_turningRight_goesUp() {
+    fun nbStairs_turningRight_goesUp_alongFlights() {
         val (locator, away) = atStairs("NB/S", 1)
-        assertEquals(listOf(PlaceReason.STEPENICE), locator.flights(away, 180f))
+        val path1 = stairPath("NB/S", 1)
+        repeat(6) { locator.step(away, stepM) }
+        assertEquals(PdrPlace("NB", 1), locator.place)
+        assertTrue("na levom kraku", distanceToSegment(locator.position(), path1[0], path1[1]) < 0.1)
+        assertTrue("krenuo uz krak", distance(locator.position(), path1[0]) > 1.5)
+        // Okret udesno na međupodestu: tačka iza lifta.
+        repeat(2) { locator.step(away + 45f * (it + 1), stepM) }
+        assertTrue("na međupodestu", distanceToSegment(locator.position(), path1[1], path1[2]) < 0.1)
+        val reasons = (List(2) { away + 135f } + List(8) { away + 180f }).mapNotNull { locator.step(it, stepM) }
+        assertEquals(listOf(PlaceReason.STEPENICE), reasons)
         assertEquals(PdrPlace("NB", 2), locator.place)
         assertEquals(StairChange("NB/S", "NB", 1, 2, turn = 1, guessed = false), locator.lastStairChange)
-        // Tačka je na stepeništu novog sprata (posle promene još 2 koraka leta ka hodniku, po 0,3 m), a korak na
-        // stepenicama prelazi samo gazište.
-        assertTrue(distance(locator.position(), graph.position(stairs.getValue("NB/S").nodes.getValue(2))) < 0.7)
+        val path2 = stairPath("NB/S", 2)
+        assertTrue("na desnom kraku", distanceToSegment(locator.position(), path2[2], path2[3]) < 0.1)
+        assertTrue("bliže dnu desnog kraka", distance(locator.position(), path2[3]) < distance(locator.position(), path2[2]))
         assertEquals(0.3f, locator.lastStepM, 1e-6f)
     }
 
+    /** Silazak: sa dna desnog kraka (S-D), okret ulevo -> sprat niže, tačka na levom kraku sprata ispod. */
+    @Test
+    fun nbStairs_fromDownFlight_turningLeft_goesDown() {
+        val (locator, away) = atStairNode("NB-2-S-D")
+        assertEquals(listOf(PlaceReason.STEPENICE), locator.flights(away, -180f))
+        assertEquals(PdrPlace("NB", 1), locator.place)
+        val path1 = stairPath("NB/S", 1)
+        assertTrue("na levom kraku I sprata", distanceToSegment(locator.position(), path1[1], path1[0]) < 0.1)
+    }
+
+    /** Sa dna levog kraka, a okret ulevo: strana okreta odlučuje (silazak), tačka prelazi na pravi krak. */
     @Test
     fun nbStairs_turningLeft_goesDown() {
         val (locator, away) = atStairs("NB/S", 2)
         assertEquals(listOf(PlaceReason.STEPENICE), locator.flights(away, -180f))
         assertEquals(PdrPlace("NB", 1), locator.place)
+        val path1 = stairPath("NB/S", 1)
+        assertTrue(distanceToSegment(locator.position(), path1[1], path1[0]) < 0.1)
     }
 
-    /** Sa stepeništa u hodnik (pravcem koji nije let): tačka se vraća na graf sprata, korak opet pune dužine. */
+    /** Posle drugog kraka pravo dalje: sa stepeništa u hol, tačka opet na grafu sprata, korak opet pune dužine. */
     @Test
     fun afterStairs_walkingOut_backOnFloorGraph() {
         val (locator, away) = atStairs("NB/S", 1)
         locator.flights(away, 180f)
-        val stair = graph.position(stairs.getValue("NB/S").nodes.getValue(2))
-        repeat(10) { locator.step(away + 180f + 50f, stepM) }
+        repeat(10) { locator.step(away + 180f, stepM) }
         assertEquals(PdrPlace("NB", 2), locator.place)
-        assertTrue(distance(locator.position(), stair) > 1.0)
+        assertNotNull("na grafu", locator.match)
+        val downFoot = graph.position(node("NB-2-S-D"))
+        assertTrue(distance(locator.position(), downFoot) > 1.0)
         assertEquals(stepM, locator.lastStepM, 1e-6f)
     }
 
-    /** Hod do stepeništa i nazad (bez letova) ne menja sprat. */
+    /** Hod do stepeništa i nazad (bez letova) ne menja sprat, a tačka ne kreće uz krak. */
     @Test
     fun toStairsAndBack_noFloorChange() {
         val (locator, away) = atStairs("NB/S", 1)
         val reasons = List(8) { away + 180f }.mapNotNull { locator.step(it, stepM) }
         assertTrue(reasons.isEmpty())
         assertEquals(PdrPlace("NB", 1), locator.place)
+        assertNotNull("na grafu", locator.match)
+    }
+
+    /**
+     * Teren 05.10.2026 (NB I -> III, NTP I -> II): više spratova zaredom, sa zastajanjem na podestu posle prve promene -
+     * oba sprata, i tačka na kraju na desnom kraku III sprata.
+     */
+    @Test
+    fun nbStairs_twoFloors_withPauseOnLanding() {
+        val (locator, away) = atStairs("NB/S", 1)
+        val headings = List(10) { away } + (1..4).map { away + 36f * it } + List(10) { away + 180f } +
+            (1..4).map { away + 180f + 36f * it } + List(10) { away } + (1..4).map { away + 36f * it } + List(8) { away + 180f }
+        var t = 0L
+        val reasons = headings.mapIndexedNotNull { i, h ->
+            t += if (i == 10 + 4 + 10 + 4) 3_250_000_000L else 650_000_000L
+            locator.step(h, stepM, timeNs = t)
+        }
+        assertEquals(listOf(PlaceReason.STEPENICE, PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("NB", 3), locator.place)
+        val path3 = stairPath("NB/S", 3)
+        assertTrue(distanceToSegment(locator.position(), path3[2], path3[3]) < 0.1)
+    }
+
+    /** NTP S1: strana okreta je iz crteža krakova (gornji red naviše, međupodest desno) - ne uči se, ne pretpostavlja. */
+    @Test
+    fun ntpStairs_turnFromFlights() {
+        val (locator, _) = atStairs("NTP/S1", 2)
+        val up = upFlightAzimuth("NTP/S1", 2)
+        assertEquals(listOf(PlaceReason.STEPENICE), locator.flights(up, 180f))
+        assertEquals(PdrPlace("NTP", 3), locator.place)
+        assertEquals(false, locator.lastStairChange!!.guessed)
+        assertNull(locator.learnedStairTurns["NTP/S1"])
+    }
+
+    /**
+     * Prolaz ka Amfiteatrima je sa međupodesta glavnog stepeništa NB (levim krakom gore, iza lifta udesno, pa u prolaz) -
+     * i uz grešku kompasa ±20° vodi u Amfiteatre.
+     */
+    @Test
+    fun nbToAmf_fromStairLanding_withCompassError() {
+        for (errorDeg in listOf(-20f, 20f)) {
+            val (locator, away) = atStairs("NB/S", 0)
+            val up = away + errorDeg
+            val headings = List(7) { up } + listOf(up + 45f, up + 90f) + List(4) { up + 90f } + listOf(up + 45f) + List(12) { up }
+            val reasons = headings.mapNotNull { locator.step(it, stepM) }
+            assertEquals("greška $errorDeg°", PdrPlace("AMF", 0), locator.place)
+            assertTrue(PlaceReason.STEPENICE !in reasons)
+        }
     }
 
     /**
@@ -520,40 +628,100 @@ class PdrLocatorTest {
         val near = locatorAt("NB-0-H653_420")
         assertEquals(listOf(PlaceReason.STEPENICE), near.flights(east, 180f, first = 8))
         assertEquals(PdrPlace("NB", 1), near.place)
-        assertTrue(distance(near.position(), graph.position(node("NB-1-S"))) < 0.5)
+        // Okret udesno je penjanje: na I sprat se stiže desnim krakom.
+        val path1 = stairPath("NB/S", 1)
+        assertTrue(distanceToSegment(near.position(), path1[2], path1[3]) < 0.1)
         val far = locatorAt("NB-0-H744_420")
         assertTrue(far.flights(east, 180f, first = 8).isEmpty())
         assertEquals(PdrPlace("NB", 0), far.place)
     }
 
-    /** Sa najnižeg nivoa se može samo gore - i tako se nauči strana okreta stepeništa koje se ne zna (NTP). */
+    /** Sa najnižeg nivoa se može samo gore - i tako se nauči strana okreta stepeništa bez crteža krakova (Kula). */
     @Test
     fun fromLowestLevel_goesUp_andLearnsTurn() {
-        val (locator, away) = atStairs("NTP/S1", 0)
+        val (locator, away) = atStairs("KULA/S", 0)
         assertEquals(listOf(PlaceReason.STEPENICE), locator.flights(away, -180f))
-        assertEquals(PdrPlace("NTP", 1), locator.place)
+        assertEquals(PdrPlace("KULA", 1), locator.place)
         assertEquals(false, locator.lastStairChange!!.guessed)
-        assertEquals(-1, locator.learnedStairTurns["NTP/S1"])
+        assertEquals(-1, locator.learnedStairTurns["KULA/S"])
         // Naučeno važi na drugim spratovima: okret ulevo je gore, udesno dole.
-        val (up, awayUp) = atStairs("NTP/S1", 2, locator.learnedStairTurns)
+        val (up, awayUp) = atStairs("KULA/S", 2, locator.learnedStairTurns)
         up.flights(awayUp, -180f)
-        assertEquals(PdrPlace("NTP", 3), up.place)
-        val (down, awayDown) = atStairs("NTP/S1", 2, locator.learnedStairTurns)
+        assertEquals(PdrPlace("KULA", 3), up.place)
+        val (down, awayDown) = atStairs("KULA/S", 2, locator.learnedStairTurns)
         down.flights(awayDown, 180f)
-        assertEquals(PdrPlace("NTP", 1), down.place)
+        assertEquals(PdrPlace("KULA", 1), down.place)
     }
 
     /** Strana se ne zna, a sprat nije krajnji: pretpostavka ka odredištu; "Ovde sam" na drugom spratu uči stranu. */
     @Test
     fun unknownTurn_guessesTowardDestination_correctionLearns() {
-        val (locator, away) = atStairs("NTP/S2", 3)
-        locator.destination = PdrPlace("NTP", 1)
+        val (locator, away) = atStairs("KULA/S", 3)
+        locator.destination = PdrPlace("KULA", 1)
         locator.flights(away, 180f)
-        assertEquals(PdrPlace("NTP", 2), locator.place)
+        assertEquals(PdrPlace("KULA", 2), locator.place)
         assertEquals(true, locator.lastStairChange!!.guessed)
-        val s4 = stairs.getValue("NTP/S2").nodes.getValue(4)
-        locator.setPosition(PdrPlace("NTP", 4), Offset(s4.x, s4.y))
+        val s4 = stairs.getValue("KULA/S").nodes.getValue(4)
+        locator.setPosition(PdrPlace("KULA", 4), Offset(s4.x, s4.y))
         // Okret udesno je bio penjanje (3 -> 4).
-        assertEquals(1, locator.learnedStairTurns["NTP/S2"])
+        assertEquals(1, locator.learnedStairTurns["KULA/S"])
+    }
+
+    // AMF po evakuacionom planu prizemlja (teren 05.10.2026: "nije dobra pozicija stepenica na AMF prizemlju").
+
+    /** Magnetski azimut od tačke [from] do [to] putanje stepeništa [key] na spratu [floor]. */
+    private fun pathAzimuth(key: String, floor: Int, from: Int, to: Int) =
+        stairPath(key, floor).let { magneticAzimuth(it[from], it[to]) }
+
+    /**
+     * S1: iz suterena srednjim krakom do podesta (trem ka Kuli), pa bočnim krakom gore u prizemlje - okret ulevo vodi na
+     * desni krak, udesno na levi; tačka je na tom kraku.
+     */
+    @Test
+    fun amfS1_fromBasement_turnSideChoosesSideFlight() {
+        for ((turnDeg, variant) in listOf(-180f to 0, 180f to 1)) {
+            val (locator, _) = atStairNode("AMF-m1-S1")
+            assertEquals(listOf(PlaceReason.STEPENICE), locator.flights(pathAzimuth("AMF/S1", -1, 0, 1), turnDeg))
+            assertEquals(PdrPlace("AMF", 0), locator.place)
+            val side = stairPath("AMF/S1", 0, variant)
+            assertTrue("okret $turnDeg°", distanceToSegment(locator.position(), side[2], side[3]) < 0.1)
+        }
+    }
+
+    /** S1: iz prizemlja niz bočni krak i pravo dalje - u trem ka Kuli (podest), pa u Kulu. */
+    @Test
+    fun amfS1_fromGroundFloor_downSideFlight_intoKulaPorch() {
+        val (locator, _) = atStairNode("AMF-0-S1-D")
+        val south = pathAzimuth("AMF/S1", 0, 3, 2)
+        var steps = 0
+        while (locator.place.buildingId != "KULA") {
+            locator.step(south, stepM)
+            check(++steps < 60) { "nije stigao u Kulu (na ${locator.place})" }
+        }
+        assertEquals(PdrPlace("KULA", 0), locator.place)
+    }
+
+    /** S1: iz suterena srednjim krakom i pravo dalje - takođe u trem ka Kuli. */
+    @Test
+    fun amfS1_fromBasement_upMiddleFlight_intoKulaPorch() {
+        val (locator, _) = atStairNode("AMF-m1-S1")
+        val south = pathAzimuth("AMF/S1", -1, 0, 1)
+        var steps = 0
+        while (locator.place.buildingId != "KULA") {
+            check(locator.step(south, stepM) != PlaceReason.STEPENICE) { "promena sprata umesto trema" }
+            check(++steps < 60) { "nije stigao u Kulu (na ${locator.place})" }
+        }
+    }
+
+    /** S2: pravo stepenište (dva kraka u nizu, bez okreta) - iz prizemlja niz oba kraka u suteren, pa u hodnik. */
+    @Test
+    fun amfS2_straight_fromGroundFloor_downToBasement() {
+        val (locator, _) = atStairNode("AMF-0-S2-D")
+        val down = pathAzimuth("AMF/S2", 0, 3, 0)
+        val reasons = List(30) { locator.step(down, stepM) }.filterNotNull()  // 2 kraka po 12 + 3 dalje
+        assertEquals(listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("AMF", -1), locator.place)
+        assertEquals(StairChange("AMF/S2", "AMF", 0, -1, turn = 0, guessed = false), locator.lastStairChange)
+        assertNotNull("sišao sa stepeništa na graf", locator.match)
     }
 }

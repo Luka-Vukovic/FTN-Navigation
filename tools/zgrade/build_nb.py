@@ -35,7 +35,7 @@ Teren 01.10.2026 (korisnik + fotografija evakuacionog plana I sprata):
 import argparse
 from pathlib import Path
 
-from common import R, build_graph, check_images, rect_poly, row, write_all
+from common import Flights, R, build_graph, check_images, rect_poly, row, write_all
 
 VX, VY, VW, VH = VIEWPORT = (305, 305, 750, 275)  # viewport plana (px plana)
 WALL = (413, 311, 1038, 519)  # spoljni zid: 625 x 208 px = OSM obris 63,4 x 21,1 m
@@ -45,12 +45,22 @@ TOP_SLAB = (413, 368, 1038, 455)  # V sprat (prepare_screens.nb_top_slab, zaokru
 
 STAIRS = [("S", (624, 318, 642, 377), (633, 382))]  # krak glavnog stepeništa (levo od lifta)
 LIFTS = [("L", (643, 330, 664, 372), (653, 382))]
+# Glavno stepenište obilazi lift (teren 05.10.2026, crtež korisnika na snimku ekrana + virtuelna tura "nb stepenice.png"):
+# sa podesta sprata levo od lifta krak naviše, iza lifta (uz zapadni zid) međupodest, desno od lifta krak naniže.
+# Penje se levim krakom, okret udesno iza lifta, pa desnim krakom ka sledećem spratu - stiže se desno od lifta.
+# Na najnižem nivou (-1) krak naniže ne postoji (ne crta se, nema čvora S-D); V sprat ima drugi crtež (bez krakova).
+FLIGHTS = Flights(up=(624, 330, 643, 377), down=(664, 330, 691, 377), landing=(624, 311, 691, 330),
+                  path=[(633, 382), (633, 320), (677, 320), (677, 382)])
+FLIGHTS_LOWEST = {**FLIGHTS, "draw_down": False}
 SPIRAL = ("S2", (908, 424, 928, 440), (918, 432))  # spiralno stepenište IV -> V sprat
 
 # Posebne tačke prizemlja; veze sa kampusom (build_campus.py pravi te čvorove).
 ENTRANCE = (666, 522)
 PASSAGE_KULA = (322, 422)
 PASSAGE_AMF = (680, 313)
+# Prolaz ka Amfiteatrima je sa međupodesta glavnog stepeništa (FtnGO: "stepenicama naviše"; plan: otvor iznad desnog
+# kraja međupodesta). Do 05.10.2026 je bio grana pravo iz hodnika - kroz desni krak (silazak u suteren).
+AMF_VIA = ("S", [("PODEST", (633, 320)), ("PODEST-AMF", (680, 320))])
 CAMPUS_LINKS = [("K-U-NB-1", "NB-0-ULAZ"), ("K-P-NB-KULA", "NB-0-PROLAZ"), ("K-P-AMF-NB", "NB-0-PROLAZ-AMF")]
 # Veze sa drugom zgradom mimo kampusa (zastakljen prolaz NB - Kula na I spratu, evakuacioni plan).
 INDOOR_LINKS = [("NB-1-PROLAZ", "KULA-1-PROLAZ-NB")]
@@ -88,6 +98,7 @@ def floor_m1():
         "columns": [(830, 412), (898, 412), (830, 452), (898, 452)],
         "stairs": STAIRS,
         "lifts": LIFTS,
+        "flights": {"S": FLIGHTS_LOWEST},
     }
 
 
@@ -116,7 +127,8 @@ def floor_0():
         "steps": [(638, 527, 695, 545)],
         "stairs": STAIRS,
         "lifts": LIFTS,
-        "points": [("ULAZ", ENTRANCE, "ULAZ"), ("PROLAZ", PASSAGE_KULA, "PROLAZ"), ("PROLAZ-AMF", PASSAGE_AMF, "PROLAZ")],
+        "flights": {"S": FLIGHTS},
+        "points": [("ULAZ", ENTRANCE, "ULAZ"), ("PROLAZ", PASSAGE_KULA, "PROLAZ"), ("PROLAZ-AMF", PASSAGE_AMF, "PROLAZ", AMF_VIA)],
     }
 
 
@@ -135,6 +147,7 @@ def floor_1():
         ],
         "stairs": STAIRS,
         "lifts": LIFTS,
+        "flights": {"S": FLIGHTS},
         "points": [("PROLAZ", PASSAGE_KULA, "PROLAZ")],
     }
 
@@ -156,6 +169,7 @@ def floor_2():
         ],
         "stairs": STAIRS,
         "lifts": LIFTS,
+        "flights": {"S": FLIGHTS},
     }
 
 
@@ -175,6 +189,7 @@ def floor_3():
         ],
         "stairs": STAIRS,
         "lifts": LIFTS,
+        "flights": {"S": FLIGHTS},
     }
 
 
@@ -195,6 +210,7 @@ def floor_4():
         ],
         "stairs": STAIRS + [SPIRAL],
         "lifts": LIFTS,
+        "flights": {"S": FLIGHTS},
     }
 
 

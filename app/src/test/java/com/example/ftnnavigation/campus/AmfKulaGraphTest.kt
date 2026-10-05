@@ -140,7 +140,7 @@ class AmfKulaGraphTest {
     fun arRooms_inOrderAroundWideStairs() {
         val xs = (0..6).map { room("AR$it").x }
         assertEquals(xs.sorted(), xs)
-        val stairs = checkNotNull(graph.node("AMF-0-S2")).x
+        val stairs = checkNotNull(graph.node("AMF-0-S2-D")).x  // prizemlje je najviši nivo S2: samo dno kraka naniže
         assertTrue(room("AR4").x < stairs && stairs < room("AR5").x)
         assertEquals(xs.last(), graph.rooms.filter { it.buildingId == AmfPlan.BUILDING_ID && it.floor == 0 }.maxOf { it.x })
     }

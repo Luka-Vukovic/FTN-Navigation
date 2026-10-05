@@ -106,6 +106,30 @@ class StairWalkTest {
         assertTrue(at[1] > 10 + 4 + 10 + 4 + 10 + 4)
     }
 
+    /**
+     * Teren 05.10.2026 (NB I -> III, NTP I -> II): posle prve promene korisnik zastane na podestu (2,2-3,3 s, gleda
+     * obaveštenje) - sledeći sprat se i dalje broji. Do tada je svaka pauza od prvog leta odbijala sve sledeće spratove.
+     */
+    @Test
+    fun secondFloor_pauseOnLandingAfterFirstChange_stillCounts() {
+        val walk = StairWalk()
+        var changes = 0
+        val headings = flight(10f, 10) + turn(10f, 180f) + flight(190f, 10) + turn(190f, 180f) + flight(10f, 10) +
+            turn(10f, 180f) + flight(190f, 8)
+        // Pauza u drugom letu (posle promene, NTP 12:00:46) i pred trećim letom (NB 11:36:16).
+        val pauses = mapOf(10 + 4 + 8 to 2_200_000_000L, 10 + 4 + 10 + 4 to 3_250_000_000L)
+        var t = 0L
+        for ((i, h) in headings.withIndex()) {
+            t += pauses[i] ?: stepNs
+            walk.step(h, timeNs = t)
+            if (walk.floorTurn(changes, if (changes > 0) 1 else 0) != 0) {
+                walk.confirmChange()
+                changes++
+            }
+        }
+        assertEquals(2, changes)
+    }
+
     @Test
     fun leaves_onlyByNonFlightWalkTowardCorridor() {
         val walk = StairWalk()
