@@ -4,6 +4,8 @@ import android.app.Application
 import android.hardware.GeomagneticField
 import android.hardware.SensorManager
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.widget.Toast
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -46,6 +48,8 @@ import com.example.ftnnavigation.graph.PlanPlacement
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.settings.AppSettings
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -82,6 +86,8 @@ data class PocUiState(
     val headingErrorDeg: Float? = null,
     /** Pređeno (m): koraci punom dužinom, a na stepeništu samo gazište ([PdrLocator.lastStepM]). */
     val distanceM: Float = 0f,
+    /** Pitanje "na koji sprat?" - korisnik stoji kod lifta ([PdrLocator.checkLift]); null = nema pitanja. */
+    val liftPrompt: LiftPrompt? = null,
 ) {
 
     /** Pozicija na grafu ako je lepljenje uključeno (map-matching se računa i kad nije). */
@@ -122,6 +128,12 @@ private const val MAX_START_ACCURACY_M = 20f
 
 /** GPS ruta kreće sa staze ili sa ulaza, ne iz unutrašnjosti zgrade bez plana ili spojnog prolaza. */
 private val GPS_START_TYPES = setOf(NodeType.STAZA, NodeType.ULAZ)
+
+/** Koliko često se za vreme praćenja proverava stajanje kod lifta. */
+private const val LIFT_CHECK_MS = 1000L
+
+/** Vibracija uz pitanje za lift (telefon je u vožnji možda u džepu): dva kratka. */
+private val LIFT_VIBRATION = longArrayOf(0, 150, 120, 150)
 
 // Visina kampusa - za magnetsku deklinaciju (tačka je referentna tačka projekcije, CampusGeo).
 private const val CAMPUS_ALT_M = 80f
@@ -220,6 +232,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Senzori za vreme praćenja (od Start do Stop). */
     private var session: PdrSensorSession? = null
+
+    /** Provera stajanja kod lifta za vreme praćenja (koraci stižu samo dok se hoda). */
+    private var liftCheck: Job? = null
 
     /** GPS: radi dok je Mapa na ekranu ([onMapVisible]) i za vreme praćenja. */
     private val gpsRecorder = if (BuildConfig.DEBUG) GpsRecorder(application.filesDir) else null
@@ -400,6 +415,31 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         if (reason == PlaceReason.STEPENICE) onStairChange(locator)
     }
 
+    /** Stoji kod lifta dovoljno dugo -> pitanje na koji sprat, uz vibraciju. */
+    private fun checkLift() {
+        val prompt = locator?.checkLift(SystemClock.elapsedRealtimeNanos()) ?: return
+        recorder?.lift(SystemClock.elapsedRealtimeNanos(), prompt)
+        state = state.copy(liftPrompt = prompt)
+        getApplication<Application>().getSystemService(VibratorManager::class.java)
+            ?.defaultVibrator?.vibrate(VibrationEffect.createWaveform(LIFT_VIBRATION, -1))
+    }
+
+    /** Odgovor na pitanje za lift: pozicija na liftu na spratu [floor] (+ koraci posle izlaska); Mapa ide za njom. */
+    fun selectLiftFloor(floor: Int) {
+        val locator = locator ?: return
+        val before = locator.place
+        val reason = locator.selectLiftFloor(floor)
+        state = state.copy(liftPrompt = null)
+        updatePosition(before, reason)
+    }
+
+    /** "Nisam u liftu". */
+    fun dismissLift() {
+        locator?.dismissLift()
+        if (state.liftPrompt != null) recorder?.lift(SystemClock.elapsedRealtimeNanos(), null)
+        state = state.copy(liftPrompt = null)
+    }
+
     /** Sprat promenjen na stepeništu: obaveštenje (i da sprat ispravi ako nije tačan) i čuvanje naučenog smera okreta. */
     private fun onStairChange(locator: PdrLocator) {
         val change = locator.lastStairChange ?: return
@@ -463,7 +503,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val check = locator.setPosition(place, point)
         // Ispravka sprata posle stepeništa je mogla da nauči smer okreta.
         AppSettings.setStairTurns(getApplication(), locator.learnedStairTurns)
-        state = state.copy(isPickingStart = false)
+        // Označavanje sklanja i pitanje za lift (sprat je izabran na planu).
+        state = state.copy(isPickingStart = false, liftPrompt = null)
         updatePosition(before, PlaceReason.RUCNO)
         if (check != null) {
             recorder?.headingCheck(SystemClock.elapsedRealtimeNanos(), place, check)
@@ -546,6 +587,12 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             recorder = recorder,
         ).also { it.start() }
         PdrTrackingService.start(app)
+        liftCheck = viewModelScope.launch {
+            while (true) {
+                delay(LIFT_CHECK_MS)
+                checkLift()
+            }
+        }
         state = state.copy(isTracking = true)
         updateGps()
     }
@@ -553,6 +600,11 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     private fun stopTracking() {
         session?.stop()
         session = null
+        liftCheck?.cancel()
+        liftCheck = null
+        // Bez praćenja nema koraka koje bi pitanje ponovilo.
+        locator?.dismissLift()
+        state = state.copy(liftPrompt = null)
         PdrTrackingService.stop(getApplication())
         recorder?.close()
         recorder = null

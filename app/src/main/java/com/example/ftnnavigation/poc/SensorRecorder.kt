@@ -23,6 +23,8 @@ import java.time.format.DateTimeFormatter
  * - `H,t,zgrada,sprat,ishod,greška,uz_ispravku,pdr_m,stvarno_m,pouzdano,primenjeno` - poređenje puta pri
  *   označavanju ([HeadingCheck]; ishod MERENO / KRATKO / PREKINUTO, prazna polja kad nema vrednosti). Greška =
  *   PDR smer − stvarni bez ispravke (°), uz_ispravku = sa ispravkom koja je važila na putu; isti t kao `L` red.
+ * - `Q,t,PITANJE,lift,sprat` / `Q,t,ODUSTAO` - pitanje za lift postavljeno ([LiftPrompt]) / "Nisam u liftu"; izabran
+ *   sprat je `L` red sa razlogom LIFT. t kao u `L` redu.
  *
  * Fajlovi: `files/pdr/` aplikacije (`adb exec-out run-as <paket> cat files/pdr/<fajl>`).
  */
@@ -58,6 +60,10 @@ class SensorRecorder private constructor(val file: File) {
         }
         write("H,$timestampNs,${place.buildingId},${place.floor},$fields")
     }
+
+    /** Pitanje za lift postavljeno ([prompt]) ili odbijeno (null). */
+    fun lift(timestampNs: Long, prompt: LiftPrompt?) =
+        write(if (prompt != null) "Q,$timestampNs,PITANJE,${prompt.lift.id},${prompt.fromFloor}" else "Q,$timestampNs,ODUSTAO")
 
     /** Senzori odjavljeni (Mapa u pozadini, ekran ugašen) - snimak se upisuje do tu. */
     fun pause(timestampNs: Long) {

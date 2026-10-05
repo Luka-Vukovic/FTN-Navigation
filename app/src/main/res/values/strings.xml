@@ -145,6 +145,11 @@
     <string name="poc_heading_check_interrupted">Pozicija ispravljena · smer nije meren (ispravka menjana usput)</string>
     <string name="poc_stairs_changed">Stepenicama: %1$s → %2$s</string>
     <string name="poc_stairs_guessed">Gore ili dole nije sigurno - ako nije tačno, „Ovde sam“ na pravom spratu</string>
+    <!-- Pitanje za lift: korisnik stoji kod lifta (%1$s = "Nastavni blok · prizemlje"). -->
+    <string name="poc_lift_title">Liftom na koji sprat?</string>
+    <string name="poc_lift_text">Stojiš kod lifta (%1$s). Ako se voziš liftom, izaberi sprat na kome izlaziš.</string>
+    <string name="poc_lift_destination">%1$s · odredište</string>
+    <string name="poc_lift_dismiss">Nisam u liftu</string>
     <string name="poc_heading_correction">Ispravi smer</string>
     <string name="poc_heading_correction_value">Ispravi smer (greška %1$+d°)</string>
     <string name="poc_stat_steps">Koraci</string>

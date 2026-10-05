@@ -521,7 +521,7 @@ private val ALL_FLOORS = -1..9
 
 /** "Nastavni blok · %s" i sl. - podnaslov Mape za zgradu. */
 @StringRes
-private fun IndoorBuilding.locationRes(): Int = when (this) {
+internal fun IndoorBuilding.locationRes(): Int = when (this) {
     NbPlan -> R.string.nb_location
     AmfPlan -> R.string.amf_location
     KulaPlan -> R.string.kula_location
@@ -536,7 +536,7 @@ private fun Route?.floorsIn(buildingId: String): Set<Int> =
 
 /** "suteren" / "prizemlje" / "3. sprat". */
 @Composable
-private fun floorName(floor: Int): String = when {
+internal fun floorName(floor: Int): String = when {
     floor < 0 -> stringResource(R.string.floor_basement)
     floor == 0 -> stringResource(R.string.floor_ground)
     else -> stringResource(R.string.floor_number, floor)

@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Pitanje za lift (sprat) vibrira - telefon je u vožnji možda u džepu. Bez pitanja korisniku. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- GPS na kampusu (pitanje pri prvom otvaranju Mape; "dok se aplikacija koristi" je dovoljno):
          na Mapi i za vreme praćenja - tada servis ima i tip location, pa GPS radi i u pozadini. -->

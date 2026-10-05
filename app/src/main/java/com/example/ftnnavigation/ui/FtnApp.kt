@@ -39,6 +39,7 @@ import com.example.ftnnavigation.settings.SettingsScreen
 import com.example.ftnnavigation.events.EventEditScreen
 import com.example.ftnnavigation.home.HomeScreen
 import com.example.ftnnavigation.onboarding.OnboardingScreen
+import com.example.ftnnavigation.poc.LiftDialog
 import com.example.ftnnavigation.poc.PocRoute
 import com.example.ftnnavigation.poc.PocViewModel
 import com.example.ftnnavigation.schedule.ScheduleScreen
@@ -189,6 +190,10 @@ fun FtnApp() {
                 )
             }
         }
+    }
+    // Pitanje za lift iskače na bilo kom ekranu - praćenje radi i kad Mapa nije na ekranu.
+    mapViewModel.state.liftPrompt?.let { prompt ->
+        LiftDialog(prompt = prompt, onSelect = mapViewModel::selectLiftFloor, onDismiss = mapViewModel::dismissLift)
     }
 }
 
