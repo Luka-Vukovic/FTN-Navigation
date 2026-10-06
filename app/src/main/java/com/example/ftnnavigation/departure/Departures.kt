@@ -9,10 +9,18 @@ import java.time.LocalDateTime
 const val DEPARTURE_MARGIN_MIN = 5L
 
 /**
+ * Koliko pre početka prve stavke u danu stiže obaveštenje: korisnik tada može biti bilo gde
+ * (kod kuće, van kampusa), pa ruta od glavnog ulaza ne govori kad da krene.
+ */
+const val FIRST_OF_DAY_NOTICE_MIN = 60L
+
+/**
  * Polazak na čas ili događaj [item]. [leaveAt] = najkasnije vreme polaska (početak - trajanje
  * rute), kao na Početnoj; [notifyAt] = kad stiže obaveštenje (rezerva ranije, ali ne pre kraja
  * prethodne stavke). [from] = prethodna stavka istog dana odakle ide ruta (null = od glavnog
  * ulaza). [route] null = mesto nije na mapi (ili ga nema), pa je obaveštenje samo podsetnik.
+ * [firstOfDay] = stavka sa mestom pre koje tog dana nema nijedne stavke sa mestom - obaveštenje
+ * stiže [FIRST_OF_DAY_NOTICE_MIN] pre početka.
  */
 data class Departure(
     val item: AgendaItem,
@@ -20,6 +28,7 @@ data class Departure(
     val route: Route?,
     val leaveAt: LocalDateTime,
     val notifyAt: LocalDateTime,
+    val firstOfDay: Boolean = false,
 ) {
     val date: LocalDate get() = item.date
     val startAt: LocalDateTime get() = item.startAt
@@ -93,5 +102,8 @@ fun departureFor(
     var notifyAt = leaveAt.minusMinutes(marginMin)
     // Obaveštenje usred prethodne stavke ne pomaže - stiže kad se ona završi.
     if (previous != null) notifyAt = maxOf(notifyAt, item.date.atTime(previous.end))
-    return Departure(item, if (fromRoute != null) previous else null, chosen, leaveAt, notifyAt)
+    // Prva stavka sa mestom: ne zna se odakle korisnik kreće. Događaj bez mesta ostaje podsetnik.
+    val firstOfDay = place != null && previous == null
+    if (firstOfDay) notifyAt = minOf(notifyAt, item.startAt.minusMinutes(FIRST_OF_DAY_NOTICE_MIN))
+    return Departure(item, if (fromRoute != null) previous else null, chosen, leaveAt, notifyAt, firstOfDay)
 }

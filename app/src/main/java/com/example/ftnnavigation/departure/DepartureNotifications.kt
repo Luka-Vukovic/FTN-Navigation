@@ -18,6 +18,8 @@ object DepartureNotifications {
     const val EXTRA_LEAVE_AT = "leave_at"
     const val EXTRA_LEAVE_AT_MS = "leave_at_ms"
     const val EXTRA_NOTIFY_AT_MS = "notify_at_ms"
+    const val EXTRA_FIRST_OF_DAY = "first_of_day"
+    const val EXTRA_START_AT = "start_at"
 
     // Podešavanja kanala se posle kreiranja ne mogu menjati iz koda - zato nov id kad treba vibracija.
     const val CHANNEL_ID = "departure_v2"
@@ -64,6 +66,9 @@ object DepartureNotifications {
         // Kad je rok već prošao (duga ruta iz prethodne sale), nema "najkasnije u".
         val title = if (now >= extras.getLongExtra(EXTRA_LEAVE_AT_MS, 0)) {
             context.getString(R.string.home_route_go_now)
+        } else if (extras.getBooleanExtra(EXTRA_FIRST_OF_DAY, false)) {
+            // Sat ranije "najkasnije u" (od glavnog ulaza) zavarava - korisnik možda nije na kampusu.
+            context.getString(R.string.departure_title_first, extras.getStringExtra(EXTRA_START_AT))
         } else {
             context.getString(R.string.departure_title, extras.getStringExtra(EXTRA_LEAVE_AT))
         }

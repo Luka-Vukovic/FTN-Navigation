@@ -152,6 +152,8 @@ object DepartureScheduler {
             .putExtra(DepartureNotifications.EXTRA_LEAVE_AT, departure.leaveAt.format(TIME_FORMAT))
             .putExtra(DepartureNotifications.EXTRA_LEAVE_AT_MS, departure.leaveAt.toEpochMilli(zone))
             .putExtra(DepartureNotifications.EXTRA_NOTIFY_AT_MS, departure.notifyAt.toEpochMilli(zone))
+            .putExtra(DepartureNotifications.EXTRA_FIRST_OF_DAY, departure.firstOfDay)
+            .putExtra(DepartureNotifications.EXTRA_START_AT, departure.startAt.format(TIME_FORMAT))
     }
 
     /** Uvek isti PendingIntent (extras se ne porede), pa novi alarm zamenjuje stari. */

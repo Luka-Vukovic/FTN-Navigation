@@ -248,6 +248,7 @@
     <string name="departure_channel_name">Polazak na čas</string>
     <string name="departure_channel_description">Javlja kad treba da kreneš na čas, prema rasporedu i trajanju rute</string>
     <string name="departure_title">Kreni najkasnije u %1$s</string>
+    <string name="departure_title_first">Danas počinješ u %1$s</string>
     <string name="departure_from_room">Iz sale %1$s ~%2$d min</string>
     <string name="departure_from_place">Od: %1$s ~%2$d min</string>
 
