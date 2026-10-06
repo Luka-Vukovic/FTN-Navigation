@@ -18,21 +18,28 @@ object DepartureNotifications {
     const val EXTRA_LEAVE_AT = "leave_at"
     const val EXTRA_LEAVE_AT_MS = "leave_at_ms"
     const val EXTRA_NOTIFY_AT_MS = "notify_at_ms"
-    const val EXTRA_CLASS_START_MS = "class_start_ms"
 
-    const val CHANNEL_ID = "departure"
+    // Podešavanja kanala se posle kreiranja ne mogu menjati iz koda - zato nov id kad treba vibracija.
+    const val CHANNEL_ID = "departure_v2"
+    private const val OLD_CHANNEL_ID = "departure"
 
     // Jedno obaveštenje u isto vreme: sledeći polazak zamenjuje prethodni.
     private const val NOTIFICATION_ID = 1
 
     /** Kanal mora da postoji da bi se otvorila njegova sistemska podešavanja; ponovno kreiranje ne menja ništa. */
     fun createChannel(context: Context) {
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+        val manager = context.getSystemService(NotificationManager::class.java)
+        // Stari kanal je bio bez vibracije: zvuk sa ugašenim ekranom je promakao (06.10.2026).
+        manager.deleteNotificationChannel(OLD_CHANNEL_ID)
+        manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
                 context.getString(R.string.departure_channel_name),
                 NotificationManager.IMPORTANCE_HIGH,
-            ).apply { description = context.getString(R.string.departure_channel_description) },
+            ).apply {
+                description = context.getString(R.string.departure_channel_description)
+                enableVibration(true)
+            },
         )
     }
 
@@ -78,8 +85,7 @@ object DepartureNotifications {
             .setCategory(Notification.CATEGORY_REMINDER)
             .setContentIntent(open)
             .setAutoCancel(true)
-            // Posle početka časa obaveštenje više nije korisno.
-            .setTimeoutAfter((extras.getLongExtra(EXTRA_CLASS_START_MS, now) - now).coerceAtLeast(60_000))
+            // Bez isteka: propušteno obaveštenje ostaje dok ga korisnik ne skloni ili ga ne zameni sledeći polazak.
             .build()
         manager.notify(NOTIFICATION_ID, notification)
     }
