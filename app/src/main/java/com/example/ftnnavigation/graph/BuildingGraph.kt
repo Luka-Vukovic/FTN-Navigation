@@ -132,6 +132,13 @@ class BuildingGraph(
         adjacency = adj
     }
 
+    /** Ivice po paru krajeva, u oba smera. */
+    private val edgeIndex: Map<Pair<String, String>, Edge> =
+        edges.flatMap { listOf((it.fromId to it.toId) to it, (it.toId to it.fromId) to it) }.toMap()
+
+    /** Ivica između čvorova [aId] i [bId] (smer nije bitan), ili null ako nisu susedi. */
+    fun edge(aId: String, bId: String): Edge? = edgeIndex[aId to bId]
+
     val rooms: List<Node> get() = nodes.filter { it.type == NodeType.PROSTORIJA }
 
     fun node(id: String): Node? = byId[id]

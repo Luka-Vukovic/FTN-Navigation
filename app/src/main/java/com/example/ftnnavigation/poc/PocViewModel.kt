@@ -43,6 +43,7 @@ import com.example.ftnnavigation.graph.FPlan
 import com.example.ftnnavigation.graph.MiPlan
 import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
+import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.indoorBuilding
@@ -399,7 +400,11 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun selectDestination(room: String?) {
         destination = room
-        val node = target?.node ?: return
+        showPlace(target?.node ?: return)
+    }
+
+    /** Mapa prikazuje mesto čvora: plan njegove zgrade na njegovom spratu, ili kampus (napolju, zgrada bez plana). */
+    fun showPlace(node: Node) {
         val building = indoorBuilding(node.buildingId)
         mode = MapMode.entries.first { it.building == building }
         if (building != null) showFloor(building, node.floor)

@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -107,6 +109,7 @@ import com.example.ftnnavigation.campus.ROOM_HOURS
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.campus.roomBuildingNames
+import com.example.ftnnavigation.campus.routeSteps
 import com.example.ftnnavigation.campus.searchDestinations
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
@@ -188,6 +191,7 @@ fun PocRoute(
         onReset = viewModel::reset,
         onSnapToggle = viewModel::toggleSnapToGraph,
         onHeadingCorrectionToggle = viewModel::toggleHeadingCorrection,
+        onShowPlace = viewModel::showPlace,
     )
 }
 
@@ -219,8 +223,11 @@ fun PocScreen(
     onReset: () -> Unit,
     onSnapToggle: () -> Unit,
     onHeadingCorrectionToggle: () -> Unit,
+    /** Mapa prikazuje mesto čvora (korak uputstva): plan zgrade na njegovom spratu ili kampus. */
+    onShowPlace: (Node) -> Unit,
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
+    var showSteps by rememberSaveable { mutableStateOf(false) }
     // Zgrada čiji je natpis držan na mapi kampusa - pop-up sa opisom.
     var infoBuildingId by rememberSaveable { mutableStateOf<String?>(null) }
     // Sala čiji je natpis držan na planu zgrade - pop-up sa radnim vremenom / zauzetošću.
@@ -312,6 +319,7 @@ fun PocScreen(
                             route = route,
                             routeStart = routeStart,
                             floorChange = floorChange,
+                            onShowSteps = { showSteps = true },
                             onClear = { onDestinationChange(null) },
                         )
                     }
@@ -369,6 +377,19 @@ fun PocScreen(
                 showDestinations = false
             },
             onDismiss = { showDestinations = false },
+        )
+    }
+    if (showSteps && route != null && graph != null && campus != null) {
+        // Ruta se menja sa svakim korakom (PDR) - uputstvo uvek kreće od trenutne pozicije.
+        val steps = remember(route, graph, campus) { routeSteps(route, graph, campus) }
+        RouteStepsSheet(
+            steps = steps,
+            campus = campus,
+            onShow = {
+                onShowPlace(it.node)
+                showSteps = false
+            },
+            onDismiss = { showSteps = false },
         )
     }
     val infoBuilding = infoBuildingId?.let { campus?.building(it) }
@@ -736,10 +757,18 @@ internal fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: 
 
 /**
  * Odredište i procena rute; ako sala nije na mapi, to piše umesto procene. Ispod piše zgrada
- * sale - ako sala nije ucrtana, ruta vodi samo do zgrade.
+ * sale - ako sala nije ucrtana, ruta vodi samo do zgrade. [onShowSteps] otvara uputstvo korak po korak.
  */
 @Composable
-private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?, routeStart: RouteStart, floorChange: FloorChange, onClear: () -> Unit) {
+private fun RouteBanner(
+    destination: String,
+    target: RouteTarget?,
+    route: Route?,
+    routeStart: RouteStart,
+    floorChange: FloorChange,
+    onShowSteps: () -> Unit,
+    onClear: () -> Unit,
+) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         shadowElevation = 3.dp,
@@ -794,6 +823,15 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                }
+                if (route != null) {
+                    TextButton(
+                        onClick = onShowSteps,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        modifier = Modifier.heightIn(min = 32.dp),
+                    ) {
+                        Text(stringResource(R.string.route_steps_open), style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
             IconButton(onClick = onClear) {
@@ -1176,6 +1214,7 @@ private fun PocScreenPreview() {
             onReset = {},
             onSnapToggle = {},
             onHeadingCorrectionToggle = {},
+            onShowPlace = {},
         )
     }
 }
