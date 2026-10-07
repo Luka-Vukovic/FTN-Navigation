@@ -51,6 +51,18 @@
         <receiver
             android:name=".departure.DepartureAlarmReceiver"
             android:exported="false" />
+        <!-- Widget "Sledeće" na početnom ekranu telefona. -->
+        <receiver
+            android:name=".widget.NextClassWidget"
+            android:exported="false"
+            android:label="@string/home_next_class_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/next_class_widget_info" />
+        </receiver>
         <receiver
             android:name=".departure.DepartureRescheduleReceiver"
             android:exported="true">

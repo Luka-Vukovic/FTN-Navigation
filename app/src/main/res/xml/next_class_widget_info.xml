@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget "Sledeće": podrazumevano 4 x 1 (sažet, korisnik: 4 x 2 je imao puno praznog prostora); razvučen na 2 reda
+     prikazuje pun raspored. updatePeriodMillis 0 - osvežava ga aplikacija (NextClassWidget). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/widget_next_class_compact"
+    android:minHeight="50dp"
+    android:minResizeHeight="40dp"
+    android:minResizeWidth="180dp"
+    android:minWidth="250dp"
+    android:previewLayout="@layout/widget_next_class_preview"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="1"
+    android:targetCellWidth="4"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

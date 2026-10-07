@@ -7,15 +7,19 @@ import android.content.Intent
 import androidx.core.content.edit
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.campus.CampusData
+import com.example.ftnnavigation.campus.PlaceLocation
 import com.example.ftnnavigation.campus.crowdFactors
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
+import com.example.ftnnavigation.campus.placeLocation
 import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.graph.RoutingProfile
 import com.example.ftnnavigation.schedule.Agenda
+import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.RoomSchedule
+import com.example.ftnnavigation.widget.NextClassWidget
 import com.example.ftnnavigation.settings.AppSettings
 import com.example.ftnnavigation.schedule.TIME_FORMAT
 import com.example.ftnnavigation.schedule.ScheduleStore
@@ -54,6 +58,8 @@ object DepartureScheduler {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val zone = ZoneId.systemDefault()
         val planner = if (isEnabled(context)) Planner.load(context) else null
+        // Svi povodi za novo zakazivanje (izmena rasporeda/događaja, podešavanja, restart, vreme) menjaju i widget.
+        NextClassWidget.updateAll(context, planner)
         val departure = planner?.run {
             showMissed(context, this, zone)
             next(scheduledAfter(context).toLocalDateTime(zone))
@@ -105,8 +111,11 @@ object DepartureScheduler {
     private fun scheduledAfter(context: Context): Long =
         maxOf(System.currentTimeMillis(), prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0))
 
-    /** Raspored, kampus i graf za računanje polazaka; učitavanje traje, pa jednom po zakazivanju. */
-    private class Planner(
+    /**
+     * Raspored, kampus i graf za računanje polazaka; učitavanje traje, pa jednom po zakazivanju. Koristi ga i widget
+     * "Sledeće" ([com.example.ftnnavigation.widget.NextClassWidget]).
+     */
+    internal class Planner(
         private val agenda: Agenda,
         private val campus: CampusData,
         private val graph: BuildingGraph,
@@ -125,9 +134,22 @@ object DepartureScheduler {
         fun missed(now: LocalDateTime, notifiedUpTo: LocalDateTime): Departure? =
             missedDeparture(agenda::on, now, notifiedUpTo, ::route)
 
+        /**
+         * Sledeća stavka (i ona u toku) sa polaskom kao na Početnoj ([departureFor]; null = prethodna stavka je na istom
+         * mestu); null ako stavke nema.
+         */
+        fun upcoming(now: LocalDateTime): Pair<AgendaItem, Departure?>? {
+            val item = agenda.next(now) ?: return null
+            return item to departureFor(item, agenda.on(item.date), ::route)
+        }
+
         /** Zgrada i sprat sale (ili zgrada, mesto van kampusa) stavke polaska ([placeLocationText]); null ako se ne zna. */
-        fun location(context: Context, departure: Departure): String? =
-            departure.item.place?.let { placeLocationText(context.resources, it, graph, campus) }
+        fun location(context: Context, departure: Departure): String? = departure.item.place?.let { location(context, it) }
+
+        fun location(context: Context, place: String): String? = placeLocationText(context.resources, place, graph, campus)
+
+        /** Gde je mesto, nesastavljeno (sažet widget piše samo sprat). */
+        fun placeLocation(place: String): PlaceLocation? = placeLocation(place, graph, campus)
 
         companion object {
             suspend fun load(context: Context): Planner {

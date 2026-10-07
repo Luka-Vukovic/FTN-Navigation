@@ -7,4 +7,8 @@
     <color name="ftn_teal_dark">#FF022E33</color>
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
+    <!-- Widget "Sledeće" (RemoteViews - bez Compose teme): isti tonovi kao FtnSurfaceLow / FtnOnSurfaceVariant. -->
+    <color name="widget_surface">#FFF4F8F9</color>
+    <color name="widget_on_surface_variant">#FF3F5457</color>
+    <color name="widget_error">#FFB3261E</color>
 </resources>
