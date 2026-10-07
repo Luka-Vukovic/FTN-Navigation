@@ -1,8 +1,11 @@
 package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.graph.IndoorBuilding
 import com.example.ftnnavigation.graph.Node
+import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NbPlan
+import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.graph.RoutingProfile
 import com.example.ftnnavigation.graph.routeOrFallback
@@ -156,6 +159,27 @@ fun resolveTarget(destination: String, graph: BuildingGraph, campus: CampusData)
     }
     val building = buildingOfRoom(destination)?.let(campus::building) ?: return null
     return graph.node(building.nodeId)?.let { RouteTarget(it, building, approximate = true) }
+}
+
+/** Gde je mesto stavke: ucrtana sala ([Room] - zgrada sa planom i sprat) ili samo naziv ([Named]). */
+sealed interface PlaceLocation {
+    data class Room(val plan: IndoorBuilding, val floor: Int) : PlaceLocation
+    data class Named(val name: String) : PlaceLocation
+}
+
+/**
+ * Gde je [place] (sala ili zgrada iz izbora odredišta), za Početnu i obaveštenje: ucrtana sala -> zgrada i sprat;
+ * zgrada ili sala koja nije ucrtana -> naziv zgrade; van kampusa -> "Medicinski fakultet"; null ako se ne zna.
+ */
+fun placeLocation(place: String, graph: BuildingGraph, campus: CampusData): PlaceLocation? {
+    offCampusPlaceOf(place)?.let { return PlaceLocation.Named(it) }
+    val target = resolveTarget(place, graph, campus)
+    val plan = target?.node?.let { indoorBuilding(it.buildingId) }
+    if (target != null && target.node.type == NodeType.PROSTORIJA && plan != null) {
+        return PlaceLocation.Room(plan, target.node.floor)
+    }
+    val building = target?.building ?: buildingOfRoom(place)?.let(campus::building)
+    return building?.name?.let { PlaceLocation.Named(it) }
 }
 
 /**

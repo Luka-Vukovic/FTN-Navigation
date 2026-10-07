@@ -7,12 +7,9 @@ import android.content.Intent
 import androidx.core.content.edit
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.campus.CampusData
-import com.example.ftnnavigation.campus.buildingOfRoom
 import com.example.ftnnavigation.campus.crowdFactors
-import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
-import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Route
@@ -66,7 +63,7 @@ object DepartureScheduler {
             return
         }
         val notifyAtMs = departure.notifyAt.toEpochMilli(zone)
-        val pending = alarmIntent(context, content(context, departure, planner.building(departure), zone))
+        val pending = alarmIntent(context, content(context, departure, planner.location(context, departure), zone))
         if (alarms.canScheduleExactAlarms()) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, notifyAtMs, pending)
         } else {
@@ -87,7 +84,7 @@ object DepartureScheduler {
         val zone = ZoneId.systemDefault()
         val planner = Planner.load(context)
         val departure = planner.next(LocalDateTime.now(zone)) ?: return false
-        DepartureNotifications.show(context, content(context, departure, planner.building(departure), zone))
+        DepartureNotifications.show(context, content(context, departure, planner.location(context, departure), zone))
         return true
     }
 
@@ -100,7 +97,7 @@ object DepartureScheduler {
         val now = System.currentTimeMillis()
         val notifiedUpTo = prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0).toLocalDateTime(zone)
         val missed = planner.missed(now.toLocalDateTime(zone), notifiedUpTo) ?: return
-        DepartureNotifications.show(context, content(context, missed, planner.building(missed), zone))
+        DepartureNotifications.show(context, content(context, missed, planner.location(context, missed), zone))
         markNotified(context, now)
     }
 
@@ -128,12 +125,9 @@ object DepartureScheduler {
         fun missed(now: LocalDateTime, notifiedUpTo: LocalDateTime): Departure? =
             missedDeparture(agenda::on, now, notifiedUpTo, ::route)
 
-        /** Naziv zgrade (ili mesta van kampusa) mesta polaska; null ako se ne zna. */
-        fun building(departure: Departure): String? = departure.item.place?.let { place ->
-            offCampusPlaceOf(place)
-                ?: resolveTarget(place, graph, campus)?.building?.name
-                ?: buildingOfRoom(place)?.let { campus.building(it)?.name }
-        }
+        /** Zgrada i sprat sale (ili zgrada, mesto van kampusa) stavke polaska ([placeLocationText]); null ako se ne zna. */
+        fun location(context: Context, departure: Departure): String? =
+            departure.item.place?.let { placeLocationText(context.resources, it, graph, campus) }
 
         companion object {
             suspend fun load(context: Context): Planner {
@@ -160,9 +154,9 @@ object DepartureScheduler {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /** Tekst obaveštenja se sastavlja pri zakazivanju, pa receiver ne mora ponovo da računa rutu. */
-    private fun content(context: Context, departure: Departure, building: String?, zone: ZoneId): Intent {
+    private fun content(context: Context, departure: Departure, location: String?, zone: ZoneId): Intent {
         return Intent()
-            .putExtra(DepartureNotifications.EXTRA_CLASS, departure.item.summary(building))
+            .putExtra(DepartureNotifications.EXTRA_CLASS, departure.item.summary(location))
             .putExtra(DepartureNotifications.EXTRA_ROUTE, departure.routeText(context.resources))
             .putExtra(DepartureNotifications.EXTRA_LEAVE_AT, departure.leaveAt.format(TIME_FORMAT))
             .putExtra(DepartureNotifications.EXTRA_LEAVE_AT_MS, departure.leaveAt.toEpochMilli(zone))

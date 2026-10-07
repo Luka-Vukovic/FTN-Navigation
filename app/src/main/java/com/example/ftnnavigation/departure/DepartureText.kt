@@ -3,7 +3,12 @@ package com.example.ftnnavigation.departure
 import android.content.res.Resources
 import androidx.annotation.StringRes
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.campus.CampusData
+import com.example.ftnnavigation.campus.PlaceLocation
 import com.example.ftnnavigation.campus.offCampusPlaceOf
+import com.example.ftnnavigation.campus.placeLocation
+import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.poc.locationRes
 import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.TIME_FORMAT
 
@@ -41,8 +46,23 @@ fun Departure.leaveByText(res: Resources): String? {
     }
 }
 
-/** Stavka i mesto u jednom redu: "Soft kompjuting · 09:15 · NTP-A · Naučno-tehnološki park". */
-fun AgendaItem.summary(building: String?): String {
-    val place = place?.let { if (building != null && building != it) "$it · $building" else it }
+/** Stavka i mesto u jednom redu: "Soft kompjuting · 09:15 · NTP-307 · Naučno-tehnološki park · 3. sprat". */
+fun AgendaItem.summary(location: String?): String {
+    val place = place?.let { if (location != null && location != it) "$it · $location" else it }
     return listOfNotNull(title, start.format(TIME_FORMAT), place).joinToString(" · ")
+}
+
+/** [placeLocation] kao tekst: "Nastavni blok · 2. sprat", "Menza", "Medicinski fakultet"; null ako se ne zna. */
+fun placeLocationText(res: Resources, place: String, graph: BuildingGraph, campus: CampusData): String? =
+    when (val location = placeLocation(place, graph, campus)) {
+        is PlaceLocation.Room -> res.getString(location.plan.locationRes(), floorText(res, location.floor))
+        is PlaceLocation.Named -> location.name
+        null -> null
+    }
+
+/** "suteren" / "prizemlje" / "3. sprat" (kao na Mapi). */
+fun floorText(res: Resources, floor: Int): String = when {
+    floor < 0 -> res.getString(R.string.floor_basement)
+    floor == 0 -> res.getString(R.string.floor_ground)
+    else -> res.getString(R.string.floor_number, floor)
 }

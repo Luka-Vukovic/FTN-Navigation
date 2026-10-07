@@ -37,6 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.poc.DestinationSheet
 import com.example.ftnnavigation.schedule.TIME_FORMAT
 import com.example.ftnnavigation.schedule.dayName
@@ -52,6 +53,7 @@ data class PlaceOptions(
     val services: List<String>,
     val rooms: List<String>,
     val roomBuildings: Map<String, List<String>>,
+    val roomNodes: Map<String, Node>,
 )
 
 /**
@@ -209,6 +211,7 @@ fun EventEditScreen(
                 services = places.services,
                 rooms = places.rooms,
                 roomBuildings = places.roomBuildings,
+                roomNodes = places.roomNodes,
                 selected = place,
                 onSelect = {
                     place = it

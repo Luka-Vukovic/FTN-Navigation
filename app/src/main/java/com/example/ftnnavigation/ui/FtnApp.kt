@@ -161,7 +161,7 @@ fun FtnApp() {
                     scheduleSummary = timetable?.let { selectionSummary(it, scheduleViewModel.selection?.group) },
                     upcoming = upcoming,
                     now = now,
-                    nextBuilding = upcoming?.place?.let { mapViewModel.buildingNameOf(it) },
+                    nextLocation = upcoming?.place?.let { mapViewModel.locationOf(it) },
                     departure = upcoming?.let { mapViewModel.departureFor(it, agenda.on(it.date)) },
                     onOpenSchedule = { navController.navigateToTopLevel(ScheduleRoute) },
                     onOpenMap = { navController.navigateToTopLevel(MapRoute) },

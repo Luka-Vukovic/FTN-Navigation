@@ -370,6 +370,7 @@ fun PocScreen(
             services = campus.named(BuildingCategory.SLUZBA).mapNotNull { it.name },
             rooms = graph.rooms.mapNotNull { it.name }.sorted(),
             roomBuildings = remember(graph, campus) { roomBuildingNames(graph, campus) },
+            roomNodes = remember(graph) { graph.rooms.associateBy { it.name!! } },
             selected = destination,
             onSelect = {
                 onDestinationChange(it)
@@ -853,8 +854,9 @@ private fun RouteBanner(
 
 /**
  * Izbor odredišta: zgrade FTN-a, studentske službe i sale, sa pretragom po nazivu
- * ([searchDestinations]); sale i po zgradi ([roomBuildings]: sala -> naziv i oznaka zgrade). Koristi ga i
- * izmena događaja (mesto događaja) - tada [noneLabel] dodaje stavku bez mesta ([onSelect] null).
+ * ([searchDestinations]); sale i po zgradi ([roomBuildings]: sala -> naziv i oznaka zgrade). Uz salu drugi red
+ * "Zgrada · sprat" ([roomNodes]: sala -> čvor). Koristi ga i izmena događaja (mesto događaja) - tada [noneLabel]
+ * dodaje stavku bez mesta ([onSelect] null).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -863,6 +865,7 @@ internal fun DestinationSheet(
     services: List<String>,
     rooms: List<String>,
     roomBuildings: Map<String, List<String>>,
+    roomNodes: Map<String, Node>,
     selected: String?,
     onSelect: (String?) -> Unit,
     onDismiss: () -> Unit,
@@ -909,13 +912,16 @@ internal fun DestinationSheet(
             )
             LazyColumn(Modifier.weight(1f)) {
                 if (noneLabel != null && query.isBlank()) {
-                    item { DestinationItem(noneLabel, isSelected = selected == null, onClick = { onSelect(null) }) }
+                    item { DestinationItem(noneLabel, location = null, isSelected = selected == null, onClick = { onSelect(null) }) }
                 }
                 for ((header, names) in sections) {
                     if (names.isEmpty()) continue
                     item(key = header) { SheetSectionHeader(stringResource(header)) }
                     items(names) { name ->
-                        DestinationItem(name, isSelected = name == selected, onClick = { onSelect(name) })
+                        val location = roomNodes[name]?.let { node ->
+                            indoorBuilding(node.buildingId)?.let { stringResource(it.locationRes(), floorName(node.floor)) }
+                        }
+                        DestinationItem(name, location, isSelected = name == selected, onClick = { onSelect(name) })
                     }
                 }
                 if (sections.all { it.second.isEmpty() }) {
@@ -944,9 +950,19 @@ private fun SheetSectionHeader(text: String) {
 }
 
 @Composable
-private fun DestinationItem(name: String, isSelected: Boolean, onClick: () -> Unit) {
+private fun DestinationItem(name: String, location: String?, isSelected: Boolean, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(name) },
+        // Zgrada i sprat sale: sitnije i bleđe od naziva (kao u slobodnim prostorijama i najbližem mestu).
+        supportingContent = location?.let {
+            {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
         leadingContent = {
             Icon(
                 painterResource(R.drawable.ic_place),

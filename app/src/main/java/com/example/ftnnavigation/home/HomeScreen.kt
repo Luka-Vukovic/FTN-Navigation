@@ -58,7 +58,7 @@ import java.time.LocalDateTime
 /**
  * @param scheduleSummary npr. "4. godina · grupa 3 · ..."; null dok raspored nije izabran.
  * @param upcoming sledeći čas ili sopstveni događaj (null ako nema).
- * @param nextBuilding zgrada njegovog mesta (null ako se ne zna).
+ * @param nextLocation gde je njegovo mesto: "Nastavni blok · 2. sprat" za ucrtanu salu, inače zgrada (null ako se ne zna).
  * @param departure polazak, isti kao u obaveštenju (sa mesta prethodne stavke ili od glavnog
  *   ulaza); null = prethodna stavka je na istom mestu.
  */
@@ -67,7 +67,7 @@ fun HomeScreen(
     scheduleSummary: String?,
     upcoming: AgendaItem?,
     now: LocalDateTime,
-    nextBuilding: String?,
+    nextLocation: String?,
     departure: Departure?,
     onOpenSchedule: () -> Unit,
     onOpenMap: () -> Unit,
@@ -119,7 +119,7 @@ fun HomeScreen(
                 when {
                     scheduleSummary == null -> CardBody(stringResource(R.string.home_next_class_empty))
                     upcoming == null -> CardBody(stringResource(R.string.home_no_upcoming))
-                    else -> NextItem(upcoming, now, nextBuilding, departure, onShowRoute)
+                    else -> NextItem(upcoming, now, nextLocation, departure, onShowRoute)
                 }
             }
             HomeCard(
@@ -160,7 +160,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun NextItem(item: AgendaItem, now: LocalDateTime, building: String?, departure: Departure?, onShowRoute: () -> Unit) {
+private fun NextItem(item: AgendaItem, now: LocalDateTime, location: String?, departure: Departure?, onShowRoute: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             whenLabel(item.date, item.start, now),
@@ -179,7 +179,7 @@ private fun NextItem(item: AgendaItem, now: LocalDateTime, building: String?, de
         )
         // Događaj bez mesta nema ni rutu.
         val place = item.place ?: return@Column
-        RoomLabel(if (building != null && building != place) "$place · $building" else place, Modifier.padding(top = 2.dp))
+        RoomLabel(if (location != null && location != place) "$place · $location" else place, Modifier.padding(top = 2.dp))
         if (departure?.route == null) {
             val note = when {
                 departure != null -> noRouteText(place)
@@ -301,7 +301,7 @@ private fun HomeScreenPreview() {
             scheduleSummary = "4. godina · grupa 3 · Softversko inženjerstvo i informacione tehnologije",
             upcoming = AgendaItem.Class(entry, date),
             now = now,
-            nextBuilding = "Naučno-tehnološki park",
+            nextLocation = "Naučno-tehnološki park · prizemlje",
             departure = Departure(
                 item = AgendaItem.Class(entry, date),
                 from = null,

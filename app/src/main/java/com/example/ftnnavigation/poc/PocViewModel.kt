@@ -35,6 +35,8 @@ import com.example.ftnnavigation.campus.crowdFactors
 import com.example.ftnnavigation.departure.Departure
 import com.example.ftnnavigation.departure.DepartureScheduler
 import com.example.ftnnavigation.departure.departureFor
+import com.example.ftnnavigation.departure.floorText
+import com.example.ftnnavigation.departure.placeLocationText
 import com.example.ftnnavigation.events.PlaceOptions
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.MatchedPosition
@@ -159,13 +161,6 @@ private const val CAMPUS_ALT_M = 80f
  */
 internal fun planUpMagneticAzimuthDeg(placement: PlanPlacement, declinationDeg: Float): Float =
     normalizeDeg(placement.rotationDeg.toFloat() - declinationDeg)
-
-/** "suteren" / "prizemlje" / "3. sprat" (kao na Mapi). */
-private fun floorText(app: Application, floor: Int): String = when {
-    floor < 0 -> app.getString(R.string.floor_basement)
-    floor == 0 -> app.getString(R.string.floor_ground)
-    else -> app.getString(R.string.floor_number, floor)
-}
 
 /**
  * Toast posle označavanja: koliko je smer promašio i šta je urađeno. Najviše dva reda (Android 12+ seče duže
@@ -457,14 +452,15 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             services = campus.named(BuildingCategory.SLUZBA).mapNotNull { it.name },
             rooms = graph.rooms.mapNotNull { it.name }.sorted(),
             roomBuildings = roomBuildingNames(graph, campus),
+            roomNodes = graph.rooms.associateBy { it.name!! },
         )
     }
 
-    /** Zgrada sale (za prikaz uz salu) ili mesto van kampusa, ili null ako se ne zna. */
-    fun buildingNameOf(room: String): String? {
-        offCampusPlaceOf(room)?.let { return it }
+    /** Gde je mesto (za prikaz uz salu na Početnoj): "Nastavni blok · 2. sprat", zgrada ili mesto van kampusa; null ako se ne zna. */
+    fun locationOf(place: String): String? {
+        offCampusPlaceOf(place)?.let { return it }
         val graph = graph ?: return null
-        return resolveTarget(room, graph, campus ?: return null)?.building?.name
+        return placeLocationText(getApplication<Application>().resources, place, graph, campus ?: return null)
     }
 
     /**
@@ -551,7 +547,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val change = locator.lastStairChange ?: return
         val app = getApplication<Application>()
         AppSettings.setStairTurns(app, locator.learnedStairTurns)
-        val text = app.getString(R.string.poc_stairs_changed, floorText(app, change.fromFloor), floorText(app, change.toFloor)) +
+        val text = app.getString(R.string.poc_stairs_changed, floorText(app.resources, change.fromFloor), floorText(app.resources, change.toFloor)) +
             if (change.guessed) "\n" + app.getString(R.string.poc_stairs_guessed) else ""
         Toast.makeText(app, text, Toast.LENGTH_LONG).show()
     }
