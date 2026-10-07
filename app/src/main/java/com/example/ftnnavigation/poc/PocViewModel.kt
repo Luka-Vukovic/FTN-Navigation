@@ -366,13 +366,6 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            while (true) {
-                val now = LocalDateTime.now()
-                minute = now.truncatedTo(ChronoUnit.MINUTES)
-                delay(Duration.between(now, minute.plusMinutes(1)).toMillis().coerceAtLeast(1))
-            }
-        }
-        viewModelScope.launch {
             val campus = loadCampus(application)
             this@PocViewModel.campus = campus
             buildingDetector = BuildingDetector(campus)
@@ -428,6 +421,18 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Trenutni minut - gužva se menja sa vremenom, a ruta ne sme da se računa iznova pri svakom čitanju. */
     private var minute by mutableStateOf(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES))
+
+    // Posle deklaracije [minute]: viewModelScope (Main.immediate) izvrši prvi upis odmah, još u konstruktoru - u init bloku
+    // iznad deklaracije polje je još null (pad pri pokretanju, 07.10.2026).
+    init {
+        viewModelScope.launch {
+            while (true) {
+                val now = LocalDateTime.now()
+                minute = now.truncatedTo(ChronoUnit.MINUTES)
+                delay(Duration.between(now, minute.plusMinutes(1)).toMillis().coerceAtLeast(1))
+            }
+        }
+    }
 
     /** Gužva po zgradi u [at] (prazno ako je isključena ili raspored nije učitan). */
     private fun crowdAt(at: LocalDateTime): Map<String, Double> =
