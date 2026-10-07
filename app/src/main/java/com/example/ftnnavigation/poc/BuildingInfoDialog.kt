@@ -40,11 +40,14 @@ import java.time.LocalDateTime
 
 /**
  * Pop-up sa slikom i opisom zgrade (držanje natpisa na mapi kampusa). [onRoute] je null kad
- * ruta nije moguća (graf još nije učitan).
+ * ruta nije moguća (graf još nije učitan). Zvezdica pored naziva dodaje u omiljena / izbacuje ([onToggleFavorite];
+ * null - zgrada bez naziva).
  */
 @Composable
 fun BuildingInfoDialog(
     building: CampusBuilding,
+    isFavorite: Boolean,
+    onToggleFavorite: (() -> Unit)?,
     onRoute: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
@@ -70,7 +73,10 @@ fun BuildingInfoDialog(
                         style = MaterialTheme.typography.labelLarge,
                         color = if (isService) OnService else MaterialTheme.colorScheme.primary,
                     )
-                    Text(building.name.orEmpty(), style = MaterialTheme.typography.headlineSmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(building.name.orEmpty(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                        if (onToggleFavorite != null) FavoriteButton(isFavorite, onToggleFavorite)
+                    }
                     if (info != null) {
                         Text(
                             stringResource(info.description),

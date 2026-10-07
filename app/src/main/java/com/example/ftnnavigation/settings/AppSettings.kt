@@ -23,6 +23,8 @@ object AppSettings {
     private const val KEY_STAIR_TURNS = "stair_turns"
     private const val KEY_FLOOR_CHANGE = "floor_change"
     private const val KEY_CROWD_ROUTING = "crowd_routing"
+    private const val KEY_FAVORITES = "favorite_destinations"
+    private const val KEY_RECENTS = "recent_destinations"
 
     /** Mapa se okreće za po 90° po smeru korisnika; podrazumevano isključeno. */
     fun autoRotateMap(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_ROTATE_MAP, false)
@@ -53,6 +55,23 @@ object AppSettings {
 
     fun setStairTurns(context: Context, turns: Map<String, Int>) =
         prefs(context).edit { putString(KEY_STAIR_TURNS, turns.entries.joinToString(";") { "${it.key}=${it.value}" }) }
+
+    /** Omiljena odredišta (nazivi sala, zgrada i službi kao u izboru odredišta), redom dodavanja. */
+    fun favorites(context: Context): List<String> = names(context, KEY_FAVORITES)
+
+    fun setFavorites(context: Context, names: List<String>) = setNames(context, KEY_FAVORITES, names)
+
+    /** Nedavna odredišta, najnovije prvo ([com.example.ftnnavigation.campus.withRecent]). */
+    fun recents(context: Context): List<String> = names(context, KEY_RECENTS)
+
+    fun setRecents(context: Context, names: List<String>) = setNames(context, KEY_RECENTS, names)
+
+    // Nazivi odredišta nemaju prelom reda, pa je on razdvajač.
+    private fun names(context: Context, key: String): List<String> =
+        prefs(context).getString(key, null).orEmpty().split('\n').filter { it.isNotEmpty() }
+
+    private fun setNames(context: Context, key: String, names: List<String>) =
+        prefs(context).edit { putString(key, names.joinToString("\n")) }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

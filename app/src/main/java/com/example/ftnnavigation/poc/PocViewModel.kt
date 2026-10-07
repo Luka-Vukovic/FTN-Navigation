@@ -32,8 +32,12 @@ import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.roomBuildingNames
 import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.campus.crowdFactors
+import com.example.ftnnavigation.campus.toggled
+import com.example.ftnnavigation.campus.withRecent
 import com.example.ftnnavigation.departure.Departure
 import com.example.ftnnavigation.departure.DepartureScheduler
+import com.example.ftnnavigation.departure.PlaceRoute
+import com.example.ftnnavigation.departure.PlanLeg
 import com.example.ftnnavigation.departure.departureFor
 import com.example.ftnnavigation.departure.floorText
 import com.example.ftnnavigation.departure.placeLocationText
@@ -61,6 +65,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
@@ -131,6 +136,11 @@ internal fun shownModes(mode: MapMode, here: CampusBuilding?): List<MapMode> =
 
 /** Odakle kreće ruta: pozicija (PDR, napolju i sa GPS-om), GPS lokacija (bez praćenja) ili glavni ulaz NB-a. */
 enum class RouteStart { PDR, GPS, ENTRANCE }
+
+/** Plan dana [date] na Mapi: rute dana redom ([legs]), prikazana je [index]. */
+data class ShownPlan(val date: LocalDate, val legs: List<PlanLeg>, val index: Int) {
+    val leg: PlanLeg get() = legs[index]
+}
 
 /** GPS lokacija lošija od ovoga se ne koristi za rutu (u zgradi luta desetinama metara). */
 private const val MAX_ROUTE_ACCURACY_M = 50f
@@ -327,7 +337,58 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      * lokaciji - graf je mali, A* traje ispod milisekunde. Promena sprata po podešavanju ([floorChange]); gde po
      * njemu puta nema, ruta bez izbegavanja ([Route.fallback] - baner to piše).
      */
-    val route: Route? by derivedStateOf { target?.let { routeTo(it.node.id) } }
+    val route: Route? by derivedStateOf {
+        val plan = plan
+        // Plan dana: ruta sa mesta prethodne stavke (izračunata pri otvaranju), ne od pozicije.
+        if (plan != null) plan.leg.route else target?.let { routeTo(it.node.id) }
+    }
+
+    /** Plan dana na Mapi: rute dana redom, prikazana je jedna; null - Mapa prikazuje rutu do [destination]. */
+    var plan by mutableStateOf<ShownPlan?>(null)
+        private set
+
+    /** Prikazuje rutu [index] plana dana [date] ([legs] iz [dayPlan]); Mapa prelazi na njen početak. */
+    fun showPlan(date: LocalDate, legs: List<PlanLeg>, index: Int) {
+        if (legs.isEmpty()) return
+        val shown = ShownPlan(date, legs, index.coerceIn(legs.indices))
+        plan = shown
+        destinationNodeId = null
+        destination = shown.leg.to.place
+        (shown.leg.route?.nodes?.firstOrNull() ?: target?.node)?.let(::showPlace)
+    }
+
+    /** Prethodna ([delta] −1) ili sledeća (+1) ruta plana dana. */
+    fun stepPlan(delta: Int) {
+        val plan = plan ?: return
+        showPlan(plan.date, plan.legs, plan.index + delta)
+    }
+
+    /** Rute dana [day] redom (plan dana), istim računanjem kao polazak ([departureFor]); prazno dok se graf učitava. */
+    fun dayPlan(day: List<AgendaItem>): List<PlanLeg> {
+        val route = placeRoute() ?: return emptyList()
+        return com.example.ftnnavigation.departure.dayPlan(day, route)
+    }
+
+    /** Ruta između dva mesta za polazak / plan dana: podešavanje sprata i gužva u vreme dolaska. */
+    private fun placeRoute(): PlaceRoute? {
+        val graph = graph ?: return null
+        val campus = campus ?: return null
+        val profile = floorChange.profile
+        return { from, to, arriveAt -> routeBetween(graph, campus, from, to, profile.copy(buildingCrowd = crowdAt(arriveAt))) }
+    }
+
+    /** Omiljena odredišta (zvezdica u izboru odredišta i u pop-up-u sale/zgrade), redom dodavanja. */
+    var favorites by mutableStateOf(AppSettings.favorites(application))
+        private set
+
+    /** Nedavna odredišta (izabrana za rutu), najnovije prvo. */
+    var recents by mutableStateOf(AppSettings.recents(application))
+        private set
+
+    fun toggleFavorite(name: String) {
+        favorites = favorites.toggled(name)
+        AppSettings.setFavorites(getApplication(), favorites)
+    }
 
     /** Zgrada u kojoj je korisnik: zgrada pozicije (PDR), inače po GPS-u; null = napolju ili se ne zna. */
     val hereBuildingId: String?
@@ -383,16 +444,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      * ulaza. Null = prethodna stavka je na istom mestu. Dok se graf učitava, ruta je null.
      */
     fun departureFor(item: AgendaItem, day: List<AgendaItem>): Departure? {
-        val graph = graph
-        val campus = campus
-        val profile = floorChange.profile
-        return departureFor(item, day, route = { from, to, arriveAt ->
-            if (graph != null && campus != null) {
-                routeBetween(graph, campus, from, to, profile.copy(buildingCrowd = crowdAt(arriveAt)))
-            } else {
-                null
-            }
-        })
+        val route = placeRoute()
+        return departureFor(item, day, route = { from, to, arriveAt -> route?.invoke(from, to, arriveAt) })
     }
 
     /** Zauzetost sala svih rasporeda (za gužvu); postavlja je `FtnApp` kad se raspored učita. */
@@ -453,6 +506,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             rooms = graph.rooms.mapNotNull { it.name }.sorted(),
             roomBuildings = roomBuildingNames(graph, campus),
             roomNodes = graph.rooms.associateBy { it.name!! },
+            favorites = favorites,
+            recents = recents,
+            onToggleFavorite = ::toggleFavorite,
         )
     }
 
@@ -467,13 +523,19 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      * Menja odredište. Sala u zgradi sa planom -> Mapa prelazi na njen sprat te zgrade; drugo -> kampus.
      */
     fun selectDestination(room: String?) {
+        plan = null
         destinationNodeId = null
         destination = room
+        if (room != null) {
+            recents = recents.withRecent(room)
+            AppSettings.setRecents(getApplication(), recents)
+        }
         showPlace(target?.node ?: return)
     }
 
     /** Odredište je čvor [node] (najbliže mesto - i toalet bez naziva), u baneru [label]. */
     fun selectPlace(node: Node, label: String) {
+        plan = null
         destinationNodeId = node.id
         destination = label
         showPlace(node)

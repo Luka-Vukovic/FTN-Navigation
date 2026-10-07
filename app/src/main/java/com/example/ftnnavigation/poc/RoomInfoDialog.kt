@@ -45,7 +45,7 @@ import java.time.LocalDate
 /**
  * Pop-up o prostoriji (držanje natpisa sale na planu zgrade): radno vreme ([hours], npr. Biblioteka) i/ili
  * zauzetost po rasporedima svih smerova ([schedule], za učionice), po danima. [location] je "Zgrada · sprat".
- * [onRoute] je null kad ruta nije moguća.
+ * [onRoute] je null kad ruta nije moguća. Zvezdica pored naziva dodaje u omiljena / izbacuje ([onToggleFavorite]).
  */
 @Composable
 fun RoomInfoDialog(
@@ -53,6 +53,8 @@ fun RoomInfoDialog(
     location: String,
     hours: OpeningHours?,
     schedule: RoomSchedule?,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onRoute: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
@@ -65,7 +67,10 @@ fun RoomInfoDialog(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(location, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    Text(name, style = MaterialTheme.typography.headlineSmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                        FavoriteButton(isFavorite, onToggleFavorite)
+                    }
                     hours?.let { OpeningHoursSection(it, Modifier.padding(top = 12.dp)) }
                     if (hasClasses) OccupancySection(name, schedule!!, Modifier.padding(top = 12.dp))
                     if (hours == null && !hasClasses) {

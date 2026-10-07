@@ -97,6 +97,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
@@ -109,6 +110,7 @@ import com.example.ftnnavigation.campus.BuildingCategory
 import com.example.ftnnavigation.campus.ROOM_HOURS
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
+import com.example.ftnnavigation.campus.quickDestinations
 import com.example.ftnnavigation.campus.roomBuildingNames
 import com.example.ftnnavigation.campus.routeSteps
 import com.example.ftnnavigation.campus.searchDestinations
@@ -188,6 +190,11 @@ fun PocRoute(
         onSnapToggle = viewModel::toggleSnapToGraph,
         onHeadingCorrectionToggle = viewModel::toggleHeadingCorrection,
         onShowPlace = viewModel::showPlace,
+        favorites = viewModel.favorites,
+        recents = viewModel.recents,
+        onToggleFavorite = viewModel::toggleFavorite,
+        plan = viewModel.plan,
+        onPlanStep = viewModel::stepPlan,
     )
 }
 
@@ -223,6 +230,13 @@ fun PocScreen(
     onHeadingCorrectionToggle: () -> Unit,
     /** Mapa prikazuje mesto čvora (korak uputstva): plan zgrade na njegovom spratu ili kampus. */
     onShowPlace: (Node) -> Unit,
+    /** Omiljena i nedavna odredišta (vrh izbora odredišta; zvezdica i u pop-up-u sale/zgrade). */
+    favorites: List<String> = emptyList(),
+    recents: List<String> = emptyList(),
+    onToggleFavorite: (String) -> Unit = {},
+    /** Plan dana: prikazana ruta i strelice za prethodnu/sledeću ([onPlanStep] −1/+1); null - obična ruta. */
+    plan: ShownPlan? = null,
+    onPlanStep: (Int) -> Unit = {},
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     var showSteps by rememberSaveable { mutableStateOf(false) }
@@ -316,6 +330,8 @@ fun PocScreen(
                             target = target,
                             route = route,
                             routeStart = routeStart,
+                            plan = plan,
+                            onPlanStep = onPlanStep,
                             floorChange = floorChange,
                             crowdPercent = crowdPercent,
                             onShowSteps = { showSteps = true },
@@ -371,6 +387,9 @@ fun PocScreen(
             rooms = graph.rooms.mapNotNull { it.name }.sorted(),
             roomBuildings = remember(graph, campus) { roomBuildingNames(graph, campus) },
             roomNodes = remember(graph) { graph.rooms.associateBy { it.name!! } },
+            favorites = favorites,
+            recents = recents,
+            onToggleFavorite = onToggleFavorite,
             selected = destination,
             onSelect = {
                 onDestinationChange(it)
@@ -396,6 +415,8 @@ fun PocScreen(
     if (infoBuilding != null) {
         BuildingInfoDialog(
             building = infoBuilding,
+            isFavorite = infoBuilding.name in favorites,
+            onToggleFavorite = infoBuilding.name?.let { name -> { onToggleFavorite(name) } },
             onRoute = infoBuilding.name?.takeIf { graph != null }?.let { name ->
                 {
                     onDestinationChange(name)
@@ -414,6 +435,8 @@ fun PocScreen(
             location = stringResource(infoRoomBuilding.locationRes(), floorName(infoRoom.floor)),
             hours = ROOM_HOURS[infoRoomName],
             schedule = roomSchedule,
+            isFavorite = infoRoomName in favorites,
+            onToggleFavorite = { onToggleFavorite(infoRoomName) },
             onRoute = {
                 onDestinationChange(infoRoomName)
                 infoRoomId = null
@@ -761,6 +784,7 @@ internal fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: 
 /**
  * Odredište i procena rute; ako sala nije na mapi, to piše umesto procene. Ispod piše zgrada
  * sale - ako sala nije ucrtana, ruta vodi samo do zgrade. [onShowSteps] otvara uputstvo korak po korak.
+ * Uz [plan] (plan dana): gore strelice za prethodnu/sledeću rutu, ruta je sa mesta prethodne stavke, ispod pauza.
  */
 @Composable
 private fun RouteBanner(
@@ -768,6 +792,8 @@ private fun RouteBanner(
     target: RouteTarget?,
     route: Route?,
     routeStart: RouteStart,
+    plan: ShownPlan?,
+    onPlanStep: (Int) -> Unit,
     floorChange: FloorChange,
     crowdPercent: Int?,
     onShowSteps: () -> Unit,
@@ -778,76 +804,118 @@ private fun RouteBanner(
         shadowElevation = 3.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                painterResource(R.drawable.ic_place),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
-            )
-            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(destination, style = MaterialTheme.typography.titleMedium)
-                val details = if (route == null) {
-                    stringResource(R.string.route_not_on_map)
-                } else {
-                    val from = stringResource(
-                        when (routeStart) {
-                            RouteStart.PDR -> R.string.route_from_position
-                            RouteStart.GPS -> R.string.route_from_gps
-                            RouteStart.ENTRANCE -> R.string.route_from_entrance
-                        },
-                    )
-                    stringResource(R.string.route_summary, route.minutes, route.lengthM.toInt()) + " · " + from
-                }
-                Text(
-                    details,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Column {
+            if (plan != null) PlanHeader(plan, onPlanStep)
+            Row(Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painterResource(R.drawable.ic_place),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
                 )
-                if (route != null && crowdPercent != null) {
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(destination, style = MaterialTheme.typography.titleMedium)
+                    val leg = plan?.leg
+                    val details = when {
+                        route == null && leg != null -> planNoRouteText(leg)
+                        route == null -> stringResource(R.string.route_not_on_map)
+                        else -> {
+                            val from = if (leg != null) {
+                                planFromText(leg)
+                            } else {
+                                stringResource(
+                                    when (routeStart) {
+                                        RouteStart.PDR -> R.string.route_from_position
+                                        RouteStart.GPS -> R.string.route_from_gps
+                                        RouteStart.ENTRANCE -> R.string.route_from_entrance
+                                    },
+                                )
+                            }
+                            stringResource(R.string.route_summary, route.minutes, route.lengthM.toInt()) + " · " + from
+                        }
+                    }
                     Text(
-                        stringResource(R.string.route_crowd, crowdPercent),
+                        details,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                // Podešavanje "Bez stepenica" / "Bez lifta" na ovoj ruti nije moguće.
-                if (route?.fallback == true) {
-                    Text(
-                        stringResource(
-                            if (floorChange == FloorChange.BEZ_LIFTA) R.string.route_fallback_lift else R.string.route_fallback_stairs,
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                val building = target?.building?.name
-                if (route != null && building != null && building != destination) {
-                    // Sala u zgradi sa spratovima: i sprat.
-                    val where = if (!target.approximate && indoorBuilding(target.node.buildingId) != null) {
-                        stringResource(R.string.building_with_floor, building, floorName(target.node.floor))
-                    } else {
-                        building
+                    // Plan dana: pauza pred stavkom (ili do kad se kreće); gužva "sada" tu ne važi - ruta je za vreme dolaska.
+                    val timing = leg?.let { planTimingText(it) }
+                    if (timing != null) {
+                        Text(
+                            timing.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (leg.tooTight) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    Text(
-                        stringResource(if (target.approximate) R.string.route_to_building else R.string.route_in_building, where),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                if (route != null) {
-                    TextButton(
-                        onClick = onShowSteps,
-                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                        modifier = Modifier.heightIn(min = 32.dp),
-                    ) {
-                        Text(stringResource(R.string.route_steps_open), style = MaterialTheme.typography.labelLarge)
+                    if (route != null && crowdPercent != null && plan == null) {
+                        Text(
+                            stringResource(R.string.route_crowd, crowdPercent),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
+                    // Podešavanje "Bez stepenica" / "Bez lifta" na ovoj ruti nije moguće.
+                    if (route?.fallback == true) {
+                        Text(
+                            stringResource(
+                                if (floorChange == FloorChange.BEZ_LIFTA) R.string.route_fallback_lift else R.string.route_fallback_stairs,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    val building = target?.building?.name
+                    if (route != null && building != null && building != destination) {
+                        // Sala u zgradi sa spratovima: i sprat.
+                        val where = if (!target.approximate && indoorBuilding(target.node.buildingId) != null) {
+                            stringResource(R.string.building_with_floor, building, floorName(target.node.floor))
+                        } else {
+                            building
+                        }
+                        Text(
+                            stringResource(if (target.approximate) R.string.route_to_building else R.string.route_in_building, where),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    if (route != null) {
+                        TextButton(
+                            onClick = onShowSteps,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                            modifier = Modifier.heightIn(min = 32.dp),
+                        ) {
+                            Text(stringResource(R.string.route_steps_open), style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+                IconButton(onClick = onClear) {
+                    Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.route_clear))
                 }
             }
-            IconButton(onClick = onClear) {
-                Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.route_clear))
-            }
+        }
+    }
+}
+
+/** Gornji red banera u planu dana: ‹ "Plan dana · 2/3" › (strelice samo gde postoji prethodna/sledeća ruta). */
+@Composable
+private fun PlanHeader(plan: ShownPlan, onStep: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = { onStep(-1) }, enabled = plan.index > 0) {
+            Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = stringResource(R.string.day_plan_previous))
+        }
+        Text(
+            stringResource(R.string.day_plan_position, plan.index + 1, plan.legs.size),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = { onStep(1) }, enabled = plan.index < plan.legs.lastIndex) {
+            Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = stringResource(R.string.day_plan_next))
         }
     }
 }
@@ -855,7 +923,8 @@ private fun RouteBanner(
 /**
  * Izbor odredišta: zgrade FTN-a, studentske službe i sale, sa pretragom po nazivu
  * ([searchDestinations]); sale i po zgradi ([roomBuildings]: sala -> naziv i oznaka zgrade). Uz salu drugi red
- * "Zgrada · sprat" ([roomNodes]: sala -> čvor). Koristi ga i izmena događaja (mesto događaja) - tada [noneLabel]
+ * "Zgrada · sprat" ([roomNodes]: sala -> čvor). Bez upita na vrhu [favorites] i [recents] ([quickDestinations]);
+ * zvezdica uz svaku stavku ([onToggleFavorite]). Koristi ga i izmena događaja (mesto događaja) - tada [noneLabel]
  * dodaje stavku bez mesta ([onSelect] null).
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -866,6 +935,9 @@ internal fun DestinationSheet(
     rooms: List<String>,
     roomBuildings: Map<String, List<String>>,
     roomNodes: Map<String, Node>,
+    favorites: List<String>,
+    recents: List<String>,
+    onToggleFavorite: (String) -> Unit,
     selected: String?,
     onSelect: (String?) -> Unit,
     onDismiss: () -> Unit,
@@ -873,7 +945,15 @@ internal fun DestinationSheet(
     noneLabel: String? = null,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    val sections = listOf(
+    val (quickFavorites, quickRecents) = remember(favorites, recents, buildings, services, rooms) {
+        quickDestinations(favorites, recents, (buildings + services + rooms).toSet())
+    }
+    val quick = if (query.isBlank()) {
+        listOf(R.string.route_destinations_favorites to quickFavorites, R.string.route_destinations_recent to quickRecents)
+    } else {
+        emptyList()
+    }
+    val sections = quick + listOf(
         R.string.route_destinations_buildings to searchDestinations(buildings, query),
         R.string.route_destinations_services to searchDestinations(services, query),
         R.string.route_destinations_rooms to searchDestinations(rooms, query) { roomBuildings[it].orEmpty() },
@@ -912,7 +992,12 @@ internal fun DestinationSheet(
             )
             LazyColumn(Modifier.weight(1f)) {
                 if (noneLabel != null && query.isBlank()) {
-                    item { DestinationItem(noneLabel, location = null, isSelected = selected == null, onClick = { onSelect(null) }) }
+                    item {
+                        DestinationItem(
+                            noneLabel, location = null, isSelected = selected == null, isFavorite = null,
+                            onClick = { onSelect(null) }, onToggleFavorite = {},
+                        )
+                    }
                 }
                 for ((header, names) in sections) {
                     if (names.isEmpty()) continue
@@ -921,7 +1006,10 @@ internal fun DestinationSheet(
                         val location = roomNodes[name]?.let { node ->
                             indoorBuilding(node.buildingId)?.let { stringResource(it.locationRes(), floorName(node.floor)) }
                         }
-                        DestinationItem(name, location, isSelected = name == selected, onClick = { onSelect(name) })
+                        DestinationItem(
+                            name, location, isSelected = name == selected, isFavorite = name in favorites,
+                            onClick = { onSelect(name) }, onToggleFavorite = { onToggleFavorite(name) },
+                        )
                     }
                 }
                 if (sections.all { it.second.isEmpty() }) {
@@ -950,8 +1038,17 @@ private fun SheetSectionHeader(text: String) {
 }
 
 @Composable
-private fun DestinationItem(name: String, location: String?, isSelected: Boolean, onClick: () -> Unit) {
+private fun DestinationItem(
+    name: String,
+    location: String?,
+    isSelected: Boolean,
+    /** null - stavka ne može u omiljena ("Bez mesta"). */
+    isFavorite: Boolean?,
+    onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+) {
     ListItem(
+        trailingContent = isFavorite?.let { { FavoriteButton(it, onToggleFavorite) } },
         headlineContent = { Text(name) },
         // Zgrada i sprat sale: sitnije i bleđe od naziva (kao u slobodnim prostorijama i najbližem mestu).
         supportingContent = location?.let {
@@ -975,6 +1072,18 @@ private fun DestinationItem(name: String, location: String?, isSelected: Boolean
         ),
         modifier = Modifier.padding(horizontal = 8.dp).clickable(onClick = onClick),
     )
+}
+
+/** Zvezdica: dodaje u omiljena ili izbacuje iz njih (izbor odredišta, pop-up sale i zgrade). */
+@Composable
+internal fun FavoriteButton(isFavorite: Boolean, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle) {
+        Icon(
+            painterResource(if (isFavorite) R.drawable.ic_star else R.drawable.ic_star_border),
+            contentDescription = stringResource(if (isFavorite) R.string.favorite_remove else R.string.favorite_add),
+            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @StringRes

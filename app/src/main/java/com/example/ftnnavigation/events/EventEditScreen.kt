@@ -54,6 +54,10 @@ data class PlaceOptions(
     val rooms: List<String>,
     val roomBuildings: Map<String, List<String>>,
     val roomNodes: Map<String, Node>,
+    /** Omiljena i nedavna odredišta - na vrhu izbora, kao na Mapi. */
+    val favorites: List<String>,
+    val recents: List<String>,
+    val onToggleFavorite: (String) -> Unit,
 )
 
 /**
@@ -212,6 +216,9 @@ fun EventEditScreen(
                 rooms = places.rooms,
                 roomBuildings = places.roomBuildings,
                 roomNodes = places.roomNodes,
+                favorites = places.favorites,
+                recents = places.recents,
+                onToggleFavorite = places.onToggleFavorite,
                 selected = place,
                 onSelect = {
                     place = it

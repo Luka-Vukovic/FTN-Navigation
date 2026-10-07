@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -77,6 +78,8 @@ fun HomeScreen(
     onOpenFreeRooms: (() -> Unit)?,
     /** Najbliže mesto izabrane vrste (null - mapa se još učitava). */
     onOpenNearby: ((PlaceKind) -> Unit)?,
+    /** Plan dana (rute između časova) za dan sledeće stavke; null - mapa se još učitava. */
+    onShowDayPlan: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {
@@ -115,6 +118,15 @@ fun HomeScreen(
                     if (scheduleSummary == null) R.string.home_choose_program else R.string.home_open_schedule,
                 ),
                 onAction = onOpenSchedule,
+                // Plan dana levo od glavnog dugmeta - samo kad postoji sledeća stavka.
+                secondaryAction = onShowDayPlan?.takeIf { scheduleSummary != null && upcoming != null }?.let { onPlan ->
+                    {
+                        TextButton(onClick = onPlan) {
+                            Icon(painterResource(R.drawable.ic_route), contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(stringResource(R.string.day_plan_open), modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                },
             ) {
                 when {
                     scheduleSummary == null -> CardBody(stringResource(R.string.home_next_class_empty))
@@ -242,6 +254,8 @@ private fun HomeCard(
     actionLabel: String? = null,
     onAction: () -> Unit = {},
     subtitle: String? = null,
+    /** Dugme levo od [actionLabel] (npr. "Plan dana"). */
+    secondaryAction: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
@@ -278,8 +292,12 @@ private fun HomeCard(
             }
             content()
             if (actionLabel != null) {
-                FilledTonalButton(onClick = onAction, modifier = Modifier.align(Alignment.End)) {
-                    Text(actionLabel)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    secondaryAction?.invoke()
+                    Spacer(Modifier.weight(1f))
+                    FilledTonalButton(onClick = onAction) {
+                        Text(actionLabel)
+                    }
                 }
             }
         }

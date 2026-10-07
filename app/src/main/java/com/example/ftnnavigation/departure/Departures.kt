@@ -85,6 +85,10 @@ fun missedDeparture(
         .minByOrNull { it.startAt }
 }
 
+/** Prethodna stavka sa mestom: poslednja završena do početka [item] (izborni časovi mogu da se preklapaju). */
+internal fun previousWithPlace(item: AgendaItem, day: List<AgendaItem>): AgendaItem? =
+    day.filter { it != item && it.place != null && it.end <= item.start }.maxByOrNull { it.end }
+
 /**
  * Polazak na [item] (isto računanje kao za obaveštenje - Početna ga prikazuje), ili null ako
  * je prethodna stavka na istom mestu, pa nema kuda da se ide. [day] = stavke tog dana.
@@ -95,8 +99,7 @@ fun departureFor(
     route: PlaceRoute,
     marginMin: Long = DEPARTURE_MARGIN_MIN,
 ): Departure? {
-    // Prethodna stavka sa mestom: poslednja završena do početka ove (izborni časovi mogu da se preklapaju).
-    val previous = day.filter { it != item && it.place != null && it.end <= item.start }.maxByOrNull { it.end }
+    val previous = previousWithPlace(item, day)
     val place = item.place
     if (place != null && previous?.place == place) return null // već si tu
 

@@ -92,4 +92,34 @@ class DestinationSearchTest {
             searchRooms("a"),
         )
     }
+
+    /** Nedavna: izabrano na vrh, bez ponavljanja, najviše 5. */
+    @Test
+    fun recents_newestFirst_noDuplicates_limited() {
+        val recents = listOf("101", "204", "AH9").withRecent("204")
+        assertEquals(listOf("204", "101", "AH9"), recents)
+        assertEquals(listOf("L1", "204", "101", "AH9"), recents.withRecent("L1"))
+        val full = listOf("a", "b", "c", "d", "e").withRecent("f")
+        assertEquals(listOf("f", "a", "b", "c", "d"), full)
+    }
+
+    /** Zvezdica: dodaje na kraj, drugi dodir izbacuje. */
+    @Test
+    fun favorites_toggle() {
+        val favorites = listOf("204").toggled("Čitaonica")
+        assertEquals(listOf("204", "Čitaonica"), favorites)
+        assertEquals(listOf("Čitaonica"), favorites.toggled("204"))
+    }
+
+    /** Vrh izbora: omiljena, pa nedavna koja nisu omiljena; nazivi kojih više nema se ne prikazuju. */
+    @Test
+    fun quickDestinations_favoritesThenOtherRecents_onlyExisting() {
+        val (favorites, recents) = quickDestinations(
+            favorites = listOf("204", "Stara sala"),
+            recents = listOf("101", "204", "AH9", "Nestala"),
+            available = names.toSet(),
+        )
+        assertEquals(listOf("204"), favorites)
+        assertEquals(listOf("101", "AH9"), recents)
+    }
 }

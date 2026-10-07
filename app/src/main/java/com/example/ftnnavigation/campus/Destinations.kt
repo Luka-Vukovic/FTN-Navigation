@@ -89,6 +89,25 @@ fun roomBuildingNames(graph: BuildingGraph, campus: CampusData): Map<String, Lis
         name to listOfNotNull(campus.building(room.buildingId)?.name, room.buildingId)
     }.toMap()
 
+/** Koliko nedavnih odredišta se pamti (i prikazuje na vrhu izbora odredišta). */
+const val MAX_RECENT_DESTINATIONS = 5
+
+/** Nedavna odredišta posle izbora [name]: ono na vrh (bez ponavljanja), najviše [max]. */
+fun List<String>.withRecent(name: String, max: Int = MAX_RECENT_DESTINATIONS): List<String> =
+    (listOf(name) + filter { it != name }).take(max)
+
+/** Omiljena posle dodira zvezdice za [name]: izbacuje ako je već tu, inače dodaje na kraj. */
+fun List<String>.toggled(name: String): List<String> = if (name in this) this - name else this + name
+
+/**
+ * Brzi izbor na vrhu izbora odredišta: omiljena, pa nedavna koja nisu među omiljenima. Samo nazivi koji i dalje postoje
+ * među odredištima ([available]) - sala može da nestane ili promeni naziv posle izmene plana.
+ */
+fun quickDestinations(favorites: List<String>, recents: List<String>, available: Set<String>): Pair<List<String>, List<String>> {
+    val favs = favorites.filter { it in available }
+    return favs to recents.filter { it in available && it !in favs }
+}
+
 /** Svaka reč upita je u nekoj oznaci ([keys]) ili je početak reči nekog naziva iz [context] (ili celog naziva). */
 private fun matchesWithContext(words: List<String>, keys: List<String>, context: List<String>): Boolean {
     if (context.isEmpty()) return false

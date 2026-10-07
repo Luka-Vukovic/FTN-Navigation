@@ -44,6 +44,7 @@ import com.example.ftnnavigation.events.EventEditScreen
 import com.example.ftnnavigation.home.HomeScreen
 import com.example.ftnnavigation.onboarding.OnboardingScreen
 import com.example.ftnnavigation.campus.PlaceKind
+import com.example.ftnnavigation.poc.DayPlanSheet
 import com.example.ftnnavigation.poc.FreeRoomsSheet
 import com.example.ftnnavigation.poc.LiftDialog
 import com.example.ftnnavigation.poc.NearestPlaceSheet
@@ -115,6 +116,10 @@ fun FtnApp() {
     }
     // Gužva u ruti (Mapa, Početna) se procenjuje iz istih rasporeda.
     LaunchedEffect(roomSchedule) { mapViewModel.updateRoomSchedule(roomSchedule) }
+    // Plan dana (sa Početne, za dan sledeće stavke): dan kao broj dana (LocalDate nije Saveable); null - zatvoren.
+    // Na Rasporedu ga nema - korisnik: "ne donosi suviše novih informacija koje se ne vide već na samom rasporedu".
+    var planDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    val showDayPlan = { date: LocalDate -> planDay = date.toEpochDay() }.takeIf { mapViewModel.graph != null }
 
     Scaffold(
         // Svaki ekran ima svoju gornju traku koja sama rešava status bar,
@@ -172,6 +177,7 @@ fun FtnApp() {
                     onOpenSettings = { navController.navigate(SettingsRoute) },
                     onOpenFreeRooms = { showFreeRooms = true }.takeIf { roomSchedule != null && mapViewModel.graph != null },
                     onOpenNearby = { kind: PlaceKind -> nearbyKind = kind }.takeIf { mapViewModel.graph != null && mapViewModel.campus != null },
+                    onShowDayPlan = upcoming?.let { item -> showDayPlan?.let { { it(item.date) } } },
                 )
                 val graph = mapViewModel.graph
                 val campus = mapViewModel.campus
@@ -246,6 +252,21 @@ fun FtnApp() {
                 )
             }
         }
+    }
+    planDay?.let { day ->
+        val date = LocalDate.ofEpochDay(day)
+        val agenda = scheduleViewModel.agenda
+        val legs = remember(date, agenda, mapViewModel.graph) { mapViewModel.dayPlan(agenda.on(date)) }
+        DayPlanSheet(
+            date = date,
+            legs = legs,
+            onShow = { index ->
+                planDay = null
+                mapViewModel.showPlan(date, legs, index)
+                navController.navigateToTopLevel(MapRoute)
+            },
+            onDismiss = { planDay = null },
+        )
     }
     // Pitanje za lift iskače na bilo kom ekranu - praćenje radi i kad Mapa nije na ekranu.
     mapViewModel.state.liftPrompt?.let { prompt ->
