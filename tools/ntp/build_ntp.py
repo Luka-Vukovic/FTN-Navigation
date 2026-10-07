@@ -381,6 +381,7 @@ class Graph:
     def __init__(self):
         self.nodes = {}  # id -> (sprat, x, y, tip, naziv)
         self.edges = {}  # (a, b) -> tip
+        self.amenities = {}  # id -> vrsta prostorije bez naziva (TOALET)
 
     def node(self, floor, key, x, y, kind="HODNIK", name=None):
         nid = f"{BUILDING}-{floor}-{key}"
@@ -571,11 +572,38 @@ def ground_floor(g):
     g.room(f, "NTP-005", (143, 1480), (143, 1407), "W143")
 
 
+# Toaleti (čvorovi bez naziva, vrsta TOALET - "najbliži toalet" u aplikaciji): (centar, vrata, čvor hodnika).
+# I-IV: soba 20 (donji srednji red, na crtežu "toaleti") - samo gde nema oznaku sa terena: na III spratu je to NTP-315
+# (korisnik 07.10.2026: "315 se preklapa sa toaletom"), na I, II i IV toalet je PRETPOSTAVKA. Toalet uz liftove (teren
+# 04.10.2026: "svaki sprat (ne prizemlje) ima toalet odmah do lifta"), vrata ka glavnom hodniku - PRETPOSTAVKA.
+# Prizemlje: WC levo od kancelarije NTP-005. Vrata svih - sredina zida ka hodniku (kao sale).
+TOILET_BLOCK_ROOM = 20
+TOILET_BLOCK = ((1170, 1472), (1170, 1389), "C1170")
+TOILET_BY_LIFTS = ((500, 765), (450, 765), "M736")
+TOILETS_GROUND = [((15, 1479), (15, 1407), "W0")]
+
+
+def typical_toilets(f):
+    labeled = {room for room, _ in TYPICAL_LABELS[f]}
+    return ([TOILET_BLOCK] if TOILET_BLOCK_ROOM not in labeled else []) + [TOILET_BY_LIFTS]
+
+
+def toilets(g, f, specs):
+    for center, door, attach in specs:
+        d = g.node(f, f"V{door[0]}_{door[1]}", *door, kind="VRATA")
+        r = g.node(f, f"TOALET{center[0]}_{center[1]}", *center, kind="PROSTORIJA")
+        g.amenities[r] = "TOALET"
+        g.edge(r, d)
+        g.edge(d, f"{BUILDING}-{f}-{attach}")
+
+
 def build():
     g = Graph()
     ground_floor(g)
+    toilets(g, 0, TOILETS_GROUND)
     for f in (1, 2, 3, 4):
         typical_floor(g, f)
+        toilets(g, f, typical_toilets(f))
     top_floor(g)
     for f in range(5):
         for s in STAIRS:  # krakom naviše sa sprata f stiže se na dno kraka naniže sprata iznad
@@ -601,7 +629,8 @@ def write_json(g, path):
         "floors": list(FLOORS),
         "entranceId": f"{BUILDING}-0-{MAIN_ENTRANCE}",
         "nodes": [
-            {"id": nid, "floor": f, "x": rel(x, y)[0], "y": rel(x, y)[1], "type": kind, **({"name": name} if name else {})}
+            {"id": nid, "floor": f, "x": rel(x, y)[0], "y": rel(x, y)[1], "type": kind, **({"name": name} if name else {}),
+             **({"amenity": g.amenities[nid]} if nid in g.amenities else {})}
             for nid, (f, x, y, kind, name) in g.nodes.items()
         ],
         "edges": [[a, b, kind] for (a, b), kind in g.edges.items()],
@@ -749,7 +778,7 @@ def main():
     # Do 04.10.2026 su I-IV bili jedan crtež.
     (res / "floor_plan_ntp_typical.xml").unlink(missing_ok=True)
     write_json(g, ROOT / "app/src/main/assets/ntp.json")
-    rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA")
+    rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA" and n[4])
     print(f"NTP: {len(g.nodes)} čvorova, {len(g.edges)} ivica, {rooms} sala")
     if args.check:
         check_images(g, args.check)

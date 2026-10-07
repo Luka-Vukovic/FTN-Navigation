@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,11 +35,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.campus.PlaceKind
 import com.example.ftnnavigation.departure.Departure
 import com.example.ftnnavigation.departure.leaveByText
 import com.example.ftnnavigation.departure.noRouteText
 import com.example.ftnnavigation.departure.routeText
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.poc.labelRes
 import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.ClassEntry
 import com.example.ftnnavigation.schedule.ClassType
@@ -71,6 +75,8 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     /** Slobodne prostorije po rasporedu (null - raspored i mapa se još učitavaju). */
     onOpenFreeRooms: (() -> Unit)?,
+    /** Najbliže mesto izabrane vrste (null - mapa se još učitava). */
+    onOpenNearby: ((PlaceKind) -> Unit)?,
 ) {
     Scaffold(
         topBar = {
@@ -124,6 +130,19 @@ fun HomeScreen(
                 onAction = onOpenMap,
             ) {
                 CardBody(stringResource(R.string.home_map_body))
+            }
+            if (onOpenNearby != null) {
+                HomeCard(
+                    icon = R.drawable.ic_place,
+                    title = stringResource(R.string.home_nearby_title),
+                    subtitle = stringResource(R.string.home_nearby_subtitle),
+                ) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PlaceKind.entries.forEach { kind ->
+                            SuggestionChip(onClick = { onOpenNearby(kind) }, label = { Text(stringResource(kind.labelRes())) })
+                        }
+                    }
+                }
             }
             if (onOpenFreeRooms != null) {
                 HomeCard(
@@ -220,8 +239,8 @@ private fun CardBody(text: String) {
 private fun HomeCard(
     @DrawableRes icon: Int,
     title: String,
-    actionLabel: String,
-    onAction: () -> Unit,
+    actionLabel: String? = null,
+    onAction: () -> Unit = {},
     subtitle: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -258,8 +277,10 @@ private fun HomeCard(
                 }
             }
             content()
-            FilledTonalButton(onClick = onAction, modifier = Modifier.align(Alignment.End)) {
-                Text(actionLabel)
+            if (actionLabel != null) {
+                FilledTonalButton(onClick = onAction, modifier = Modifier.align(Alignment.End)) {
+                    Text(actionLabel)
+                }
             }
         }
     }
@@ -293,6 +314,7 @@ private fun HomeScreenPreview() {
             onShowRoute = {},
             onOpenSettings = {},
             onOpenFreeRooms = {},
+            onOpenNearby = {},
         )
     }
 }

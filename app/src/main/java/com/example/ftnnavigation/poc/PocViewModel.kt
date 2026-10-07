@@ -272,10 +272,16 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     var destination by mutableStateOf<String?>(null)
         private set
 
+    /** Odredište zadato čvorom ([selectPlace]: toalet nema naziv); null - [destination] je naziv sale ili zgrade. */
+    private var destinationNodeId by mutableStateOf<String?>(null)
+
     /** Gde vodi ruta do [destination]; null ako se ne zna gde je (ili se graf učitava). */
     val target: RouteTarget? by derivedStateOf {
         val graph = graph ?: return@derivedStateOf null
         val campus = campus ?: return@derivedStateOf null
+        destinationNodeId?.let { id ->
+            return@derivedStateOf graph.node(id)?.let { RouteTarget(it, campus.building(it.buildingId), approximate = false) }
+        }
         destination?.let { resolveTarget(it, graph, campus) }
     }
 
@@ -405,8 +411,16 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      * Menja odredište. Sala u zgradi sa planom -> Mapa prelazi na njen sprat te zgrade; drugo -> kampus.
      */
     fun selectDestination(room: String?) {
+        destinationNodeId = null
         destination = room
         showPlace(target?.node ?: return)
+    }
+
+    /** Odredište je čvor [node] (najbliže mesto - i toalet bez naziva), u baneru [label]. */
+    fun selectPlace(node: Node, label: String) {
+        destinationNodeId = node.id
+        destination = label
+        showPlace(node)
     }
 
     /** Mapa prikazuje mesto čvora: plan njegove zgrade na njegovom spratu, ili kampus (napolju, zgrada bez plana). */

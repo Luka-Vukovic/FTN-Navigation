@@ -50,7 +50,7 @@ class NbGraphTest {
 
     @Test
     fun roomsUnique_nodesInsidePlan_allFloorsPresent() {
-        val names = nbNodes.filter { it.type == NodeType.PROSTORIJA }.map { it.name!! }
+        val names = nbNodes.filter { it.type == NodeType.PROSTORIJA && it.amenity == null }.map { it.name!! }
         assertEquals(names.size, names.toSet().size)
         assertTrue(nbNodes.all { it.x in 0f..1f && it.y in 0f..1f })
         assertEquals(NbPlan.FLOORS.toList(), nb.floors)

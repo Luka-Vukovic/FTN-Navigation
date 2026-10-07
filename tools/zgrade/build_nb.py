@@ -35,7 +35,7 @@ Teren 01.10.2026 (korisnik + fotografija evakuacionog plana I sprata):
 import argparse
 from pathlib import Path
 
-from common import STEPS, Flights, R, build_graph, check_images, rect_poly, row, write_all
+from common import STEPS, TOALET, Flights, R, build_graph, check_images, rect_poly, row, write_all
 
 VX, VY, VW, VH = VIEWPORT = (305, 305, 750, 275)  # viewport plana (px plana)
 WALL = (413, 311, 1038, 519)  # spoljni zid: 625 x 208 px = OSM obris 63,4 x 21,1 m
@@ -68,7 +68,7 @@ INDOOR_LINKS = [("NB-1-PROLAZ", "KULA-1-PROLAZ-NB")]
 
 def toilets():
     """Toaleti desno od stepeništa (I-IV sprat), uvučeni: između njih i hodnika je hol."""
-    return [R(691, 727, 311, 377), R(727, 760, 311, 377)]
+    return [R(691, 727, 311, 377, amenity=TOALET), R(727, 760, 311, 377, amenity=TOALET)]
 
 
 def hall(y1):
@@ -90,7 +90,9 @@ def floor_m1():
             *row(311, 413, [(416, 487, None), (487, 555, "P03")]),
             R(555, 625, 311, 369), R(555, 625, 369, 413, "P01"),
             *row(450, 519, [(416, 487, None), (487, 555, None), (555, 625, "P08"), (625, 665, None),
-                            (665, 692, None), (692, 725, None), (725, 760, None)]),
+                            (665, 692, None)]),
+            # Toaleti Ž i M (ikonice na FtnGO-u).
+            R(692, 725, 450, 519, amenity=TOALET), R(725, 760, 450, 519, amenity=TOALET),
             *row(311, 387, [(692, 727, "P21"), (727, 760, "P20")]),
             R(967, 1002, 311, 353, "P18", door=(967, 332)), R(967, 1002, 353, 412, "P17", door=(967, 382)),
             R(1002, 1038, 311, 412), R(965, 1038, 452, 519),
@@ -116,7 +118,8 @@ def floor_0():
             *row(311, 383, [(416, 487, "018"), (487, 520, "019"), (520, 554, "021-3"), (554, 589, "021-2"),
                             (589, 624, "021-1")]),
             R(416, 452, 373, 407, "018A"),
-            *row(311, 378, [(692, 727, None), (727, 760, "008")]),
+            # Toalet: na FtnGO-u "008" sa ikonicama M i Ž; 008 nije u rasporedu (kao 113/110 na I-IV spratu).
+            R(692, 727, 311, 378), R(727, 760, 311, 378, amenity=TOALET),
             R(760, 1038, 311, 405, "Svečana sala"),
             *row(456, 519, [(416, 487, "015"), (487, 520, "013"), (520, 543, "014"), (543, 566, "012"), (566, 589, "016"),
                             (589, 618, "017"), (618, 645, "Portir"), (688, 760, None),

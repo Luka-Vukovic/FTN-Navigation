@@ -48,6 +48,11 @@ data class Node(
     val type: NodeType,
     /** Naziv sale kako piše u rasporedu (npr. "NTP-307"); samo za [NodeType.PROSTORIJA]. */
     val name: String? = null,
+    /**
+     * Vrsta prostorije bez naziva koja je ipak u grafu (generatori: "TOALET") - za "najbliže mesto". Sala sa nazivom
+     * dobija vrstu po nazivu ([com.example.ftnnavigation.campus.placeKindOf]).
+     */
+    val amenity: String? = null,
 )
 
 /** Neusmerena ivica; vreme prolaska se ne čuva, već računa po profilu korisnika. */

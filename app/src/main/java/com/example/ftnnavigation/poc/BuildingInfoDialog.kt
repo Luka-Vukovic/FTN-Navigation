@@ -142,7 +142,7 @@ internal fun OpeningHoursSection(hours: OpeningHours, modifier: Modifier = Modif
 }
 
 @Composable
-private fun openStatusText(status: OpenStatus, now: LocalDateTime): String = when (status) {
+internal fun openStatusText(status: OpenStatus, now: LocalDateTime): String = when (status) {
     is OpenStatus.Open -> stringResource(R.string.building_info_open_until, status.until.format(TIME_FORMAT))
     is OpenStatus.Closed -> {
         val opensAt = status.opensAt

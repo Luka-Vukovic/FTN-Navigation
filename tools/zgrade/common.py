@@ -40,9 +40,16 @@ M_PER_PX = 63.4 / 625  # NB: OSM obris 63,4 m = 625 px plana
 STEPS = "STEPENICI"
 
 
-def R(x0, x1, y0, y1, name=None, door=None, doors=None):
-    """Soba; vrata: [door] (jedna tačka), [doors] (više ulaza) ili sredina zida prema hodniku."""
-    return {"rect": (x0, y0, x1, y1), "name": name, "doors": doors or ([door] if door else None)}
+# Vrsta prostorije bez naziva koja ipak ide u graf (aplikacija: "najbliži toalet"). Čvor PROSTORIJA bez naziva.
+TOALET = "TOALET"
+
+
+def R(x0, x1, y0, y1, name=None, door=None, doors=None, amenity=None):
+    """
+    Soba; vrata: [door] (jedna tačka), [doors] (više ulaza) ili sredina zida prema hodniku. Soba bez naziva nema čvor,
+    osim ako ima vrstu (amenity, npr. TOALET) - tada je čvor bez naziva sa vrstom.
+    """
+    return {"rect": (x0, y0, x1, y1), "name": name, "doors": doors or ([door] if door else None), "amenity": amenity}
 
 
 def Flights(up, down, landing, path, draw_down=True, down_node=None, draw_up=True):
@@ -89,6 +96,7 @@ class Graph:
         self.nodes = {}  # id -> (sprat, x, y, tip, naziv)
         self.edges = {}  # (a, b) -> tip
         self.steps = set()  # (a, b) HOD ivica sa stepenicima (krak do podesta/međunivoa) - "bez stepenica" ih ne koristi
+        self.amenities = {}  # id -> vrsta prostorije bez naziva (TOALET)
 
     def nid(self, floor, key):
         return f"{self.building}-{'m' + str(-floor) if floor < 0 else floor}-{key}"
@@ -168,10 +176,15 @@ def build_floor(g, f, plan, down_keys=(), up_keys=None):
     """
     net = Network(g, f, plan["paths"])
     for room in plan["rooms"]:
-        if not room["name"]:
+        amenity = room.get("amenity")
+        if not room["name"] and not amenity:
             continue
         x0, y0, x1, y1 = room["rect"]
-        r = g.node(f, room["name"], (x0 + x1) / 2, (y0 + y1) / 2, kind="PROSTORIJA", name=room["name"])
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        key = room["name"] or f"{amenity}{round(cx)}_{round(cy)}"
+        r = g.node(f, key, cx, cy, kind="PROSTORIJA", name=room["name"])
+        if amenity:
+            g.amenities[r] = amenity
         for door in room["doors"] or [default_door(room, net)]:
             d = g.node(f, f"V{round(door[0])}_{round(door[1])}", *door, kind="VRATA")
             g.edge(r, d)
@@ -242,7 +255,8 @@ def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=(
         "floors": list(floors),
         "entranceId": entrance,
         "nodes": [
-            {"id": n, "floor": f, "x": rel(x, y)[0], "y": rel(x, y)[1], "type": kind, **({"name": name} if name else {})}
+            {"id": n, "floor": f, "x": rel(x, y)[0], "y": rel(x, y)[1], "type": kind, **({"name": name} if name else {}),
+             **({"amenity": g.amenities[n]} if n in g.amenities else {})}
             for n, (f, x, y, kind, name) in g.nodes.items()
         ],
         # [a, b, tip] ili [a, b, "HOD", STEPS] - hod krakom stepeništa (do podesta/međunivoa)
@@ -353,7 +367,7 @@ def write_all(g, plans, viewport, wall, building_name, script, prefix, entrance,
     asset = ROOT / f"app/src/main/assets/{g.building.lower()}.json"
     write_json(g, asset, viewport, list(plans), entrance, campus_links, indoor_links,
                plans if any(p.get("flights") for p in plans.values()) else ())
-    rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA")
+    rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA" and n[4])
     print(f"{g.building}: {len(g.nodes)} čvorova, {len(g.edges)} ivica, {rooms} sala -> {asset.name}")
 
 

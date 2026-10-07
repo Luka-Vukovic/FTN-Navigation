@@ -28,7 +28,7 @@ data class IndoorPlan(
     /** Stepeništa sa dva kraka i međupodestom, po spratu (nisu deo grafa - za kretanje tačke po stepeništu). */
     val stairwells: List<IndoorStairwell> = emptyList(),
 ) {
-    fun graphNodes(): List<Node> = nodes.map { Node(it.id, buildingId, it.floor, it.x, it.y, it.type, it.name) }
+    fun graphNodes(): List<Node> = nodes.map { Node(it.id, buildingId, it.floor, it.x, it.y, it.type, it.name, it.amenity) }
 
     /** Putanje stepeništa, ključ "zgrada/stepenište" kao [com.example.ftnnavigation.poc.stairKey]. */
     fun stairPaths(): List<StairPath> = stairwells.map { s ->
@@ -68,6 +68,8 @@ data class IndoorNode(
     val y: Float,
     val type: NodeType,
     val name: String? = null,
+    /** Vrsta prostorije bez naziva (generatori: `TOALET`) - [Node.amenity]. */
+    val amenity: String? = null,
 )
 
 /**

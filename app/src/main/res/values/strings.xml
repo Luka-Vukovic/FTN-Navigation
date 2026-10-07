@@ -18,6 +18,16 @@
     <string name="home_map_title">Mapa</string>
     <string name="home_map_subtitle">Kampus · Nastavni blok</string>
     <string name="home_map_body">Pogledaj zgrade FTN-a i staze između njih, a u Nastavnom bloku postavi početnu poziciju i prati svoje kretanje kroz hodnik.</string>
+    <string name="home_nearby_title">Najbliže mesto</string>
+    <string name="home_nearby_subtitle">Ruta do najbližeg izabrane vrste</string>
+    <string name="place_kind_toalet">Toalet</string>
+    <string name="place_kind_hrana">Hrana i piće</string>
+    <string name="place_kind_ucenje">Biblioteka i čitaonica</string>
+    <string name="place_kind_skriptarnica">Skriptarnica</string>
+    <string name="nearby_from">Po vremenu hoda %1$s</string>
+    <string name="nearby_nearest">najbliže</string>
+    <string name="nearby_walk">~%1$d min</string>
+    <string name="nearby_none">Nema puta ni do jednog takvog mesta.</string>
     <string name="home_free_rooms_title">Slobodne prostorije</string>
     <string name="home_free_rooms_subtitle">Po rasporedu nastave</string>
     <string name="home_free_rooms_body">Prostorije u kojima po rasporedu sada nema nastave, najbliže prve - za učenje ili rad u grupi.</string>

@@ -22,7 +22,8 @@ sobe iste veličine) i 3D prikaz na njima (III sprat i delovi ostalih), teren/iz
 od sobe levo (istočno) od stepeništa donjim (severnim) redom do istočnog kraja (x01..x13 na I, 200..208 na II, 301..308
 na III), pa gornjim (južnim) redom nazad ka zapadu (114..126, 209..224, 309..320); jugoistočni ugao je na I i III deo
 istočne krajnje sobe (na tabli I sprata 113 zauzima ceo kraj). Zapadno od stepeništa: I "1", toalet, "2", "3"; II
-226-228; III 326. Ranije pravilo korisnika (od sobe levo od stepeništa u smeru kazaljke) je za donji red bilo tačno,
+226-228; III 326. Toalet na II i III spratu (TOALET) je soba bez broja na istom mestu kao toalet I sprata - PRETPOSTAVKA
+(07.10.2026). Ranije pravilo korisnika (od sobe levo od stepeništa u smeru kazaljke) je za donji red bilo tačno,
 gornji red je bio pomeren za jednu sobu.
 II sprat: tabla ima 8 soba između stepeništa i istočnog kraja (200-207), crtež 7 - crtež je verovatno tačniji (korisnik),
 a jedina neobična soba crteža je široka 74 px (ostale 25/50): tu tabla ima dve sobe -> "F 202" sa aliasom 203
@@ -40,7 +41,7 @@ sredina zgrade) su samo nacrtane; evakuacioni izlaz na zapadnom kraju se ne crta
 import argparse
 from pathlib import Path
 
-from common import STEPS, R, build_graph, write_all
+from common import STEPS, TOALET, R, build_graph, write_all
 
 VX, VY, VW, VH = VIEWPORT = (-15, -15, 630, 230)
 WALL = (0, 0, 600, 163)  # OSM obris (60,8 x 16,5 m)
@@ -63,12 +64,14 @@ def poly(*pts):
 
 
 def rooms(floor, y0, y1, spans):
-    """Red soba: [(x0, x1, broj ili None ili gotov naziv)]; broj 15 na 3. spratu -> "F 315", 0 na 2. -> "F 200"."""
+    """
+    Red soba: [(x0, x1, broj ili None ili gotov naziv ili TOALET)]; broj 15 na 3. spratu -> "F 315", 0 na 2. -> "F 200".
+    """
     def name(n):
         if n is None or isinstance(n, str):
             return n
         return f"F {floor}{n:02d}"
-    return [R(a, b, y0, y1, name(n)) for a, b, n in spans]
+    return [R(a, b, y0, y1, amenity=n) if n == TOALET else R(a, b, y0, y1, name(n)) for a, b, n in spans]
 
 
 STAIRS_RECT = (402, 452, 114, 160)  # glavno stepenište, uz donji (severni) zid
@@ -134,7 +137,7 @@ def floor_1():
             *rooms(1, 113, 163, [(0, 51, 13), (51, 75, 12), (75, 100, 11), (100, 125, 10), (125, 150, 9),
                                  (150, 175, 8), (175, 200, 7), (200, 225, 6), (225, 250, 5), (250, 275, 4),
                                  (275, 300, 3), (300, 325, 2), (325, 352, 1),
-                                 (489, 509, "F 1"), (509, 550, None), (550, 572, "F 2"), (572, 600, "F 3")]),
+                                 (489, 509, "F 1"), (509, 550, TOALET), (550, 572, "F 2"), (572, 600, "F 3")]),
         ],
         "stairs": stairs((405, 453, 114, 160)),
         "points": [("PROLAZ-AMF", PASSAGE, "PROLAZ")],
@@ -157,7 +160,7 @@ def floor_2():
                               (548, 600, 24)]),  # 224 = i 225
             *rooms(2, 114, 163, [(0, 50, 8), (50, 100, 7), (100, 149, 6), (149, 198, 5), (198, 248, 4),
                                  (248, 322, 2), (322, 347, 1), (347, 373, 0),  # 202 = i 203 (tabla: dve sobe)
-                                 (489, 509, 26), (509, 548, None), (548, 573, 27), (573, 600, 28)]),
+                                 (489, 509, 26), (509, 548, TOALET), (548, 573, 27), (573, 600, 28)]),
         ],
         "stairs": stairs(),
     }
@@ -179,7 +182,7 @@ def floor_3():
             *rooms(3, 98, 163, [(0, 52, 8), (52, 101, 7), (101, 151, 6), (151, 201, 5), (201, 251, 4),
                                 (251, 301, 3), (301, 350, 2), (350, 374, 1)]),
             R(374, 387, 132, 163),  # ostava kod stepeništa
-            *rooms(3, 114, 163, [(465, 496, 26), (496, 537, None), (559, 600, None)]),
+            *rooms(3, 114, 163, [(465, 496, 26), (496, 537, TOALET), (559, 600, None)]),
         ],
         "stairs": stairs((398, 446, 114, 160)),
     }

@@ -139,7 +139,8 @@ class BuildingGraph(
     /** Ivica između čvorova [aId] i [bId] (smer nije bitan), ili null ako nisu susedi. */
     fun edge(aId: String, bId: String): Edge? = edgeIndex[aId to bId]
 
-    val rooms: List<Node> get() = nodes.filter { it.type == NodeType.PROSTORIJA }
+    /** Sale (prostorije sa nazivom); toaleti su prostorije bez naziva i nisu odredište po nazivu. */
+    val rooms: List<Node> get() = nodes.filter { it.type == NodeType.PROSTORIJA && it.name != null }
 
     fun node(id: String): Node? = byId[id]
 

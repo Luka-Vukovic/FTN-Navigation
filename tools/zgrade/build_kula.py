@@ -19,7 +19,7 @@ Amfiteatrima gore, prolaz ka NB-u desno.
 import argparse
 from pathlib import Path
 
-from common import R, build_graph, check_images, col, rect_poly, row, write_all
+from common import TOALET, R, build_graph, check_images, col, rect_poly, row, write_all
 
 VX, VY, VW, VH = VIEWPORT = (140, 300, 280, 275)
 WALL = (155, 375, 335, 554)  # OSM obris u zajedničkom sistemu (18,3 x 18,2 m)
@@ -43,7 +43,7 @@ def five(y0, y1, numbers):
 
 
 def toilets(y0=462, y1=480):
-    return [R(285, 309, y0, y1), R(309, 333, y0, y1)]
+    return [R(285, 309, y0, y1, amenity=TOALET), R(309, 333, y0, y1, amenity=TOALET)]
 
 
 def typical(f):

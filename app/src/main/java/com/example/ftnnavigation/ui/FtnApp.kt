@@ -43,8 +43,10 @@ import com.example.ftnnavigation.settings.SettingsScreen
 import com.example.ftnnavigation.events.EventEditScreen
 import com.example.ftnnavigation.home.HomeScreen
 import com.example.ftnnavigation.onboarding.OnboardingScreen
+import com.example.ftnnavigation.campus.PlaceKind
 import com.example.ftnnavigation.poc.FreeRoomsSheet
 import com.example.ftnnavigation.poc.LiftDialog
+import com.example.ftnnavigation.poc.NearestPlaceSheet
 import com.example.ftnnavigation.poc.PocRoute
 import com.example.ftnnavigation.poc.PocViewModel
 import com.example.ftnnavigation.schedule.RoomSchedule
@@ -152,6 +154,7 @@ fun FtnApp() {
                 val agenda = scheduleViewModel.agenda
                 val upcoming = agenda.next(now)
                 var showFreeRooms by rememberSaveable { mutableStateOf(false) }
+                var nearbyKind by rememberSaveable { mutableStateOf<PlaceKind?>(null) }
                 HomeScreen(
                     scheduleSummary = timetable?.let { selectionSummary(it, scheduleViewModel.selection?.group) },
                     upcoming = upcoming,
@@ -166,8 +169,26 @@ fun FtnApp() {
                     },
                     onOpenSettings = { navController.navigate(SettingsRoute) },
                     onOpenFreeRooms = { showFreeRooms = true }.takeIf { roomSchedule != null && mapViewModel.graph != null },
+                    onOpenNearby = { kind: PlaceKind -> nearbyKind = kind }.takeIf { mapViewModel.graph != null && mapViewModel.campus != null },
                 )
                 val graph = mapViewModel.graph
+                val campus = mapViewModel.campus
+                val kind = nearbyKind
+                if (kind != null && graph != null && campus != null) {
+                    NearestPlaceSheet(
+                        kind = kind,
+                        graph = graph,
+                        campus = campus,
+                        routeStart = mapViewModel.routeStart,
+                        routeTo = mapViewModel::routeTo,
+                        onRoute = { node, label ->
+                            nearbyKind = null
+                            mapViewModel.selectPlace(node, label)
+                            navController.navigateToTopLevel(MapRoute)
+                        },
+                        onDismiss = { nearbyKind = null },
+                    )
+                }
                 if (showFreeRooms && roomSchedule != null && graph != null) {
                     FreeRoomsSheet(
                         graph = graph,

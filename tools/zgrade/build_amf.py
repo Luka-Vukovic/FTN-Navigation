@@ -35,7 +35,7 @@ grafu - na mapi kampusa je služba (build_campus.py SERVICES).
 import argparse
 from pathlib import Path
 
-from common import STEPS, Flights, R, build_graph, check_images, col, rect_poly, row, write_all
+from common import STEPS, TOALET, Flights, R, build_graph, check_images, col, rect_poly, row, write_all
 
 VX, VY, VW, VH = VIEWPORT = (30, -80, 820, 310)
 WALL = (168, -65, 835, 210)  # OSM obris u zajedničkom sistemu (67,7 x 27,9 m)
@@ -106,8 +106,10 @@ def floor_m1():
             R(30, 170, -30, 0, "Skriptarnica", door=(170, -10)),  # FtnGO "Skriptarnica (B015)"
             R(170, 203, -65, -30, "FTN Student"),
             *row(-65, -17, [(285, 317, "B001"), (317, 347, "B002"), (347, 378, "B003"), (378, 410, "B004"),
-                            (410, 430, "B005"), (430, 443, "B006"), (443, 480, "B007"), (480, 518, None),
-                            (587, 660, "INT 1"), (660, 765, "GRID-1"), (765, 800, None), (800, 832, None)]),
+                            (410, 430, "B005"), (430, 443, "B006"), (443, 480, "B007"),
+                            (587, 660, "INT 1"), (660, 765, "GRID-1"), (800, 832, None)]),
+            # Toaleti (ikonice M i Ž na FtnGO-u): pored B007 i pored GRID-1.
+            R(480, 518, -65, -17, amenity=TOALET), R(765, 800, -65, -17, amenity=TOALET),
             R(170, 230, 0, 170, "Scen-LAB", door=(230, 60)),  # FtnGO "SCENLab"
             R(170, 205, 170, 207), R(205, 230, 170, 207),
             R(266, 285, 183, 207, "Kiosk"),  # pored stepeništa S1 (teren 02.10.2026)
