@@ -106,6 +106,7 @@ import com.example.ftnnavigation.campus.BuildingCategory
 import com.example.ftnnavigation.campus.ROOM_HOURS
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
+import com.example.ftnnavigation.campus.roomBuildingNames
 import com.example.ftnnavigation.campus.searchDestinations
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
@@ -361,6 +362,7 @@ fun PocScreen(
             buildings = campus.named(BuildingCategory.FTN).mapNotNull { it.name },
             services = campus.named(BuildingCategory.SLUZBA).mapNotNull { it.name },
             rooms = graph.rooms.mapNotNull { it.name }.sorted(),
+            roomBuildings = remember(graph, campus) { roomBuildingNames(graph, campus) },
             selected = destination,
             onSelect = {
                 onDestinationChange(it)
@@ -803,8 +805,8 @@ private fun RouteBanner(destination: String, target: RouteTarget?, route: Route?
 
 /**
  * Izbor odredišta: zgrade FTN-a, studentske službe i sale, sa pretragom po nazivu
- * ([searchDestinations]). Koristi ga i izmena događaja (mesto događaja) - tada [noneLabel] dodaje
- * stavku bez mesta ([onSelect] null).
+ * ([searchDestinations]); sale i po zgradi ([roomBuildings]: sala -> naziv i oznaka zgrade). Koristi ga i
+ * izmena događaja (mesto događaja) - tada [noneLabel] dodaje stavku bez mesta ([onSelect] null).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -812,6 +814,7 @@ internal fun DestinationSheet(
     buildings: List<String>,
     services: List<String>,
     rooms: List<String>,
+    roomBuildings: Map<String, List<String>>,
     selected: String?,
     onSelect: (String?) -> Unit,
     onDismiss: () -> Unit,
@@ -820,10 +823,10 @@ internal fun DestinationSheet(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val sections = listOf(
-        R.string.route_destinations_buildings to buildings,
-        R.string.route_destinations_services to services,
-        R.string.route_destinations_rooms to rooms,
-    ).map { (header, names) -> header to searchDestinations(names, query) }
+        R.string.route_destinations_buildings to searchDestinations(buildings, query),
+        R.string.route_destinations_services to searchDestinations(services, query),
+        R.string.route_destinations_rooms to searchDestinations(rooms, query) { roomBuildings[it].orEmpty() },
+    )
     val focusManager = LocalFocusManager.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,

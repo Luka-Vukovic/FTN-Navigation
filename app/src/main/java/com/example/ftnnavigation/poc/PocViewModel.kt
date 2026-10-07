@@ -29,6 +29,7 @@ import com.example.ftnnavigation.campus.loadGraph
 import com.example.ftnnavigation.campus.loadStairPaths
 import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.resolveTarget
+import com.example.ftnnavigation.campus.roomBuildingNames
 import com.example.ftnnavigation.campus.routeBetween
 import com.example.ftnnavigation.departure.Departure
 import com.example.ftnnavigation.departure.DepartureScheduler
@@ -382,6 +383,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             buildings = campus.named(BuildingCategory.FTN).mapNotNull { it.name },
             services = campus.named(BuildingCategory.SLUZBA).mapNotNull { it.name },
             rooms = graph.rooms.mapNotNull { it.name }.sorted(),
+            roomBuildings = roomBuildingNames(graph, campus),
         )
     }
 

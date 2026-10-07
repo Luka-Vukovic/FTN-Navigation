@@ -52,4 +52,44 @@ class DestinationSearchTest {
     fun noMatch_isEmpty() {
         assertEquals(emptyList<String>(), search("menza"))
     }
+
+    private val buildings = mapOf(
+        "012" to listOf("Nastavni blok", "NB"), "101" to listOf("Nastavni blok", "NB"),
+        "204" to listOf("Nastavni blok", "NB"), "AH9" to listOf("Nastavni blok", "NB"),
+        "Kula 101" to listOf("Kula", "KULA"), "L1" to listOf("Amfiteatri", "AMF"),
+        "L1 (RC)" to listOf("Nastavni blok", "NB"), "NTP-101" to listOf("Naučno-tehnološki park", "NTP"),
+        "Scen-LAB" to listOf("Amfiteatri", "AMF"), "Svečana sala" to listOf("Nastavni blok", "NB"),
+    )
+
+    private fun searchRooms(query: String) = searchDestinations(names, query) { buildings[it].orEmpty() }
+
+    @Test
+    fun roomsByBuilding() {
+        assertEquals(listOf("012", "101", "204", "AH9", "L1 (RC)", "Svečana sala"), searchRooms("nastavni"))
+        assertEquals(listOf("012", "101", "204", "AH9", "L1 (RC)", "Svečana sala"), searchRooms("nastavni blok"))
+        assertEquals(listOf("L1", "Scen-LAB"), searchRooms("amfiteatri"))
+        assertEquals(listOf("NTP-101"), searchRooms("tehnoloski"))
+        assertEquals(listOf("012", "101", "204", "AH9", "L1 (RC)", "Svečana sala"), searchRooms("nb"))
+    }
+
+    @Test
+    fun roomAndBuilding_together() {
+        assertEquals(listOf("101"), searchRooms("nastavni 101"))
+        assertEquals(listOf("101"), searchRooms("101 nb"))
+        assertEquals(listOf("L1"), searchRooms("l1 amf"))
+        assertEquals(listOf("204"), searchRooms("204a nastavni"))
+    }
+
+    @Test
+    fun nameMatchesFirst_thenBuilding() {
+        // "Kula 101" po nazivu; nijedna druga sala nije u Kuli
+        assertEquals(listOf("Kula 101"), searchRooms("kula"))
+        // "sala" je u nazivu Svečane sale; zgrada se ne gleda kad reč nije početak reči naziva zgrade
+        assertEquals(listOf("Svečana sala"), searchRooms("sala"))
+        // nazivi sa "a" prvi (204 po oznaci 204A), pa sala Amfiteatara koja nema "a" u nazivu
+        assertEquals(
+            listOf("AH9", "204", "Kula 101", "Scen-LAB", "Svečana sala", "Studentska služba", "Čitaonica", "L1"),
+            searchRooms("a"),
+        )
+    }
 }

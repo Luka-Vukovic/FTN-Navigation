@@ -47,7 +47,12 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 /** Mesta koja se nude za događaj - ista kao odredišta na Mapi. */
-data class PlaceOptions(val buildings: List<String>, val services: List<String>, val rooms: List<String>)
+data class PlaceOptions(
+    val buildings: List<String>,
+    val services: List<String>,
+    val rooms: List<String>,
+    val roomBuildings: Map<String, List<String>>,
+)
 
 /**
  * Novi ([event] null, za dan [initialDate]) ili postojeći događaj. [defaultUntil] = predlog
@@ -203,6 +208,7 @@ fun EventEditScreen(
                 buildings = places.buildings,
                 services = places.services,
                 rooms = places.rooms,
+                roomBuildings = places.roomBuildings,
                 selected = place,
                 onSelect = {
                     place = it

@@ -40,13 +40,20 @@ fun canonicalRoom(room: String): String = room.trim().let { ROOM_ALIASES[it] ?: 
 
 /**
  * Odredišta iz [names] koja odgovaraju pretrazi [query], bolja poklapanja prva: ceo naziv, pa naziv koji
- * počinje upitom, pa ostali (u istom redosledu kao [names]). Prazan upit vraća sve.
+ * počinje upitom, pa ostali, pa odredišta nađena tek uz [contextOf] (u istom redosledu kao [names]). Prazan
+ * upit vraća sve.
  *
  * Bez obzira na velika slova, kvačice (svecana -> Svečana), razmake i crtice (ah9 -> AH9, scenlab ->
  * Scen-LAB); reči upita mogu biti bilo kojim redom (sala svecana). Sala se nalazi i po drugoj oznaci
- * (O12 -> 012, 204A -> 204).
+ * (O12 -> 012, 204A -> 204), i po zgradi: [contextOf] daje nazive zgrade sale ("Nastavni blok", "NB"), a reč
+ * upita koja nije u nazivu sale sme da bude početak reči naziva zgrade (nastavni -> sve sale NB-a,
+ * "nastavni 101" -> 101, ne Kula 101).
  */
-fun searchDestinations(names: List<String>, query: String): List<String> {
+fun searchDestinations(
+    names: List<String>,
+    query: String,
+    contextOf: (String) -> List<String> = { emptyList() },
+): List<String> {
     val words = query.split(' ').map(::searchKey).filter { it.isNotEmpty() }
     if (words.isEmpty()) return names
     val whole = words.joinToString("")
@@ -62,10 +69,30 @@ fun searchDestinations(names: List<String>, query: String): List<String> {
                     else -> 3
                 }
             }
-            if (rank < 3) name to rank else null
+            when {
+                rank < 3 -> name to rank
+                matchesWithContext(words, keys, contextOf(name)) -> name to 3
+                else -> null
+            }
         }
         .sortedBy { it.second }
         .map { it.first }
+}
+
+/** Sala iz grafa -> naziv i oznaka njene zgrade ("Nastavni blok", "NB"), za pretragu sala po zgradi. */
+fun roomBuildingNames(graph: BuildingGraph, campus: CampusData): Map<String, List<String>> =
+    graph.rooms.mapNotNull { room ->
+        val name = room.name ?: return@mapNotNull null
+        name to listOfNotNull(campus.building(room.buildingId)?.name, room.buildingId)
+    }.toMap()
+
+/** Svaka reč upita je u nekoj oznaci ([keys]) ili je početak reči nekog naziva iz [context] (ili celog naziva). */
+private fun matchesWithContext(words: List<String>, keys: List<String>, context: List<String>): Boolean {
+    if (context.isEmpty()) return false
+    val contextWords = context.flatMap { text ->
+        text.split(' ', '-').map(::searchKey).filter { it.isNotEmpty() } + searchKey(text)
+    }
+    return words.all { word -> keys.any { word in it } || contextWords.any { it.startsWith(word) } }
 }
 
 /** Naziv za poređenje u pretrazi: mala slova, bez kvačica, razmaka i znakova (Scen-LAB -> scenlab). */
