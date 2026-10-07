@@ -46,6 +46,10 @@ class RoomSchedule(data: ScheduleData, val calendar: AcademicCalendar) {
     /** Da li sala ima ijedan čas u rasporedima (učionica), bez obzira na dan. */
     fun hasClasses(room: String): Boolean = canonicalRoom(room) in byRoom
 
+    /** Časovi svih sala na dan [date] (oznake kao na planu), samo sale koje tog dana imaju časove. */
+    fun allOn(date: LocalDate): Map<String, List<RoomSlot>> =
+        byRoom.keys.associateWith { on(it, date) }.filterValues { it.isNotEmpty() }
+
     /** Rasporedi za [date] su učitani (van semestra nastave ih i ne treba); letnji PDF-ovi izlaze kasnije. */
     fun knows(date: LocalDate): Boolean = calendar.dayInfo(date).semester.let { it == null || it in semesters }
 

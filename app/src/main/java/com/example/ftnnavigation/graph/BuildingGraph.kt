@@ -59,12 +59,22 @@ data class RoutingProfile(
     /** Lift se ne koristi (podešavanje "Bez lifta") - samo stepenice. */
     val avoidLift: Boolean = false,
     val crowdFactor: Double = 1.0,
+    /**
+     * Gužva po zgradi ([Node.buildingId] -> faktor >= 1; nema = 1): množi hod i stepenice u toj zgradi, na ivici između dve
+     * zgrade veći od dva. Procena iz rasporeda ([com.example.ftnnavigation.campus.crowdFactors]).
+     */
+    val buildingCrowd: Map<String, Double> = emptyMap(),
 ) {
     init {
         require(walkingSpeedMps > 0) { "walkingSpeedMps mora biti > 0" }
         require(crowdFactor >= 1.0) { "crowdFactor mora biti >= 1" }
+        require(buildingCrowd.values.all { it >= 1.0 }) { "gužva po zgradi mora biti >= 1" }
         require(!(avoidStairs && avoidLift)) { "bez stepenica i bez lifta - nema promene sprata" }
     }
+
+    /** Ukupna gužva na ivici [from] - [to]: [crowdFactor] i gužva zgrade (veća od dve, ako ivica spaja zgrade). */
+    fun crowdBetween(from: Node, to: Node): Double =
+        crowdFactor * maxOf(buildingCrowd[from.buildingId] ?: 1.0, buildingCrowd[to.buildingId] ?: 1.0)
 
     /** Isti profil bez izbegavanja stepenica/lifta. */
     fun withoutAvoidance(): RoutingProfile = copy(avoidStairs = false, avoidLift = false)
@@ -228,7 +238,7 @@ class BuildingGraph(
 
     /** Ruta produžena hodom od [legM] metara pre prvog čvora. */
     private fun Route.withLeg(legM: Double, profile: RoutingProfile) = copy(
-        durationSec = durationSec + legM / profile.walkingSpeedMps * profile.crowdFactor,
+        durationSec = durationSec + legM / profile.walkingSpeedMps * profile.crowdBetween(nodes.first(), nodes.first()),
         lengthM = lengthM + legM,
     )
 
@@ -238,12 +248,12 @@ class BuildingGraph(
     internal fun cost(from: Node, to: Node, type: EdgeType, profile: RoutingProfile): Double? = when (type) {
         // Krak do podesta / pasarela na podest: vreme kao hod (kratko), ali sa stepenicima.
         EdgeType.HOD -> if (profile.avoidStairs && (from.id to to.id) in stepEdges) null else {
-            distanceM(from, to) / profile.walkingSpeedMps * profile.crowdFactor
+            distanceM(from, to) / profile.walkingSpeedMps * profile.crowdBetween(from, to)
         }
         EdgeType.STEPENICE -> if (profile.avoidStairs) null else {
             val floors = to.floor - from.floor
             val perFloor = if (floors > 0) profile.stairsUpSecPerFloor else profile.stairsDownSecPerFloor
-            abs(floors) * perFloor * profile.crowdFactor
+            abs(floors) * perFloor * profile.crowdBetween(from, to)
         }
         EdgeType.LIFT -> if (profile.avoidLift) null else profile.liftWaitSec + abs(to.floor - from.floor) * profile.liftSecPerFloor
     }

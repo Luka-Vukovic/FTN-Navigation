@@ -39,7 +39,7 @@ class DeparturesTest {
     private fun minutes(n: Int) = Route(emptyList(), durationSec = n * 60.0, lengthM = 0.0)
 
     /** Od ulaza 3 min do svakog mesta, između mesta 2 min; "Fizika" nije na mapi. */
-    private val routes = { from: String?, to: String ->
+    private val routes = { from: String?, to: String, _: LocalDateTime ->
         when {
             to == "Fizika" || from == "Fizika" -> null
             from == null -> minutes(3)

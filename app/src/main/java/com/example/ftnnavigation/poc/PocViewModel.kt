@@ -31,6 +31,7 @@ import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.resolveTarget
 import com.example.ftnnavigation.campus.roomBuildingNames
 import com.example.ftnnavigation.campus.routeBetween
+import com.example.ftnnavigation.campus.crowdFactors
 import com.example.ftnnavigation.departure.Departure
 import com.example.ftnnavigation.departure.DepartureScheduler
 import com.example.ftnnavigation.departure.departureFor
@@ -51,11 +52,15 @@ import com.example.ftnnavigation.graph.PlanPlacement
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.graph.routeOrFallback
 import com.example.ftnnavigation.schedule.AgendaItem
+import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.settings.AppSettings
 import com.example.ftnnavigation.settings.FloorChange
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Duration
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -136,6 +141,9 @@ private val GPS_START_TYPES = setOf(NodeType.STAZA, NodeType.ULAZ)
 
 /** Koliko često se za vreme praćenja proverava stajanje kod lifta. */
 private const val LIFT_CHECK_MS = 1000L
+
+/** Manja gužva na ruti se ne piše u baneru. */
+private const val MIN_CROWD_PERCENT = 5
 
 /** Vibracija uz pitanje za lift (telefon je u vožnji možda u džepu): dva kratka. */
 private val LIFT_VIBRATION = longArrayOf(0, 150, 120, 150)
@@ -338,7 +346,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val raw = state.rawPosition
         val gps = routeGps
         val place = state.pdrPlace
-        return routeOrFallback(floorChange.profile) { profile ->
+        return routeOrFallback(floorChange.profile.copy(buildingCrowd = crowdNow)) { profile ->
             when {
                 match != null -> graph.routeFrom(match.point, nodeId, profile)
                 raw != null -> graph.routeFrom(
@@ -357,6 +365,13 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        viewModelScope.launch {
+            while (true) {
+                val now = LocalDateTime.now()
+                minute = now.truncatedTo(ChronoUnit.MINUTES)
+                delay(Duration.between(now, minute.plusMinutes(1)).toMillis().coerceAtLeast(1))
+            }
+        }
         viewModelScope.launch {
             val campus = loadCampus(application)
             this@PocViewModel.campus = campus
@@ -383,9 +398,49 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val graph = graph
         val campus = campus
         val profile = floorChange.profile
-        return departureFor(item, day, route = { from, to ->
-            if (graph != null && campus != null) routeBetween(graph, campus, from, to, profile) else null
+        return departureFor(item, day, route = { from, to, arriveAt ->
+            if (graph != null && campus != null) {
+                routeBetween(graph, campus, from, to, profile.copy(buildingCrowd = crowdAt(arriveAt)))
+            } else {
+                null
+            }
         })
+    }
+
+    /** Zauzetost sala svih rasporeda (za gužvu); postavlja je `FtnApp` kad se raspored učita. */
+    private var roomSchedule by mutableStateOf<RoomSchedule?>(null)
+
+    fun updateRoomSchedule(schedule: RoomSchedule?) {
+        roomSchedule = schedule
+    }
+
+    /** Gužva između časova u ruti (Podešavanja). */
+    var crowdRouting by mutableStateOf(AppSettings.crowdRouting(application))
+        private set
+
+    /** Menja i vreme polaska - obaveštenje se zakazuje iznova. */
+    fun updateCrowdRouting(enabled: Boolean) {
+        crowdRouting = enabled
+        val app = getApplication<Application>()
+        AppSettings.setCrowdRouting(app, enabled)
+        viewModelScope.launch { DepartureScheduler.reschedule(app) }
+    }
+
+    /** Trenutni minut - gužva se menja sa vremenom, a ruta ne sme da se računa iznova pri svakom čitanju. */
+    private var minute by mutableStateOf(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES))
+
+    /** Gužva po zgradi u [at] (prazno ako je isključena ili raspored nije učitan). */
+    private fun crowdAt(at: LocalDateTime): Map<String, Double> =
+        roomSchedule?.takeIf { crowdRouting }?.let { crowdFactors(it, at) }.orEmpty()
+
+    /** Gužva sada - za rutu na Mapi. */
+    private val crowdNow: Map<String, Double> by derivedStateOf { crowdAt(minute) }
+
+    /** Najveća gužva na ruti, u procentima sporijeg hoda (za baner); null - bez gužve vredne pomena. */
+    val routeCrowdPercent: Int? by derivedStateOf {
+        val buildings = route?.nodes?.map { it.buildingId }?.toSet().orEmpty()
+        val extra = buildings.maxOfOrNull { crowdNow[it] ?: 1.0 }?.minus(1) ?: 0.0
+        (extra * 100).roundToInt().takeIf { it >= MIN_CROWD_PERCENT }
     }
 
     /** Mesta za događaje - ista kao odredišta na Mapi; null dok se mapa učitava. */

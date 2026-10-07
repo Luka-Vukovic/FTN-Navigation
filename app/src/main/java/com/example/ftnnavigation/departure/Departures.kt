@@ -35,6 +35,12 @@ data class Departure(
 }
 
 /**
+ * Ruta između dva mesta (fromPlace null = od glavnog ulaza), ili null ako se neko od njih ne zna; [arriveAt] je početak
+ * stavke na koju se ide - u to vreme je gužva između časova.
+ */
+typealias PlaceRoute = (fromPlace: String?, toPlace: String, arriveAt: LocalDateTime) -> Route?
+
+/**
  * Prvi polazak čije obaveštenje stiže posle [after]. [agenda] daje stavke dana, [route] rutu
  * između dva mesta (fromPlace null = od glavnog ulaza), ili null ako se neko od njih ne zna.
  * Događaji sa isključenim obaveštenjem se preskaču, ali i dalje mogu biti mesto polaska.
@@ -42,7 +48,7 @@ data class Departure(
 fun nextDeparture(
     agenda: (LocalDate) -> List<AgendaItem>,
     after: LocalDateTime,
-    route: (fromPlace: String?, toPlace: String) -> Route?,
+    route: PlaceRoute,
     marginMin: Long = DEPARTURE_MARGIN_MIN,
     horizonDays: Int = 120,
 ): Departure? {
@@ -68,7 +74,7 @@ fun missedDeparture(
     agenda: (LocalDate) -> List<AgendaItem>,
     now: LocalDateTime,
     notifiedUpTo: LocalDateTime,
-    route: (fromPlace: String?, toPlace: String) -> Route?,
+    route: PlaceRoute,
     marginMin: Long = DEPARTURE_MARGIN_MIN,
 ): Departure? {
     val day = agenda(now.toLocalDate())
@@ -86,7 +92,7 @@ fun missedDeparture(
 fun departureFor(
     item: AgendaItem,
     day: List<AgendaItem>,
-    route: (fromPlace: String?, toPlace: String) -> Route?,
+    route: PlaceRoute,
     marginMin: Long = DEPARTURE_MARGIN_MIN,
 ): Departure? {
     // Prethodna stavka sa mestom: poslednja završena do početka ove (izborni časovi mogu da se preklapaju).
@@ -95,8 +101,8 @@ fun departureFor(
     if (place != null && previous?.place == place) return null // već si tu
 
     // Ako se ne zna gde je prethodno mesto, ruta ide od glavnog ulaza.
-    val fromRoute = previous?.place?.let { route(it, place ?: return@let null) }
-    val chosen = fromRoute ?: place?.let { route(null, it) }
+    val fromRoute = previous?.place?.let { route(it, place ?: return@let null, item.startAt) }
+    val chosen = fromRoute ?: place?.let { route(null, it, item.startAt) }
 
     val leaveAt = item.startAt.minusMinutes(chosen?.minutes?.toLong() ?: 0)
     var notifyAt = leaveAt.minusMinutes(marginMin)

@@ -218,6 +218,7 @@
     <string name="free_rooms_walk">~%1$d min hoda</string>
     <string name="free_rooms_none">Nema prostorija slobodnih još bar %1$s.</string>
     <string name="free_rooms_no_teaching_today">Danas nema nastave po rasporedu - sve prostorije su slobodne po rasporedu.</string>
+    <string name="route_crowd">Gužva između časova · hod sporiji do %1$d %%</string>
     <string name="route_steps_open">Uputstvo korak po korak</string>
     <string name="route_steps_title">Uputstvo</string>
     <string name="route_steps_hint">Dodirni korak da vidiš njegov sprat na mapi. Levo i desno su u pravcu hoda.</string>
@@ -313,6 +314,8 @@
     <string name="settings_floor_change_no_stairs_body">Liftom (kolica, povreda, prtljag). Amfiteatri, F-blok i MI nemaju lift, a na V sprat Nastavnog bloka se ide samo stepenicama - tamo ruta ide stepenicama, uz napomenu.</string>
     <string name="settings_floor_change_no_lift">Bez lifta</string>
     <string name="settings_floor_change_no_lift_body">Samo stepenicama.</string>
+    <string name="settings_crowd_title">Gužva između časova</string>
+    <string name="settings_crowd_body">Kad se u zgradi završava ili počinje mnogo časova, hod kroz nju se računa sporije (najviše 30 %). Procena je iz rasporeda svih smerova, uz pretpostavku da na predavanja ne dolaze svi - važi i za vreme polaska u obaveštenju.</string>
 
     <!-- Podešavanja obaveštenja -->
     <string name="notifications_title">Obaveštenja</string>

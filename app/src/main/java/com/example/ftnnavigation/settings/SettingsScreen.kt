@@ -45,6 +45,8 @@ fun SettingsScreen(
     onAutoRotateMapChange: (Boolean) -> Unit,
     floorChange: FloorChange,
     onFloorChangeChange: (FloorChange) -> Unit,
+    crowdRouting: Boolean,
+    onCrowdRoutingChange: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -76,6 +78,12 @@ fun SettingsScreen(
             )
             SectionHeader(stringResource(R.string.settings_section_route))
             FloorChangeCard(floorChange, onFloorChangeChange)
+            SettingsSwitchCard(
+                title = stringResource(R.string.settings_crowd_title),
+                body = stringResource(R.string.settings_crowd_body),
+                checked = crowdRouting,
+                onCheckedChange = onCrowdRoutingChange,
+            )
             SectionHeader(stringResource(R.string.notifications_title))
             DepartureSettings()
         }

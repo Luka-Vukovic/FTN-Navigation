@@ -177,6 +177,7 @@ fun PocRoute(
         roomSchedule = roomSchedule,
         autoRotateMap = viewModel.autoRotateMap,
         floorChange = viewModel.floorChange,
+        crowdPercent = viewModel.routeCrowdPercent,
         onModeChange = viewModel::selectMode,
         onFloorChange = viewModel::selectFloor,
         onDestinationChange = viewModel::selectDestination,
@@ -205,6 +206,8 @@ fun PocScreen(
     routeStart: RouteStart,
     /** Promena sprata iz Podešavanja - baner piše kad je ruta po njoj nemoguća. */
     floorChange: FloorChange = FloorChange.NAJBRZE,
+    /** Gužva između časova na ruti (procenat sporijeg hoda) - baner je piše; null = nema vredne pomena. */
+    crowdPercent: Int? = null,
     canStartTracking: Boolean,
     roomSchedule: RoomSchedule?,
     /** Mapa se okreće po smeru korisnika (podešavanje). */
@@ -314,6 +317,7 @@ fun PocScreen(
                             route = route,
                             routeStart = routeStart,
                             floorChange = floorChange,
+                            crowdPercent = crowdPercent,
                             onShowSteps = { showSteps = true },
                             onClear = { onDestinationChange(null) },
                         )
@@ -764,6 +768,7 @@ private fun RouteBanner(
     route: Route?,
     routeStart: RouteStart,
     floorChange: FloorChange,
+    crowdPercent: Int?,
     onShowSteps: () -> Unit,
     onClear: () -> Unit,
 ) {
@@ -798,6 +803,13 @@ private fun RouteBanner(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (route != null && crowdPercent != null) {
+                    Text(
+                        stringResource(R.string.route_crowd, crowdPercent),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 // Podešavanje "Bez stepenica" / "Bez lifta" na ovoj ruti nije moguće.
                 if (route?.fallback == true) {
                     Text(

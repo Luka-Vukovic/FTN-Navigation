@@ -155,6 +155,7 @@ class BuildingGraphTest {
         val nbGraph = BuildingGraph(nb.graphNodes(), nb.graphEdges().filter { it.fromId in nbIds && it.toId in nbIds }, FloorScale(76f, 27.9f))
         val profiles = listOf(
             RoutingProfile(), RoutingProfile(avoidStairs = true), RoutingProfile(avoidLift = true), RoutingProfile(crowdFactor = 1.7),
+            RoutingProfile(buildingCrowd = mapOf("T" to 1.3, "NB" to 1.25)),
         )
         for ((g, step) in listOf(graph to 1, nbGraph to 5)) {
             for (profile in profiles) {
@@ -168,6 +169,36 @@ class BuildingGraphTest {
                 }
             }
         }
+    }
+
+    /**
+     * Dva jednako duga puta od S do T: kroz zgradu X i kroz zgradu Y. Gužva u jednoj zgradi vodi rutu kroz drugu; A*
+     * ostaje tačan (faktori >= 1 - heuristika vazdušnom linijom bez gužve i dalje ne precenjuje).
+     */
+    @Test
+    fun buildingCrowd_routeAvoidsCrowdedBuilding() {
+        val nodes = listOf(
+            Node("S", "Z", 0, 0.1f, 0.5f, NodeType.HODNIK),
+            Node("X", "X", 0, 0.5f, 0.2f, NodeType.HODNIK),
+            Node("Y", "Y", 0, 0.5f, 0.8f, NodeType.HODNIK),
+            Node("T", "Z", 0, 0.9f, 0.5f, NodeType.HODNIK),
+        )
+        val edges = listOf("S" to "X", "X" to "T", "S" to "Y", "Y" to "T").map { (a, b) -> Edge(a, b, EdgeType.HOD) }
+        val g = BuildingGraph(nodes, edges, scale)
+        val plain = g.route("S", "T")!!
+
+        val crowdedX = g.route("S", "T", RoutingProfile(buildingCrowd = mapOf("X" to 1.3)))!!
+        assertTrue(crowdedX.uses("Y"))
+        assertEquals(plain.durationSec, crowdedX.durationSec, 1e-5) // Float koordinate: putevi jednaki do ~1e-7 s
+
+        val crowdedBoth = g.route("S", "T", RoutingProfile(buildingCrowd = mapOf("X" to 1.3, "Y" to 1.2)))!!
+        assertTrue(crowdedBoth.uses("Y"))
+        assertEquals(plain.durationSec * 1.2, crowdedBoth.durationSec, 1e-5)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun buildingCrowd_belowOne_rejected() {
+        RoutingProfile(buildingCrowd = mapOf("NB" to 0.9))
     }
 
     private fun dijkstra(g: BuildingGraph, fromId: String, profile: RoutingProfile): Map<String, Double> {

@@ -113,6 +113,8 @@ fun FtnApp() {
     val roomSchedule = remember(scheduleData, calendar) {
         if (scheduleData != null && calendar != null) RoomSchedule(scheduleData, calendar) else null
     }
+    // Gužva u ruti (Mapa, Početna) se procenjuje iz istih rasporeda.
+    LaunchedEffect(roomSchedule) { mapViewModel.updateRoomSchedule(roomSchedule) }
 
     Scaffold(
         // Svaki ekran ima svoju gornju traku koja sama rešava status bar,
@@ -218,6 +220,8 @@ fun FtnApp() {
                     onAutoRotateMapChange = mapViewModel::updateAutoRotateMap,
                     floorChange = mapViewModel.floorChange,
                     onFloorChangeChange = mapViewModel::updateFloorChange,
+                    crowdRouting = mapViewModel.crowdRouting,
+                    onCrowdRoutingChange = mapViewModel::updateCrowdRouting,
                     onBack = { navController.popBackStack() },
                 )
             }

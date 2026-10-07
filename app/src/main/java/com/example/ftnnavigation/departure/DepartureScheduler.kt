@@ -8,6 +8,7 @@ import androidx.core.content.edit
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.buildingOfRoom
+import com.example.ftnnavigation.campus.crowdFactors
 import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
@@ -17,12 +18,15 @@ import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.graph.RoutingProfile
 import com.example.ftnnavigation.schedule.Agenda
+import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.settings.AppSettings
 import com.example.ftnnavigation.schedule.TIME_FORMAT
 import com.example.ftnnavigation.schedule.ScheduleStore
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Zakazuje jedan alarm - za sledeći polazak na čas ili događaj ([nextDeparture]). Kad alarm
@@ -111,8 +115,13 @@ object DepartureScheduler {
         private val graph: BuildingGraph,
         /** Promena sprata iz Podešavanja (bez stepenica / bez lifta menja vreme polaska). */
         private val profile: RoutingProfile,
+        /** Zauzetost sala svih rasporeda - gužva u vreme dolaska; null = gužva isključena u Podešavanjima. */
+        private val roomSchedule: RoomSchedule?,
     ) {
-        private fun route(from: String?, to: String): Route? = routeBetween(graph, campus, from, to, profile)
+        private fun route(from: String?, to: String, arriveAt: LocalDateTime): Route? {
+            val crowd = roomSchedule?.let { crowdFactors(it, arriveAt) }.orEmpty()
+            return routeBetween(graph, campus, from, to, profile.copy(buildingCrowd = crowd))
+        }
 
         fun next(after: LocalDateTime): Departure? = nextDeparture(agenda::on, after, ::route)
 
@@ -129,9 +138,15 @@ object DepartureScheduler {
         companion object {
             suspend fun load(context: Context): Planner {
                 val campus = loadCampus(context)
+                val store = ScheduleStore(context)
+                val roomSchedule = if (AppSettings.crowdRouting(context)) {
+                    withContext(Dispatchers.IO) { RoomSchedule(store.loadData(), store.loadCalendar()) }
+                } else {
+                    null
+                }
                 return Planner(
-                    ScheduleStore(context).loadAgenda(), campus, loadGraph(context, campus),
-                    AppSettings.floorChange(context).profile,
+                    store.loadAgenda(), campus, loadGraph(context, campus),
+                    AppSettings.floorChange(context).profile, roomSchedule,
                 )
             }
         }
