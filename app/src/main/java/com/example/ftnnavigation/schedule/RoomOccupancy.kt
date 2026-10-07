@@ -1,7 +1,9 @@
 package com.example.ftnnavigation.schedule
 
 import com.example.ftnnavigation.campus.canonicalRoom
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 
 /**
@@ -17,6 +19,9 @@ data class RoomSlot(
     val biweekly: Boolean,
     val timetables: List<Timetable>,
 )
+
+/** Prostorija slobodna po rasporedu: do [until] (početak sledećeg časa); null = do kraja dana. */
+data class FreeRoom(val name: String, val until: LocalTime?)
 
 sealed interface RoomStatus {
     /** Zauzeta do [until] (kraj niza časova koji se nastavljaju jedan na drugi). */
@@ -40,6 +45,23 @@ class RoomSchedule(data: ScheduleData, val calendar: AcademicCalendar) {
 
     /** Da li sala ima ijedan čas u rasporedima (učionica), bez obzira na dan. */
     fun hasClasses(room: String): Boolean = canonicalRoom(room) in byRoom
+
+    /** Rasporedi za [date] su učitani (van semestra nastave ih i ne treba); letnji PDF-ovi izlaze kasnije. */
+    fun knows(date: LocalDate): Boolean = calendar.dayInfo(date).semester.let { it == null || it in semesters }
+
+    /**
+     * Prostorije iz [rooms] koje se pojavljuju u rasporedima (učionice - ne kancelarije, toaleti...) i po rasporedu su u
+     * [now] slobodne bar još [minMinutes] minuta. Redosled kao u [rooms]. Raspored ne zna za ispite, konsultacije,
+     * nadoknade ni zaključana vrata - slobodna po rasporedu ne znači i stvarno dostupna.
+     */
+    fun freeRooms(rooms: List<String>, now: LocalDateTime, minMinutes: Long): List<FreeRoom> {
+        val time = now.toLocalTime()
+        return rooms.filter(::hasClasses).mapNotNull { room ->
+            val status = roomStatus(on(room, now.toLocalDate()), time) as? RoomStatus.Free ?: return@mapNotNull null
+            val until = status.until
+            FreeRoom(room, until).takeIf { until == null || Duration.between(time, until).toMinutes() >= minMinutes }
+        }
+    }
 
     /** Časovi u sali [room] na dan [date], po početku. */
     fun on(room: String, date: LocalDate): List<RoomSlot> =

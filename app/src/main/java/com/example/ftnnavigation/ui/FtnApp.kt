@@ -19,6 +19,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -39,9 +43,11 @@ import com.example.ftnnavigation.settings.SettingsScreen
 import com.example.ftnnavigation.events.EventEditScreen
 import com.example.ftnnavigation.home.HomeScreen
 import com.example.ftnnavigation.onboarding.OnboardingScreen
+import com.example.ftnnavigation.poc.FreeRoomsSheet
 import com.example.ftnnavigation.poc.LiftDialog
 import com.example.ftnnavigation.poc.PocRoute
 import com.example.ftnnavigation.poc.PocViewModel
+import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.schedule.ScheduleScreen
 import com.example.ftnnavigation.schedule.ScheduleSelection
 import com.example.ftnnavigation.schedule.ScheduleViewModel
@@ -99,6 +105,12 @@ fun FtnApp() {
         return
     }
     DepartureNotificationsEffect(scheduleViewModel.selection)
+    // Zauzetost sala po svim rasporedima: pop-up sale na Mapi i slobodne prostorije na Početnoj.
+    val scheduleData = scheduleViewModel.data
+    val calendar = scheduleViewModel.calendar
+    val roomSchedule = remember(scheduleData, calendar) {
+        if (scheduleData != null && calendar != null) RoomSchedule(scheduleData, calendar) else null
+    }
 
     Scaffold(
         // Svaki ekran ima svoju gornju traku koja sama rešava status bar,
@@ -139,6 +151,7 @@ fun FtnApp() {
                 val timetable = scheduleViewModel.selectedTimetable
                 val agenda = scheduleViewModel.agenda
                 val upcoming = agenda.next(now)
+                var showFreeRooms by rememberSaveable { mutableStateOf(false) }
                 HomeScreen(
                     scheduleSummary = timetable?.let { selectionSummary(it, scheduleViewModel.selection?.group) },
                     upcoming = upcoming,
@@ -152,9 +165,25 @@ fun FtnApp() {
                         navController.navigateToTopLevel(MapRoute)
                     },
                     onOpenSettings = { navController.navigate(SettingsRoute) },
+                    onOpenFreeRooms = { showFreeRooms = true }.takeIf { roomSchedule != null && mapViewModel.graph != null },
                 )
+                val graph = mapViewModel.graph
+                if (showFreeRooms && roomSchedule != null && graph != null) {
+                    FreeRoomsSheet(
+                        graph = graph,
+                        schedule = roomSchedule,
+                        hereBuildingId = mapViewModel.hereBuildingId,
+                        routeTo = mapViewModel::routeTo,
+                        onRoute = {
+                            showFreeRooms = false
+                            mapViewModel.selectDestination(it)
+                            navController.navigateToTopLevel(MapRoute)
+                        },
+                        onDismiss = { showFreeRooms = false },
+                    )
+                }
             }
-            composable<MapRoute> { PocRoute(mapViewModel, scheduleViewModel.data, scheduleViewModel.calendar) }
+            composable<MapRoute> { PocRoute(mapViewModel, roomSchedule) }
             composable<ScheduleRoute> {
                 ScheduleScreen(
                     scheduleViewModel,

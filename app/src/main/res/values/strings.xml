@@ -18,6 +18,10 @@
     <string name="home_map_title">Mapa</string>
     <string name="home_map_subtitle">Kampus · Nastavni blok</string>
     <string name="home_map_body">Pogledaj zgrade FTN-a i staze između njih, a u Nastavnom bloku postavi početnu poziciju i prati svoje kretanje kroz hodnik.</string>
+    <string name="home_free_rooms_title">Slobodne prostorije</string>
+    <string name="home_free_rooms_subtitle">Po rasporedu nastave</string>
+    <string name="home_free_rooms_body">Prostorije u kojima po rasporedu sada nema nastave, najbliže prve - za učenje ili rad u grupi.</string>
+    <string name="home_free_rooms_action">Prikaži slobodne</string>
     <string name="home_open_map">Otvori mapu</string>
 
     <!-- Raspored -->
@@ -193,6 +197,17 @@
     <string name="route_not_on_map">Sala još nije na mapi</string>
     <string name="route_off_campus">Van kampusa</string>
     <string name="route_clear">Ukloni rutu</string>
+    <string name="free_rooms_title">Slobodne prostorije</string>
+    <string name="free_rooms_note">Slobodnost se određuje po rasporedu nastave svih smerova - to ne znači da je prostorija i stvarno dostupna (ispiti, konsultacije, nadoknade, zaključana vrata).</string>
+    <string name="free_rooms_min_label">Slobodna još bar</string>
+    <string name="free_rooms_min_minutes">%1$d min</string>
+    <string name="free_rooms_min_hours">%1$d h</string>
+    <string name="free_rooms_all_buildings">Sve zgrade</string>
+    <string name="free_rooms_until">do %1$s</string>
+    <string name="free_rooms_rest_of_day">do kraja dana</string>
+    <string name="free_rooms_walk">~%1$d min hoda</string>
+    <string name="free_rooms_none">Nema prostorija slobodnih još bar %1$s.</string>
+    <string name="free_rooms_no_teaching_today">Danas nema nastave po rasporedu - sve prostorije su slobodne po rasporedu.</string>
     <string name="route_steps_open">Uputstvo korak po korak</string>
     <string name="route_steps_title">Uputstvo</string>
     <string name="route_steps_hint">Dodirni korak da vidiš njegov sprat na mapi. Levo i desno su u pravcu hoda.</string>

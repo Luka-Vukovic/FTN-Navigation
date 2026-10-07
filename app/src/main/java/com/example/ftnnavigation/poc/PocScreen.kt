@@ -123,9 +123,7 @@ import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.Route
-import com.example.ftnnavigation.schedule.AcademicCalendar
 import com.example.ftnnavigation.schedule.RoomSchedule
-import com.example.ftnnavigation.schedule.ScheduleData
 import com.example.ftnnavigation.settings.FloorChange
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
 import com.example.ftnnavigation.ui.theme.FTNNavigationTheme
@@ -140,14 +138,10 @@ import kotlin.math.roundToInt
 @Composable
 fun PocRoute(
     viewModel: PocViewModel = viewModel(),
-    scheduleData: ScheduleData? = null,
-    calendar: AcademicCalendar? = null,
+    roomSchedule: RoomSchedule? = null,
 ) {
     val state = viewModel.state
     val context = LocalContext.current
-    val roomSchedule = remember(scheduleData, calendar) {
-        if (scheduleData != null && calendar != null) RoomSchedule(scheduleData, calendar) else null
-    }
 
     PdrHeadingEffect(
         enabled = !state.isTracking,
@@ -952,7 +946,7 @@ private fun DestinationItem(name: String, isSelected: Boolean, onClick: () -> Un
 }
 
 @StringRes
-private fun MapMode.labelRes(): Int = when (this) {
+internal fun MapMode.labelRes(): Int = when (this) {
     MapMode.KAMPUS -> R.string.map_mode_campus
     MapMode.NB -> R.string.map_mode_building
     MapMode.AMF -> R.string.map_mode_amf

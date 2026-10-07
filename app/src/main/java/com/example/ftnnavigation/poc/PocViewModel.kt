@@ -318,28 +318,34 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      * lokaciji - graf je mali, A* traje ispod milisekunde. Promena sprata po podešavanju ([floorChange]); gde po
      * njemu puta nema, ruta bez izbegavanja ([Route.fallback] - baner to piše).
      */
-    val route: Route? by derivedStateOf {
-        val graph = graph ?: return@derivedStateOf null
-        val campus = campus ?: return@derivedStateOf null
-        val target = target ?: return@derivedStateOf null
+    val route: Route? by derivedStateOf { target?.let { routeTo(it.node.id) } }
+
+    /** Zgrada u kojoj je korisnik: zgrada pozicije (PDR), inače po GPS-u; null = napolju ili se ne zna. */
+    val hereBuildingId: String?
+        get() = state.pdrPlace.building?.buildingId?.takeIf { state.rawPosition != null } ?: currentBuilding?.id
+
+    /** Ruta do čvora [nodeId] odakle kreće i ruta na Mapi ([routeStart]); null dok se graf učitava ili puta nema. */
+    fun routeTo(nodeId: String): Route? {
+        val graph = graph ?: return null
+        val campus = campus ?: return null
         val match = state.shownMatch
         val raw = state.rawPosition
         val gps = routeGps
         val place = state.pdrPlace
-        routeOrFallback(floorChange.profile) { profile ->
+        return routeOrFallback(floorChange.profile) { profile ->
             when {
-                match != null -> graph.routeFrom(match.point, target.node.id, profile)
+                match != null -> graph.routeFrom(match.point, nodeId, profile)
                 raw != null -> graph.routeFrom(
-                    place.buildingId, place.floor, raw.x, raw.y, target.node.id, profile,
+                    place.buildingId, place.floor, raw.x, raw.y, nodeId, profile,
                     startTypes = GPS_START_TYPES.takeIf { place.isCampus },
                 )
                 gps != null -> graph.routeFrom(
                     CAMPUS_ID, 0,
                     (gps.point.x / campus.widthM).toFloat(), (gps.point.y / campus.heightM).toFloat(),
-                    target.node.id, profile,
+                    nodeId, profile,
                     startTypes = GPS_START_TYPES,
                 )
-                else -> graph.route(NbPlan.ENTRANCE_ID, target.node.id, profile)
+                else -> graph.route(NbPlan.ENTRANCE_ID, nodeId, profile)
             }
         }
     }

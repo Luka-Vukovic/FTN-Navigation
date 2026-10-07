@@ -69,6 +69,8 @@ fun HomeScreen(
     onOpenMap: () -> Unit,
     onShowRoute: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Slobodne prostorije po rasporedu (null - raspored i mapa se još učitavaju). */
+    onOpenFreeRooms: (() -> Unit)?,
 ) {
     Scaffold(
         topBar = {
@@ -122,6 +124,17 @@ fun HomeScreen(
                 onAction = onOpenMap,
             ) {
                 CardBody(stringResource(R.string.home_map_body))
+            }
+            if (onOpenFreeRooms != null) {
+                HomeCard(
+                    icon = R.drawable.ic_meeting_room,
+                    title = stringResource(R.string.home_free_rooms_title),
+                    subtitle = stringResource(R.string.home_free_rooms_subtitle),
+                    actionLabel = stringResource(R.string.home_free_rooms_action),
+                    onAction = onOpenFreeRooms,
+                ) {
+                    CardBody(stringResource(R.string.home_free_rooms_body))
+                }
             }
         }
     }
@@ -279,6 +292,7 @@ private fun HomeScreenPreview() {
             onOpenMap = {},
             onShowRoute = {},
             onOpenSettings = {},
+            onOpenFreeRooms = {},
         )
     }
 }

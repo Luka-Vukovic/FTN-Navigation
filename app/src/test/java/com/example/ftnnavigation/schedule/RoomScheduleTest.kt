@@ -5,6 +5,7 @@ import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -68,6 +69,27 @@ class RoomScheduleTest {
         val wednesday = schedule.on("A1", LocalDate.of(2026, 10, 7))
         assertTrue(wednesday.isNotEmpty())
         assertEquals(wednesday, schedule.on("A1", LocalDate.of(2026, 11, 14)))
+    }
+
+    @Test
+    fun freeRooms_onlyClassroomsFreeLongEnough() {
+        val rooms = listOf("A1", "Kula 101", "Biblioteka")
+        // A1 utorkom: čas 10:15-12:00, sledeći u 12:15.
+        val at = { time: String -> tuesday.atTime(LocalTime.parse(time)) }
+        assertEquals(emptyList<FreeRoom>(), schedule.freeRooms(rooms, at("11:00"), minMinutes = 0))
+        assertEquals(listOf(FreeRoom("A1", LocalTime.of(12, 15))), schedule.freeRooms(rooms, at("12:05"), minMinutes = 10))
+        assertEquals(emptyList<FreeRoom>(), schedule.freeRooms(rooms, at("12:05"), minMinutes = 30))
+        // Posle poslednjeg časa - do kraja dana; kancelarija Kule i Biblioteka nemaju časove, pa nisu u izboru.
+        assertEquals(listOf(FreeRoom("A1", null)), schedule.freeRooms(rooms, at("20:30"), minMinutes = 120))
+        // Nedelja: sve učionice slobodne ceo dan.
+        assertEquals(listOf(FreeRoom("A1", null)), schedule.freeRooms(rooms, LocalDate.of(2026, 10, 4).atTime(10, 0), 60))
+    }
+
+    @Test
+    fun knows_onlyLoadedSemesters() {
+        assertTrue(schedule.knows(tuesday))
+        assertFalse(schedule.knows(LocalDate.of(2027, 3, 2))) // letnji semestar - PDF-ovi još nisu izašli
+        assertTrue(schedule.knows(LocalDate.of(2026, 8, 15))) // van semestra - nema nastave, pa se zna
     }
 
     @Test
