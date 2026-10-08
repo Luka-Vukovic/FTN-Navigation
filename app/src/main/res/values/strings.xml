@@ -339,6 +339,10 @@
     <string name="settings_section_map">Mapa</string>
     <string name="settings_auto_rotate_title">Auto-rotacija mape</string>
     <string name="settings_auto_rotate_body">Mapa se okreće za po 90° tako da ono ispred tebe bude gore. Okreće se tek kad se okreneš za više od ~65° i tako ostaneš oko sekunde.</string>
+    <string name="settings_step_length_title">Dužina koraka</string>
+    <string name="settings_step_length_value">%1$s m</string>
+    <string name="settings_step_length_body">Koliko se tvoja pozicija na mapi pomeri po jednom koraku. Ako tačka u hodu pretiče mesto na kome si, smanji dužinu, a ako kasni, povećaj. Kod većine ljudi je između 0,65 i 0,80 m.</string>
+    <string name="settings_step_length_reset">Vrati na %1$s m</string>
     <string name="settings_section_route">Ruta</string>
     <string name="settings_floor_change_title">Promena sprata</string>
     <string name="settings_floor_change_fastest">Najbrže</string>

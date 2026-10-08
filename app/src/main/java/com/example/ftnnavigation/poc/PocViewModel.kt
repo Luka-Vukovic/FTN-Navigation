@@ -61,6 +61,7 @@ import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.settings.AppSettings
 import com.example.ftnnavigation.settings.FloorChange
+import com.example.ftnnavigation.settings.snapStepLength
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -89,9 +90,6 @@ data class PocUiState(
     /** Odstupanje telefona od pravca hoda (-180..180); null dok se premešten telefon smiruje. */
     val phoneOffsetDeg: Float? = 0f,
     val steps: Int = 0,
-    // Teren 02.10.2026: hodnik III sprata NTP-a (38,3 m) = 46 i 48 detektovanih koraka (01.10. 50) -> ~0,8 m.
-    // Korak korisnika (visok); drugima će biti predug - kandidat za podešavanje.
-    val stepLengthM: Float = 0.8f,
     val isTracking: Boolean = false,
     val isPickingStart: Boolean = false,
     /** Prikaz i ruta sa grafa (map-matching); isključeno = čist PDR (provera smera hoda). */
@@ -227,6 +225,16 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     fun updateAutoRotateMap(enabled: Boolean) {
         autoRotateMap = enabled
         AppSettings.setAutoRotateMap(getApplication(), enabled)
+    }
+
+    /** Dužina koraka (Podešavanja): koliko tačka pređe po koraku. Važi od sledećeg koraka, i usred praćenja. */
+    var stepLengthM by mutableStateOf(AppSettings.stepLengthM(application))
+        private set
+
+    fun updateStepLength(meters: Float) {
+        stepLengthM = snapStepLength(meters)
+        AppSettings.setStepLengthM(getApplication(), stepLengthM)
+        recorder?.stepLength(SystemClock.elapsedRealtimeNanos(), stepLengthM)
     }
 
     /** Promena sprata na ruti (Podešavanja): najbrže, bez stepenica ili bez lifta. */
@@ -566,7 +574,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val before = locator.place
         // Kad se smer na stepeništu ne zna, pretpostavlja se ka spratu odredišta.
         locator.destination = target?.node?.let { PdrPlace(it.buildingId, it.floor) }
-        val reason = locator.step(step.headingDeg, state.stepLengthM, step.redoSteps, SystemClock.elapsedRealtimeNanos())
+        val reason = locator.step(step.headingDeg, stepLengthM, step.redoSteps, SystemClock.elapsedRealtimeNanos())
         state = state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
         updatePosition(before, reason)
         if (reason == PlaceReason.STEPENICE) onStairChange(locator)
@@ -753,6 +761,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         // Gde je tačka (na grafu, ako je zalepljena) - replay odatle kreće.
         val shown = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw
         recorder?.place(SystemClock.elapsedRealtimeNanos(), PlaceReason.START, locator.place, shown, locator.headingBiasDeg)
+        recorder?.stepLength(SystemClock.elapsedRealtimeNanos(), stepLengthM)
         session = PdrSensorSession(
             app.getSystemService(SensorManager::class.java),
             walkingDirection,

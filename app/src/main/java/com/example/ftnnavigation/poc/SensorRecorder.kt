@@ -27,6 +27,8 @@ import java.time.format.DateTimeFormatter
  *   sprat je `L` red sa razlogom LIFT. t kao u `L` redu.
  * - `V,t,početak,kraj,pomeraj_m` - prepoznata vožnja liftom ([LiftRide]; t = uzorak na kome je prepoznata, isti sat kao
  *   `A`); promena sprata posle nje je `L` red LIFT, a nesiguran broj spratova `Q` PITANJE.
+ * - `K,t,dužina_m` - dužina koraka iz Podešavanja (na Start i pri promeni; snimci pre 08.10.2026 je nemaju - tada 0,8 m).
+ *   t kao u `L` redu.
  *
  * Fajlovi: `files/pdr/` aplikacije (`adb exec-out run-as <paket> cat files/pdr/<fajl>`).
  */
@@ -66,6 +68,9 @@ class SensorRecorder private constructor(val file: File) {
     /** Pitanje za lift postavljeno ([prompt]) ili odbijeno (null). */
     fun lift(timestampNs: Long, prompt: LiftPrompt?) =
         write(if (prompt != null) "Q,$timestampNs,PITANJE,${prompt.lift.id},${prompt.fromFloor}" else "Q,$timestampNs,ODUSTAO")
+
+    /** Dužina koraka (Podešavanja) - na Start i pri promeni za vreme praćenja. */
+    fun stepLength(timestampNs: Long, meters: Float) = write("K,$timestampNs,$meters")
 
     /** Prepoznata vožnja liftom. */
     fun liftRide(timestampNs: Long, ride: LiftRide) = write("V,$timestampNs,${ride.startNs},${ride.endNs},${ride.heightM}")

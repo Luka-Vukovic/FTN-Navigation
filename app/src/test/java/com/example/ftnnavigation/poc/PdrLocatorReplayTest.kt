@@ -34,7 +34,8 @@ class PdrLocatorReplayTest {
         .let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private val declination = 5.5f
-    private val stepM = 0.8f
+    // Snimci bez `K` reda (pre 08.10.2026) su hodani sa 0,8 m.
+    private var stepM = 0.8f
 
     @Test
     fun replay() {
@@ -61,6 +62,7 @@ class PdrLocatorReplayTest {
     private fun replay(file: File, locator: PdrLocator): Pair<String, String> {
         val lines = file.readLines().map { it.split(',') }
         locator.clearRedo()
+        stepM = 0.8f
         val out = StringBuilder("Snimak ${file.name}\n")
         val track = StringBuilder("t,vrsta,mesto,sprat,x,y,gps_x,gps_y,tacnost,slobodna_x,slobodna_y,ivica\n")
         val t0 = lines.firstNotNullOf { it.getOrNull(1)?.toLongOrNull() }
@@ -107,6 +109,7 @@ class PdrLocatorReplayTest {
                 } else {
                     log(t, "telefon: pitanje za lift ${f[3]}")
                 }
+                "K" -> stepM = f[2].toFloat()
                 "S" -> {
                     lift.onStep(t)
                     steps++

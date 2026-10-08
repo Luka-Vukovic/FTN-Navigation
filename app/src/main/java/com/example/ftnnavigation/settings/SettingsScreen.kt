@@ -19,9 +19,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,15 +40,19 @@ import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.departure.DepartureSettings
 import com.example.ftnnavigation.ui.components.FtnTopAppBar
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
- * Podešavanja aplikacije (podekran sa Početne): mapa (auto-rotacija), ruta (stepenice / lift) i obaveštenja o polasku
+ * Podešavanja aplikacije (podekran sa Početne): mapa (auto-rotacija, dužina koraka), ruta (stepenice / lift) i obaveštenja o polasku
  * ([DepartureSettings]).
  */
 @Composable
 fun SettingsScreen(
     autoRotateMap: Boolean,
     onAutoRotateMapChange: (Boolean) -> Unit,
+    stepLengthM: Float,
+    onStepLengthChange: (Float) -> Unit,
     floorChange: FloorChange,
     onFloorChangeChange: (FloorChange) -> Unit,
     crowdRouting: Boolean,
@@ -76,6 +86,7 @@ fun SettingsScreen(
                 checked = autoRotateMap,
                 onCheckedChange = onAutoRotateMapChange,
             )
+            StepLengthCard(stepLengthM, onStepLengthChange)
             SectionHeader(stringResource(R.string.settings_section_route))
             FloorChangeCard(floorChange, onFloorChangeChange)
             SettingsSwitchCard(
@@ -98,6 +109,46 @@ private fun SectionHeader(text: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() },
     )
+}
+
+/** Decimalni zarez, dve decimale ("0,75"). */
+private fun formatMeters(meters: Float): String = String.format(Locale.forLanguageTag("sr-Latn-RS"), "%.2f", meters)
+
+/**
+ * Dužina koraka: klizač na po 5 cm. Dok se vuče, menja se samo prikaz - čuva se kad se pusti (ne upisuje se svaki
+ * pomeraj prsta).
+ */
+@Composable
+private fun StepLengthCard(stepLengthM: Float, onChange: (Float) -> Unit) {
+    var dragged by remember(stepLengthM) { mutableFloatStateOf(stepLengthM) }
+    val shown = snapStepLength(dragged)
+    SettingsCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.settings_step_length_title),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(R.string.settings_step_length_value, formatMeters(shown)),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        CardBody(stringResource(R.string.settings_step_length_body))
+        Slider(
+            value = dragged,
+            onValueChange = { dragged = it },
+            onValueChangeFinished = { onChange(snapStepLength(dragged)) },
+            valueRange = MIN_STEP_LENGTH_M..MAX_STEP_LENGTH_M,
+            steps = ((MAX_STEP_LENGTH_M - MIN_STEP_LENGTH_M) / STEP_LENGTH_INCREMENT_M).roundToInt() - 1,
+        )
+        if (shown != DEFAULT_STEP_LENGTH_M) {
+            TextButton(onClick = { onChange(DEFAULT_STEP_LENGTH_M) }, modifier = Modifier.align(Alignment.End)) {
+                Text(stringResource(R.string.settings_step_length_reset, formatMeters(DEFAULT_STEP_LENGTH_M)))
+            }
+        }
+    }
 }
 
 /** Kako ruta menja sprat: jedan od tri izbora (dodir na red bira). */

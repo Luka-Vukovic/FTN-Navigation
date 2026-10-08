@@ -224,6 +224,8 @@ fun FtnApp() {
                 SettingsScreen(
                     autoRotateMap = mapViewModel.autoRotateMap,
                     onAutoRotateMapChange = mapViewModel::updateAutoRotateMap,
+                    stepLengthM = mapViewModel.stepLengthM,
+                    onStepLengthChange = mapViewModel::updateStepLength,
                     floorChange = mapViewModel.floorChange,
                     onFloorChangeChange = mapViewModel::updateFloorChange,
                     crowdRouting = mapViewModel.crowdRouting,
