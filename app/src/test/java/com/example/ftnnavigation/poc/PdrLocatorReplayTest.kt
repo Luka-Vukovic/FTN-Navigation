@@ -17,8 +17,8 @@ import kotlin.math.hypot
 /**
  * Pušta snimak sa telefona ([SensorRecorder]) kroz [PdrLocator]: koraci (S - smer i ponavljanje kako ih je dao
  * telefon), GPS (G), ručna označavanja (L RUCNO, sa stanjem prekidača "Ispravi smer" iz H reda) i odgovori na pitanje
- * za lift (L LIFT, Q ODUSTAO; samo pitanje replay postavlja sam, po vremenu uzoraka A). Prelazi
- * (ULAZ, PROLAZ, GPS_IZLAZ...) se ne prepisuju iz snimka - računa ih locator, pa se porede sa zabeleženim.
+ * za lift (L LIFT, Q ODUSTAO). Vožnje liftom replay prepoznaje sam ([LiftRideDetector] nad redovima R, A i S). Prelazi
+ * (ULAZ, PROLAZ, GPS_IZLAZ, LIFT...) se ne prepisuju iz snimka - računa ih locator, pa se porede sa zabeleženim.
  * Izlaz: `app/build/pdr-replay/<snimak>-mesto.txt` (događaji) i `-putanja.csv` (pozicija po koraku/GPS-u u
  * metrima kampusa). Samo uz PDR_REPLAY (fajl ili folder):
  * ```
@@ -85,11 +85,22 @@ class PdrLocatorReplayTest {
                     free?.let { String.format(Locale.ROOT, "%.2f", it.x) } ?: "", free?.let { String.format(Locale.ROOT, "%.2f", it.y) } ?: "", edge),
             )
         }
+        val lift = LiftRideDetector()
         for ((i, f) in lines.withIndex()) {
             val t = f.getOrNull(1)?.toLongOrNull() ?: continue
             when (f[0]) {
-                // Stajanje kod lifta: telefon proverava svake sekunde, replay na svakom uzorku akcelerometra (do ~1 s ranije).
-                "A" -> locator.checkLift(t)?.let { log(t, "replay: pitanje za lift ${it.lift.id}") }
+                "R" -> lift.onRotation(FloatArray(9) { f[2 + it].toFloat() })
+                "A" -> lift.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)?.let { ride ->
+                    val before = locator.place
+                    val ride0 = String.format(Locale.ROOT, "%.1f-%.1f s, %+.1f m", sec(ride.startNs), sec(ride.endNs), ride.heightM)
+                    when (val outcome = locator.liftRide(ride)) {
+                        is LiftOutcome.Moved -> log(t, "replay: vožnja $ride0, ${before.floor} -> ${outcome.change.toFloor}")
+                        is LiftOutcome.Ask -> log(t, "replay: vožnja $ride0, pitanje (predlog ${outcome.prompt.suggested})")
+                        null -> log(t, "replay: vožnja $ride0, nije kod lifta")
+                    }
+                    row(t, "V")
+                }
+                "V" -> log(t, String.format(Locale.ROOT, "telefon: vožnja %+.1f m", f[4].toDouble()))
                 "Q" -> if (f[2] == "ODUSTAO") {
                     locator.dismissLift()
                     log(t, "telefon: nisam u liftu")
@@ -97,6 +108,7 @@ class PdrLocatorReplayTest {
                     log(t, "telefon: pitanje za lift ${f[3]}")
                 }
                 "S" -> {
+                    lift.onStep(t)
                     steps++
                     val reason = locator.step(f[2].toFloat(), stepM, f[3].toInt(), t)
                     if (reason != null) log(t, "replay: $reason")
@@ -139,10 +151,17 @@ class PdrLocatorReplayTest {
                         steps = 0
                         row(t, "L")
                     } else if (reason == PlaceReason.LIFT) {
-                        // Izbor sprata u pitanju za lift; ako replay pitanje nije postavio, tačka se ipak premešta (kao telefon).
-                        val asked = locator.selectLiftFloor(place.floor) != null
-                        if (!asked) locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()), measure = false)
-                        log(t, "telefon: LIFT ${place.buildingId} ${place.floor}" + if (asked) "" else " (replay nije pitao - postavljeno)")
+                        // Telefon: vožnja ili izbor u pitanju (snimci do 08.10.2026: pitanje posle stajanja). Replay je već
+                        // na tom spratu (sam prepoznao vožnju) - ništa; čeka pitanje - izbor; inače se postavlja kao telefon.
+                        val note = when {
+                            locator.liftPrompt != null -> if (locator.selectLiftFloor(place.floor) != null) "" else " (?)"
+                            locator.place == place -> " (replay već tu)"
+                            else -> {
+                                locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()), measure = false)
+                                " (replay nije prepoznao - postavljeno)"
+                            }
+                        }
+                        log(t, "telefon: LIFT ${place.buildingId} ${place.floor}$note")
                         row(t, "L")
                     } else {
                         log(t, "telefon: $reason ${place.buildingId} ${place.floor}")

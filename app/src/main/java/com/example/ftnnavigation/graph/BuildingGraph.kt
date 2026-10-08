@@ -210,6 +210,10 @@ class BuildingGraph(
     /**
      * Ruta od proizvoljne tačke (npr. PDR pozicije): pravom linijom do najbližeg čvora, pa A*.
      * Prvi deo puta je uračunat u vreme i dužinu; [Route.nodes] počinje tim čvorom.
+     *
+     * Sa [startTypes] (staze kampusa) ruta kreće sa najbliže tačke na HOD ivici između takvih čvorova, ne sa najbližeg
+     * čvora: čvorovi staza su samo na raskrsnicama, pa je ruta iz sredine ulice išla do čvora u stranu i nazad (teren
+     * 08.10.2026, snimci ekrana - "trougao" pored NTP-a).
      */
     fun routeFrom(
         buildingId: String,
@@ -220,9 +224,39 @@ class BuildingGraph(
         profile: RoutingProfile = RoutingProfile(),
         startTypes: Set<NodeType>? = null,
     ): Route? {
+        val point = placement(buildingId).toMeters(x, y)
+        if (startTypes != null) {
+            nearestEdgePoint(buildingId, floor, point, startTypes)?.let { (onEdge, legM) ->
+                return routeFrom(onEdge, toId, profile)?.withLeg(legM, profile)
+            }
+        }
         val start = nearestNode(buildingId, floor, x, y, startTypes) ?: return null
-        val legM = distanceM(position(start), placement(buildingId).toMeters(x, y))
+        val legM = distanceM(position(start), point)
         return route(start.id, toId, profile)?.withLeg(legM, profile)
+    }
+
+    /**
+     * Najbliža tačka [point] (metri) na HOD ivici između čvorova tipova [types] zgrade [buildingId] na spratu [floor], i
+     * rastojanje do nje; null ako takvih ivica nema.
+     */
+    fun nearestEdgePoint(buildingId: String, floor: Int, point: PointM, types: Set<NodeType>): Pair<EdgePoint, Double>? {
+        var best: Pair<EdgePoint, Double>? = null
+        for (edge in edges) {
+            if (edge.type != EdgeType.HOD) continue
+            val a = byId.getValue(edge.fromId)
+            val b = byId.getValue(edge.toId)
+            if (a.buildingId != buildingId || b.buildingId != buildingId || a.floor != floor || b.floor != floor) continue
+            if (a.type !in types || b.type !in types) continue
+            val pa = position(a)
+            val pb = position(b)
+            val dx = pb.x - pa.x
+            val dy = pb.y - pa.y
+            val length2 = dx * dx + dy * dy
+            val t = if (length2 == 0.0) 0.0 else (((point.x - pa.x) * dx + (point.y - pa.y) * dy) / length2).coerceIn(0.0, 1.0)
+            val d = distanceM(PointM(pa.x + t * dx, pa.y + t * dy), point)
+            if (best == null || d < best.second) best = EdgePoint(a, b, t) to d
+        }
+        return best
     }
 
     /**

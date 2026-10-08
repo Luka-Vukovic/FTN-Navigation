@@ -25,6 +25,8 @@ import java.time.format.DateTimeFormatter
  *   PDR smer − stvarni bez ispravke (°), uz_ispravku = sa ispravkom koja je važila na putu; isti t kao `L` red.
  * - `Q,t,PITANJE,lift,sprat` / `Q,t,ODUSTAO` - pitanje za lift postavljeno ([LiftPrompt]) / "Nisam u liftu"; izabran
  *   sprat je `L` red sa razlogom LIFT. t kao u `L` redu.
+ * - `V,t,početak,kraj,pomeraj_m` - prepoznata vožnja liftom ([LiftRide]; t = uzorak na kome je prepoznata, isti sat kao
+ *   `A`); promena sprata posle nje je `L` red LIFT, a nesiguran broj spratova `Q` PITANJE.
  *
  * Fajlovi: `files/pdr/` aplikacije (`adb exec-out run-as <paket> cat files/pdr/<fajl>`).
  */
@@ -64,6 +66,9 @@ class SensorRecorder private constructor(val file: File) {
     /** Pitanje za lift postavljeno ([prompt]) ili odbijeno (null). */
     fun lift(timestampNs: Long, prompt: LiftPrompt?) =
         write(if (prompt != null) "Q,$timestampNs,PITANJE,${prompt.lift.id},${prompt.fromFloor}" else "Q,$timestampNs,ODUSTAO")
+
+    /** Prepoznata vožnja liftom. */
+    fun liftRide(timestampNs: Long, ride: LiftRide) = write("V,$timestampNs,${ride.startNs},${ride.endNs},${ride.heightM}")
 
     /** Senzori odjavljeni (Mapa u pozadini, ekran ugašen) - snimak se upisuje do tu. */
     fun pause(timestampNs: Long) {

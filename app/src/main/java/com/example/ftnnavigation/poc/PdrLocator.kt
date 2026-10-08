@@ -61,7 +61,7 @@ enum class PlaceReason {
     /** Stepenicama na drugi sprat (okret na podestu između dva leta, [StairWalk]). */
     STEPENICE,
 
-    /** Liftom: korisnik je u pitanju ([LiftPrompt]) izabrao sprat. */
+    /** Liftom: prepoznata vožnja ([LiftRide]) ili izbor sprata u pitanju ([LiftPrompt]). */
     LIFT,
 
     /**
@@ -100,6 +100,16 @@ private const val ENTER_DEPTH_M = 1.5
  * tom snimku više ne okida - tada ostaje "Ovde sam".
  */
 private const val ENTER_RADIUS_M = 6.0
+
+/**
+ * Kad su uslovi za ulazak ispunjeni, tačka je i dalje do [ENTER_RADIUS_M] od ulaza (teren 08.10.2026: NB 5,3 m - korisnik
+ * "možda 7 koraka pre"; NTP opet prerano). Ulazak tek kad koraci pređu taj put ka ulazu (deo koraka u pravcu ulaza),
+ * osim ovoliko (vrata, korak).
+ */
+private const val ENTER_SLACK_M = 1.0
+
+/** Ulazak koji čeka se otkazuje ako se tačka udalji od ulaza više od ovoga. */
+private const val ENTER_CANCEL_M = 12.0
 
 /** Tačka na grafu je na kraju hodnika (na čvoru prolaza/ulaza). */
 private const val AT_GATE_M = 0.3
@@ -200,21 +210,41 @@ private const val LANDING_EXIT_STEPS = 4
  */
 private const val SECOND_FLIGHT_NO_CHANGE_STEPS = FLIGHT_STEPS + 2
 
-// Lift (telefon nema barometar - sprat bira korisnik). Vrednosti su procena, NISU proverene na terenu; kasnije i
-// prepoznavanje vožnje iz akcelerometra (udar pri polasku i zaustavljanju), kad budu snimci vožnji.
-
-/** Tačka (na grafu ako je zalepljena) najviše ovoliko od čvora lifta ... */
-private const val LIFT_NEAR_M = 3.0
-
-/** ... i bez koraka ovoliko -> pitanje na koji sprat (čekanje lifta je obično duže, vožnja jednog sprata ~5 s). */
-private const val LIFT_STILL_NS = 10_000_000_000L
+// Lift: vožnja se prepoznaje iz akcelerometra ([LiftRideDetector], teren 08.10.2026), a broj spratova iz pomeraja. Do
+// 08.10. je pitanje "na koji sprat?" stizalo posle 10 s stajanja na 3 m od lifta - na terenu prerano (dok čeka lift, čim
+// uđe), lažno (čekanje bez vožnje, posle vožnje u prizemlju) ili nikako (stavljanje telefona u džep pravi lažne korake -
+// tačka se odmakla ~10 m od lifta).
 
 /**
- * Pitanje "na koji sprat?" kad korisnik stoji kod lifta [lift]: [floors] su spratovi do kojih lift ide, bez
- * sprata [fromFloor] na kome je tačka (od najvišeg); [suggested] je sprat odredišta u toj zgradi, ako ga ima.
+ * Vožnja se pripisuje najbližem liftu na spratu tačke, ako je najviše ovoliko daleko: tačka ume da se odmakne od lifta
+ * (lažni koraci pri stavljanju u džep - 08.10.2026 ~10 m). Jezgra sa liftovima u NTP-u su desetinama metara razmaknuta.
+ */
+private const val LIFT_RIDE_NEAR_M = 15.0
+
+/**
+ * Visina sprata za broj spratova iz pomeraja vožnje. NTP (08.10.2026, 6 vožnji): 3,5-4,05 m po spratu, P -> V 19,2 m.
+ * NB i Kula: ista vrednost je PRETPOSTAVKA (nije mereno).
+ */
+private const val FLOOR_HEIGHT_M = 3.75
+
+/** Broj spratova (pomeraj / visina sprata) dalji od celog broja od ovoga nije siguran -> pitanje. Na snimcima do 0,16. */
+private const val FLOOR_ROUNDING = 0.35
+
+/**
+ * Pitanje "na koji sprat?" posle vožnje liftom [lift] kad broj spratova iz pomeraja nije siguran: [floors] su spratovi
+ * do kojih lift ide, bez sprata [fromFloor] na kome je tačka (od najvišeg); [suggested] je sprat najbliži izmerenom.
  */
 data class LiftPrompt(val lift: Node, val fromFloor: Int, val floors: List<Int>, val suggested: Int?) {
     val buildingId: String get() = lift.buildingId
+}
+
+/** Vožnja liftom u zgradi [buildingId] sa sprata [fromFloor] na [toFloor] (toast). */
+data class LiftChange(val buildingId: String, val fromFloor: Int, val toFloor: Int)
+
+/** Šta je vožnja promenila: tačka je na liftu novog sprata, ili sprat nije siguran pa se pita ([PdrLocator.liftPrompt]). */
+sealed interface LiftOutcome {
+    data class Moved(val change: LiftChange) : LiftOutcome
+    data class Ask(val prompt: LiftPrompt) : LiftOutcome
 }
 
 // Ispravka smera iz rekalibracije.
@@ -269,9 +299,9 @@ sealed interface HeadingCheck {
  *   na podestu menja sprat; strana okreta je gore ili dole (stepenište je spirala - [STAIR_UP_TURN], naučeno sa
  *   najnižeg/najvišeg nivoa ili iz ispravke). Hod od stepeništa ka hodniku vraća tačku na graf sprata.
  *
- * - lift: tačka stoji kod lifta bez koraka [LIFT_STILL_NS] -> pitanje na koji sprat ([checkLift], [LiftPrompt]); sprat
- *   bira korisnik ([selectLiftFloor]) - nema barometra. Koraci dok pitanje čeka se pamte i ponove od lifta na izabranom
- *   spratu (telefon je u vožnji možda u džepu, pa se odgovara tek posle izlaska).
+ * - lift: prepoznata vožnja ([LiftRide]) kod lifta -> tačka na liftu sprata izračunatog iz pomeraja ([liftRide]); kad
+ *   broj spratova nije siguran, pitanje na koji sprat ([LiftPrompt], [selectLiftFloor]). Koraci dok pitanje čeka se pamte
+ *   i ponove od lifta na izabranom spratu.
  *
  * Svako
  * ručno označavanje je i sidro: posle bar [MIN_BIAS_DISTANCE_M] hoda sa istog sprata, razlika između PDR puta
@@ -353,6 +383,13 @@ class PdrLocator(
 
     /** Ulaz kampusa ([outside], K-U-...) i čvor zgrade sa planom iza njega. */
     private class Entrance(val outside: Node, val inside: Node)
+
+    /** Ulazak čeka: tačka je bila [remainingM] od ulaza [entrance]; [walkedM] je zbir koraka od tada. */
+    private class PendingEntry(val entrance: Entrance, val remainingM: Double) {
+        var walkedM = 0.0
+    }
+
+    private var pendingEntry: PendingEntry? = null
 
     private val entrances: Map<String, List<Entrance>> = graph.nodes
         .filter { it.buildingId == CAMPUS_ID && it.type == NodeType.ULAZ }
@@ -478,15 +515,9 @@ class PdrLocator(
         .filter { it.type == NodeType.LIFT && it.isIndoor }
         .groupBy { it.place }
 
-    /** Vreme poslednjeg koraka (sat iz [step]/[checkLift]); null = od sidra još nije bilo koraka ni provere. */
-    private var lastStepNs: Long? = null
-
     /** Pitanje za lift čeka odgovor; null = nema pitanja. */
     var liftPrompt: LiftPrompt? = null
         private set
-
-    /** Pitanje je već postavljeno (i odgovoreno/odbijeno) - novo tek posle koraka. */
-    private var liftAsked = false
 
     /** Koraci od pitanja za lift (ponavljaju se od lifta na izabranom spratu). */
     private class PendingStep(val azimuthDeg: Float, val lengthM: Float, val redoSteps: Int, val timeNs: Long?)
@@ -503,9 +534,8 @@ class PdrLocator(
      * merenja smera i učenja (replay: START red snimka nije označavanje).
      */
     fun setPosition(place: PdrPlace, point: Offset, measure: Boolean = true): HeadingCheck? {
-        // Označio je gde je - pitanje za lift (ako čeka) više ne važi, a stajanje posle označavanja nije vožnja: novo pitanje
-        // tek posle koraka (replay 03.10.2026: "Ovde sam" u holu kod lifta NB I sprata, pa 10-140 s stajanja - dva lažna pitanja).
-        clearLift(asked = true)
+        // Označio je gde je - pitanje za lift (ako čeka) više ne važi.
+        clearLift()
         if (!measure) {
             lastStairChange = null
             setAnchor(place, point)
@@ -529,12 +559,12 @@ class PdrLocator(
 
     /**
      * Novo praćenje: koraci od pre se ne ponavljaju, a ni let stepeništa se ne nastavlja (replay: lažna promena posle
-     * Start-a). Pitanje za lift tek posle prvog koraka (vreme između Stop i Start, ni stajanje posle Start-a, nije vožnja).
+     * Start-a).
      */
     fun clearRedo() {
         stepStarts.clear()
         watch = StairWalk()
-        clearLift(asked = true)
+        clearLift()
     }
 
     /** Briše poziciju i naučene ispravke smera; mesto ostaje (za prikaz). */
@@ -554,34 +584,40 @@ class PdrLocator(
     }
 
     /**
-     * Korisnik stoji: posle [LIFT_STILL_NS] bez koraka kod lifta (u zgradi, van stepeništa i prolaza) vraća pitanje na
-     * koji sprat - jednom, novo tek posle koraka. Posle označavanja i Start-a tek posle prvog koraka. [nowNs]: isti sat kao
-     * vreme koraka u [step]. Poziva se periodično.
+     * Prepoznata vožnja liftom ([LiftRideDetector]): najbliži lift na spratu tačke (u zgradi, van prolaza, najviše
+     * [LIFT_RIDE_NEAR_M]) i broj spratova iz pomeraja. Siguran broj, a lift ide do tog sprata -> tačka na liftu tog sprata
+     * ([LiftOutcome.Moved]); inače pitanje ([LiftOutcome.Ask], sa spratom najbližim izmerenom). null: nije kod lifta (ili
+     * pitanje već čeka).
      */
-    fun checkLift(nowNs: Long): LiftPrompt? {
-        if (liftPrompt != null || liftAsked) return null
+    fun liftRide(ride: LiftRide): LiftOutcome? {
+        if (liftPrompt != null) return null
         val raw = raw ?: return null
-        if (passage != null || climb != null || place.isCampus) return null
-        val since = lastStepNs ?: run {
-            lastStepNs = nowNs
-            return null
-        }
-        if (nowNs - since < LIFT_STILL_NS) return null
+        if (passage != null || place.isCampus) return null
         val here = match?.point?.let { local(it.x, it.y) } ?: local(raw.x, raw.y)
         val lift = lifts[place].orEmpty()
             .minByOrNull { distance(local(it.x, it.y), here) }
-            ?.takeIf { distance(local(it.x, it.y), here) <= LIFT_NEAR_M }
+            ?.takeIf { distance(local(it.x, it.y), here) <= LIFT_RIDE_NEAR_M }
             ?: return null
-        val floors = graph.neighbors(lift.id)
+        val targets = graph.neighbors(lift.id)
             .filter { (other, type) -> type == EdgeType.LIFT && other.buildingId == lift.buildingId }
-            .map { it.first.floor }
-            .distinct()
-            .sortedDescending()
-        if (floors.isEmpty()) return null
-        val suggested = destination?.takeIf { it.buildingId == lift.buildingId }?.floor?.takeIf { it in floors }
-        liftAsked = true
+            .associate { it.first.floor to it.first }
+        if (targets.isEmpty()) return null
+        val from = place.floor
+        val measured = ride.heightM / FLOOR_HEIGHT_M
+        val floors = Math.round(measured).toInt()
+        val target = targets[from + floors]
+        if (floors != 0 && abs(measured - floors) <= FLOOR_ROUNDING && target != null) {
+            liftSteps.clear()
+            lastStairChange = null
+            moveTo(target)
+            return LiftOutcome.Moved(LiftChange(lift.buildingId, from, target.floor))
+        }
+        // Nesigurno: predlog je sprat najbliži izmerenom, u smeru vožnje.
+        val suggested = targets.keys.filter { if (ride.up) it > from else it < from }.minByOrNull { abs(it - (from + measured)) }
         liftSteps.clear()
-        return LiftPrompt(lift, place.floor, floors, suggested).also { liftPrompt = it }
+        val prompt = LiftPrompt(lift, from, targets.keys.sortedDescending(), suggested)
+        liftPrompt = prompt
+        return LiftOutcome.Ask(prompt)
     }
 
     /**
@@ -602,32 +638,27 @@ class PdrLocator(
         return PlaceReason.LIFT
     }
 
-    /** "Nisam u liftu": pitanje se sklanja, tačka ostaje gde je; novo pitanje tek posle koraka i stajanja. */
+    /** "Nisam u liftu": pitanje se sklanja, tačka ostaje gde je. */
     fun dismissLift() {
         liftPrompt = null
         liftSteps.clear()
     }
 
-    /** Briše pitanje za lift; [asked] = true: novo pitanje tek posle koraka. */
-    private fun clearLift(asked: Boolean = false) {
+    private fun clearLift() {
         liftPrompt = null
         liftSteps.clear()
-        liftAsked = asked
-        lastStepNs = null
     }
 
     /**
      * Jedan korak u pravcu [azimuthDeg] (magnetski, sa senzora). Ako [redoSteps] > 0, toliko prethodnih
      * koraka se ponavlja u tom pravcu (ispravljen smer). [timeNs]: vreme koraka (bilo koji sat) - pauza prekida let na
-     * stepeništu, a stajanje kod lifta se meri od njega ([checkLift], isti sat). Vraća razlog ako je pozicija prešla na
-     * drugo mesto.
+     * stepeništu. Vraća razlog ako je pozicija prešla na drugo mesto.
      */
     fun step(azimuthDeg: Float, lengthM: Float, redoSteps: Int = 0, timeNs: Long? = null): PlaceReason? {
         var raw = raw ?: return null
         // Pitanje za lift čeka: korak se pamti (ponavlja se na izabranom spratu), a na ovom spratu ide dalje (možda nije
-        // bio u liftu). Bez pitanja korak dozvoljava novo pitanje posle sledećeg stajanja.
-        if (liftPrompt != null) liftSteps += PendingStep(azimuthDeg, lengthM, redoSteps, timeNs) else liftAsked = false
-        lastStepNs = timeNs
+        // bio u liftu).
+        if (liftPrompt != null) liftSteps += PendingStep(azimuthDeg, lengthM, redoSteps, timeNs)
         stepsSinceStairChange++
         lastStepM = if (climb != null) STAIR_STEP_M else lengthM
         passage?.let { return passageStep(it, azimuthDeg, lengthM) }
@@ -666,7 +697,7 @@ class PdrLocator(
             stairTurnNearby(azimuthDeg)?.let { return it }
         }
         if (++stepsSinceChange < MIN_STEPS_BETWEEN_CHANGES) return null
-        return if (place.isCampus) enterBuilding() else leaveThroughGateway()
+        return if (place.isCampus) enterBuilding(lengthM.toDouble() * (redo + 1)) else leaveThroughGateway()
     }
 
     /**
@@ -736,6 +767,7 @@ class PdrLocator(
         gpsOutliers = 0
         exitDetector = if (place.isCampus) null else BuildingDetector(campus)
         stepsSinceChange = MIN_STEPS_BETWEEN_CHANGES
+        pendingEntry = null
     }
 
     /** Prelaz: pozicija na čvoru [node] (zgrada ili kampus). */
@@ -1199,15 +1231,35 @@ class PdrLocator(
     }
 
     /** Napolju: tačka duboko u obrisu zgrade sa planom, blizu njenog ulaza -> u zgradu, na taj ulaz. */
-    private fun enterBuilding(): PlaceReason? {
+    /**
+     * Napolju posle koraka ([stepM]: dužina koraka, uz ponovljene): tačka u obrisu zgrade sa planom blizu njenog ulaza ->
+     * ulazak, ali tek kad koraci pređu put koji je tačka tada imala do ulaza ([PendingEntry]). Pređeni put je zbir dužina
+     * koraka, ne deo u pravcu ulaza: tačka koja uđe u obris pravo kroz vrata je već iza njih, a tačka koju GPS drži bočno
+     * od vrata ide pored njih (teren 08.10.2026, NB: tačka 5 m bočno, korisnik ide popreko na zid ka vratima).
+     */
+    private fun enterBuilding(stepM: Double): PlaceReason? {
         val p = meters(PdrPlace.CAMPUS, raw ?: return null)
+        pendingEntry?.let { pending ->
+            pending.walkedM += stepM
+            if (pending.walkedM >= pending.remainingM - ENTER_SLACK_M) {
+                moveTo(pending.entrance.inside)
+                return PlaceReason.ULAZ
+            }
+            if (distance(graph.position(pending.entrance.outside), p) <= ENTER_CANCEL_M) return null
+            pendingEntry = null
+        }
         for ((buildingId, list) in entrances) {
             val outline = campus.building(buildingId) ?: continue
             if (!outline.contains(p) || outline.distanceToWallM(p) < ENTER_DEPTH_M) continue
             val entrance = list.minBy { distance(graph.position(it.outside), p) }
-            if (distance(graph.position(entrance.outside), p) > ENTER_RADIUS_M) continue
-            moveTo(entrance.inside)
-            return PlaceReason.ULAZ
+            val toDoor = distance(graph.position(entrance.outside), p)
+            if (toDoor > ENTER_RADIUS_M) continue
+            if (toDoor <= ENTER_SLACK_M) {
+                moveTo(entrance.inside)
+                return PlaceReason.ULAZ
+            }
+            pendingEntry = PendingEntry(entrance, toDoor)
+            return null
         }
         return null
     }

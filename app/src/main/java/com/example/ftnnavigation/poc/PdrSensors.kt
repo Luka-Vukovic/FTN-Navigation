@@ -20,8 +20,8 @@ import kotlin.math.abs
  *
  * Oba senzora idu u [direction] (smer hoda, ne pravac telefona). [onHeading] dobija smer za
  * prikaz (azimut u stepenima, 0..360, 0 = sever, u smeru kazaljke), a [onStep] smer hoda koraka
- * (uz broj prethodnih koraka koje treba ponoviti). [recorder] (debug) snima sve događaje.
- * Događaji stižu na glavnoj niti.
+ * (uz broj prethodnih koraka koje treba ponoviti). [lift] (ako je zadat) dobija iste uzorke i korake, a prepoznata
+ * vožnja liftom ide u [onLiftRide]. [recorder] (debug) snima sve događaje. Događaji stižu na glavnoj niti.
  */
 class PdrSensorSession(
     private val sensorManager: SensorManager,
@@ -30,12 +30,15 @@ class PdrSensorSession(
     private val onHeading: (Float) -> Unit,
     private val onStep: (WalkingDirection.WalkStep) -> Unit,
     private val recorder: SensorRecorder? = null,
+    private val lift: LiftRideDetector? = null,
+    private val onLiftRide: (LiftRide) -> Unit = {},
 ) {
     private val rotationMatrix = FloatArray(9)
     private var lastHeading = Float.NaN
     private var lastAccelNs = 0L
 
     private val stepDetector = AccelStepDetector {
+        lift?.onStep(lastAccelNs)
         direction.onStep(lastAccelNs)?.let { step ->
             recorder?.step(lastAccelNs, step, direction)
             onStep(step)
@@ -49,6 +52,7 @@ class PdrSensorSession(
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
                     recorder?.rotation(event.timestamp, rotationMatrix)
                     direction.onRotation(rotationMatrix, event.timestamp)
+                    lift?.onRotation(rotationMatrix)
                     // Senzor javlja ~50 puta u sekundi - prikaz se osvežava tek na promenu od 1°.
                     val heading = direction.heading() ?: return
                     if (lastHeading.isNaN() || abs(angleDiffDeg(heading, lastHeading)) >= 1f) {
@@ -61,6 +65,10 @@ class PdrSensorSession(
                     recorder?.accelerometer(event.timestamp, event.values[0], event.values[1], event.values[2])
                     direction.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
                     stepDetector.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
+                    lift?.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)?.let { ride ->
+                        recorder?.liftRide(event.timestamp, ride)
+                        onLiftRide(ride)
+                    }
                 }
             }
         }

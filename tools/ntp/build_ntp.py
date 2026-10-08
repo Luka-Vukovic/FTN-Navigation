@@ -285,6 +285,7 @@ SPLIT_DOORS = {
     15: [((1187, 1100), (1301, 1100), "R1160"), ((1187, 1220), (1301, 1220), "R1160")],
     16: [((1500, 1057), (1500, 1280), "C1494"), ((1720, 1057), (1720, 1280), "C1795")],
     17: [((1952, 1260), (1822, 1334), "C1795"), ((1952, 1460), (1822, 1470), "K1795")],
+    18: [((755, 1473), (755, 1389), "C815"), ((871, 1473), (871, 1389), "C870")],  # III: 313 | 314 (pregrada x 812)
 }
 # Sobe koje nisu na crtežu (korisnik je dodirnuo mesto van nacrtanih soba): (centar, vrata, čvor) - PRETPOSTAVKA.
 ABOVE_RIGHT = ((1170, 765), (1301, 805), "R830")  # iznad sobe 14, levo od početka desnog hodnika
@@ -296,19 +297,22 @@ TYPICAL_LABELS = {
         *[(21 + i, 138 - i) for i in range(14)]],
     2: [(1, 208), (2, 209), (3, 210), (4, 211), (6, 202), (10, 212), (11, 213), (12, 214), (14, 218), (15, 217),
         (16, (221, 222)), (17, (223, 224)), (18, 215), (19, 216), ("above", 219), *[(21 + i, 238 - i) for i in range(14)]],
+    # III: teren 08.10.2026 (korisnik: "Redom idu prostorije 313, 314, 315, pa toalet"; evakuacioni plan: pregrade na x 812
+    # i 930) - soba 18 su dve sobe (313, 314), 315 je soba 19, a soba 20 je blok toaleta. Do 08.10. je 315 bio u sobi 20.
     3: [(1, 307), (2, 308), (3, 309), (4, 310), (10, 311), (11, 312), (14, 317), (15, 316), ("above", 318),
-        (16, (320, 321)), (17, (322, 323)), (18, 313), (19, 314), (20, 315), *[(21 + i, 337 - i) for i in range(14)]],
+        (16, (320, 321)), (17, (322, 323)), (18, (313, 314)), (19, 315), *[(21 + i, 337 - i) for i in range(14)]],
     4: [(1, 407), (2, 408), (3, 409), (6, 402), (7, 403), (8, 404), (9, 405), (10, 410), (11, 411), (12, 412),
         (14, 416), (15, 415), (16, 417), (17, 418), (18, 413), (19, 414), ("corner", 419),
         *[(21 + i, 433 - i) for i in range(14)]],
 }
-SPLIT = {1: {14, 15}, 2: {17}, 3: {16, 17}}
+SPLIT = {1: {14, 15}, 2: {17}, 3: {16, 17, 18}}
 # Pregrade podeljenih soba na crtežu II-IV (I sprat ima svoje, FIRST): sredina između vrata polovina, do fasade.
 SPLIT_SHAPES = {
     16: [[(1402, 834), (1612, 990), (1612, 1280), (1402, 1280)],
          [(1612, 990), (1747, 1090), (1822, 1146), (1822, 1280), (1612, 1280)]],
     17: [[(1822, 1146), (2055, 1360), (1822, 1360)],
          [(1822, 1360), (2055, 1360), (2075, 1378), (2081, 1556), (1822, 1556)]],
+    18: [[(699, 1389), (812, 1389), (812, 1556), (699, 1556)], [(812, 1389), (930, 1389), (930, 1556), (812, 1556)]],
 }
 # Soba 17 na II i III spratu: u drugu polovinu (224, 323) se ulazi kroz prvu (223, 322) - prva je prolaz (čvor hodnika
 # P17 u njoj; sala nije usputni čvor grafa), druga ima vrata u pregradi. Gornja polovina je uzan trougao pod fasadom.
@@ -573,19 +577,25 @@ def ground_floor(g):
 
 
 # Toaleti (čvorovi bez naziva, vrsta TOALET - "najbliži toalet" u aplikaciji): (centar, vrata, čvor hodnika).
-# I-IV: soba 20 (donji srednji red, na crtežu "toaleti") - samo gde nema oznaku sa terena: na III spratu je to NTP-315
-# (korisnik 07.10.2026: "315 se preklapa sa toaletom"), na I, II i IV toalet je PRETPOSTAVKA. Toalet uz liftove (teren
-# 04.10.2026: "svaki sprat (ne prizemlje) ima toalet odmah do lifta"), vrata ka glavnom hodniku - PRETPOSTAVKA.
-# Prizemlje: WC levo od kancelarije NTP-005. Vrata svih - sredina zida ka hodniku (kao sale).
+# I-IV: soba 20 (donji srednji red, na crtežu "toaleti") - samo gde nema oznaku sa terena. Teren 08.10.2026: na III spratu
+# je to zaista toalet ("313, 314, 315, pa toalet"; 07.10. je ovde bio NTP-315), na I, II i IV isto (korisnik: "možeš
+# pretpostaviti u odnosu na ono što sam ti potvrdio na 3. spratu"; evakuacioni plan: kabine i predvorje na svim). Ulaz
+# u predvorje bloka: na II-IV odozgo (srednji hodnik), na I odozdo (donji hodnik - strelica na planu).
+# Toalet uz liftove L1/L2 (teren 04.10.2026: "svaki sprat (ne prizemlje) ima toalet odmah do lifta"; evakuacioni plan:
+# pregrade i lavaboi ispod liftova): ulaz iz predvorja gore desno, iz gornjeg hodnika. Do 08.10. vrata ka glavnom hodniku
+# (levo) - korisnik: "može biti zbunjujuće što vrata nisu sa te strane".
+# Prizemlje: WC levo od kancelarije NTP-005. Vrata - sredina zida ka hodniku (kao sale), osim gde piše drugačije.
 TOILET_BLOCK_ROOM = 20
 TOILET_BLOCK = ((1170, 1472), (1170, 1389), "C1170")
-TOILET_BY_LIFTS = ((500, 765), (450, 765), "M736")
+TOILET_BLOCK_FIRST = ((1170, 1472), (1170, 1556), "B1226")
+TOILET_BY_LIFTS = ((500, 765), (600, 700), "U640")
 TOILETS_GROUND = [((15, 1479), (15, 1407), "W0")]
 
 
 def typical_toilets(f):
     labeled = {room for room, _ in TYPICAL_LABELS[f]}
-    return ([TOILET_BLOCK] if TOILET_BLOCK_ROOM not in labeled else []) + [TOILET_BY_LIFTS]
+    block = TOILET_BLOCK_FIRST if f == 1 else TOILET_BLOCK
+    return ([block] if TOILET_BLOCK_ROOM not in labeled else []) + [TOILET_BY_LIFTS]
 
 
 def toilets(g, f, specs):

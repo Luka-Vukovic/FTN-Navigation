@@ -230,6 +230,38 @@ class NtpGraphTest {
         assertTrue(outline.distanceToWallM(graph.position(door)) > outline.distanceToWallM(graph.position(room)))
     }
 
+    /**
+     * Teren 08.10.2026 (korisnik: "Redom idu prostorije 313, 314, 315, pa toalet"; evakuacioni plan): u donjem srednjem
+     * redu III sprata sleva nadesno 313, 314, 315, pa blok toaleta. Do 08.10. je 315 bio u bloku toaleta.
+     */
+    @Test
+    fun thirdFloor_313To315ThenToilet() {
+        val rooms = listOf("NTP-313", "NTP-314", "NTP-315").map { checkNotNull(graph.room(it)) }
+        assertTrue(rooms.all { it.floor == 3 })
+        assertEquals(rooms, rooms.sortedBy { it.x })
+        val toilet = ntpNodes.single {
+            it.floor == 3 && it.amenity == AMENITY_TOALET && it.x > rooms.last().x && kotlin.math.abs(it.y - rooms.last().y) < 0.01f
+        }
+        // Toalet je odmah posle 315 (bliži 315 nego 314).
+        assertTrue(toilet.x - rooms[2].x < rooms[2].x - rooms[0].x)
+    }
+
+    /**
+     * Toalet ispod liftova L1/L2 (I-IV): ulaz iz predvorja gore desno, iz gornjeg hodnika (evakuacioni plan; korisnik
+     * 08.10.2026 za rutu do toaleta: "može biti zbunjujuće što vrata nisu sa te strane" - bila su ka glavnom hodniku).
+     */
+    @Test
+    fun liftToilet_enteredFromUpperCorridor() {
+        for (floor in 1..4) {
+            val lift = graph.node("NTP-$floor-L1")!!
+            val toilet = ntpNodes.filter { it.floor == floor && it.amenity == AMENITY_TOALET }
+                .minBy { hypot((it.x - lift.x).toDouble(), (it.y - lift.y).toDouble()) }
+            val door = graph.neighbors(toilet.id).single().first
+            assertEquals(NodeType.VRATA, door.type)
+            assertTrue(graph.neighbors(door.id).any { (n, _) -> n.id == "NTP-$floor-U640" })
+        }
+    }
+
     /** Evakuacioni putevi se ne koriste (korisnik, 02.10.2026): terasa V sprata ne spaja hodnik i desno jezgro. */
     @Test
     fun topFloorTerrace_notUsed() {

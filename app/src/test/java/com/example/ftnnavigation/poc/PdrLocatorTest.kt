@@ -99,6 +99,38 @@ class PdrLocatorTest {
         assertNotNull(locator.match)
     }
 
+    /** Pravac (jedinični) spoljnog zida zgrade [id] najbližeg tački [p]. */
+    private fun wallDirection(id: String, p: PointM): PointM {
+        val ring = campus.building(id)!!.outline.map { (x, y) -> PointM(x.toDouble(), y.toDouble()) }
+        val (a, b) = ring.indices.map { ring[it] to ring[(it + 1) % ring.size] }.minBy { (a, b) -> distanceToSegment(p, a, b) }
+        val len = distance(a, b)
+        return PointM((b.x - a.x) / len, (b.y - a.y) / len)
+    }
+
+    /**
+     * Teren 08.10.2026: ulazak u NB "možda 7 koraka pre" - tačka (GPS + PDR) je već bila u obrisu, 5,3 m od ulaza (bočno, a
+     * korisnik je išao ka vratima). Ulazak tek kad koraci pređu taj put: tačka 2,5 m u obrisu, ~5,5 m uz zid od ulaza.
+     */
+    @Test
+    fun fromCampus_alreadyInOutlineBeforeDoor_entersAfterWalkingToDoor() {
+        val entrance = graph.position(node("K-U-NB-1"))
+        val outline = campus.building("NB")!!
+        val wall = wallDirection("NB", entrance)
+        fun at(along: Double, inward: Double, sign: Double) = PointM(
+            entrance.x + wall.x * along - sign * wall.y * inward,
+            entrance.y + wall.y * along + sign * wall.x * inward,
+        )
+        val sign = listOf(1.0, -1.0).single { outline.contains(at(0.0, 2.5, it)) }
+        val start = listOf(5.5, -5.5).map { at(it, 2.5, sign) }.first { outline.contains(it) && outline.distanceToWallM(it) >= 1.5 }
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val toward = magneticAzimuth(start, at(0.0, 2.5, sign))
+        val entered = (1..10).firstOrNull { locator.step(toward, stepM) == PlaceReason.ULAZ }
+        assertNotNull(entered)
+        // ~6 m do ulaza: najmanje (5,5 − 1) / 0,8 koraka; ranije ulazak odmah, čim je tačka do 6 m od ulaza.
+        assertTrue("ušao posle $entered koraka", entered!! >= 5)
+        assertEquals(PdrPlace("NB", 0), locator.place)
+    }
+
     /**
      * Do kraja hodnika [gateId], pa dalje pravcem hodnika dok pozicija ne stigne na [targetId] (kraj hodnika druge
      * zgrade ili ulaz na kampusu). Vraća razloge i broj koraka posle kraja hodnika.
@@ -725,11 +757,16 @@ class PdrLocatorTest {
         assertNotNull("sišao sa stepeništa na graf", locator.match)
     }
 
-    // Lift: pitanje na koji sprat posle stajanja kod lifta.
+    // Lift: prepoznata vožnja ([LiftRide]) menja sprat po pomeraju; pitanje samo kad broj spratova nije siguran.
 
     private val sec = 1_000_000_000L
 
-    /** Korisnik je iz hodnika ispred lifta [liftId] ušao u lift; poslednji korak u vremenu 0 (stajanje se meri od njega). */
+    /** Visina sprata kao u [PdrLocator] (NTP, teren 08.10.2026). */
+    private val floorM = 3.75
+
+    private fun ride(floors: Double) = LiftRide(0, 8 * sec, floors * floorM)
+
+    /** Korisnik je iz hodnika ispred lifta [liftId] ušao u lift. */
     private fun atLift(liftId: String): PdrLocator {
         val lift = graph.position(node(liftId))
         val locator = locatorAt(inner(liftId).id)
@@ -737,7 +774,6 @@ class PdrLocatorTest {
         val steps = (distance(locator.position(), lift) / stepM).toInt().coerceAtLeast(1)
         for (i in steps - 1 downTo 0) locator.step(azimuth, stepM, timeNs = -i * 600_000_000L)
         assertTrue("u liftu", distance(locator.position(), lift) < 1.0)
-        assertNull(locator.checkLift(0))
         return locator
     }
 
@@ -745,78 +781,95 @@ class PdrLocatorTest {
     private fun outOfLift(liftId: String) = magneticAzimuth(graph.position(node(liftId)), graph.position(inner(liftId)))
 
     @Test
-    fun lift_standingStill_asksFloor() {
+    fun lift_rideUp_movesToMeasuredFloor() {
         val locator = atLift("NB-0-L")
-        assertNull("posle 9 s još ne", locator.checkLift(9 * sec))
-        val prompt = locator.checkLift(10 * sec)
-        assertNotNull(prompt)
-        assertEquals("NB-0-L", prompt!!.lift.id)
-        assertEquals(0, prompt.fromFloor)
-        // Lift NB ide -1 ... IV (na V sprat ne), bez sprata na kome je.
-        assertEquals(listOf(4, 3, 2, 1, -1), prompt.floors)
-        assertNull(prompt.suggested)
-        assertEquals(prompt, locator.liftPrompt)
-        assertNull("pita se jednom", locator.checkLift(20 * sec))
+        val outcome = locator.liftRide(ride(3.1))
+        assertEquals(LiftOutcome.Moved(LiftChange("NB", 0, 3)), outcome)
+        assertEquals(PdrPlace("NB", 3), locator.place)
+        assertNull(locator.liftPrompt)
+        assertNotNull("na grafu novog sprata", locator.match)
+        assertTrue(distance(locator.position(), graph.position(node("NB-3-L"))) < 0.5)
+    }
+
+    /** Teren 08.10.2026: NTP II -> P liftom L2 (7,5 m), I -> P liftom L1 (3,5 m). */
+    @Test
+    fun lift_rideDown_ntp() {
+        val fromSecond = atLift("NTP-2-L2")
+        assertEquals(LiftOutcome.Moved(LiftChange("NTP", 2, 0)), fromSecond.liftRide(LiftRide(0, 8 * sec, -7.5)))
+        val fromFirst = atLift("NTP-1-L1")
+        assertEquals(LiftOutcome.Moved(LiftChange("NTP", 1, 0)), fromFirst.liftRide(LiftRide(0, 6 * sec, -3.5)))
+        assertEquals(PdrPlace("NTP", 0), fromFirst.place)
+    }
+
+    /** Stajanje na IV usput (08.10.2026, V -> III): dve vožnje po jedan sprat. */
+    @Test
+    fun lift_stopOnTheWay_twoRides() {
+        val locator = atLift("NTP-5-L1")
+        assertEquals(LiftOutcome.Moved(LiftChange("NTP", 5, 4)), locator.liftRide(LiftRide(0, 6 * sec, -3.6)))
+        assertEquals(LiftOutcome.Moved(LiftChange("NTP", 4, 3)), locator.liftRide(LiftRide(28 * sec, 34 * sec, -3.6)))
+        assertEquals(PdrPlace("NTP", 3), locator.place)
     }
 
     @Test
-    fun lift_chosenFloor_stepsAfterExitRepeatedThere() {
+    fun lift_uncertainFloors_asks_stepsAfterExitRepeatedOnChosenFloor() {
         val locator = atLift("NB-0-L")
-        locator.checkLift(10 * sec)
+        val outcome = locator.liftRide(ride(2.6))
+        assertTrue(outcome is LiftOutcome.Ask)
+        val prompt = locator.liftPrompt!!
+        assertEquals("NB-0-L", prompt.lift.id)
+        assertEquals(0, prompt.fromFloor)
+        // Lift NB ide -1 ... IV (na V sprat ne), bez sprata na kome je; predlog je najbliži izmerenom.
+        assertEquals(listOf(4, 3, 2, 1, -1), prompt.floors)
+        assertEquals(3, prompt.suggested)
         // Izašao iz lifta i hodao pre odgovora (telefon u džepu): 3 koraka ka hodniku.
         val out = outOfLift("NB-0-L")
         repeat(3) { locator.step(out, stepM, timeNs = (20 + it) * sec) }
         assertEquals("dok čeka odgovor, tačka ostaje na spratu", PdrPlace("NB", 0), locator.place)
+        assertNull("dok pitanje čeka, nova vožnja se ne obrađuje", locator.liftRide(ride(1.0)))
         assertEquals(PlaceReason.LIFT, locator.selectLiftFloor(3))
         assertEquals(PdrPlace("NB", 3), locator.place)
         assertNull(locator.liftPrompt)
-        assertNotNull(locator.match)
         // Ista 3 koraka od lifta na III spratu (lift je na istom mestu na svakom spratu).
         val walked = distance(locator.position(), graph.position(node("NB-3-L")))
         assertTrue("od lifta ${"%.1f".format(walked)} m", walked in 1.5..2.6)
     }
 
     @Test
-    fun lift_destinationFloorSuggested_onlyIfLiftGoesThere() {
-        val locator = atLift("NB-0-L").apply { destination = PdrPlace("NB", 3) }
-        assertEquals(3, locator.checkLift(10 * sec)!!.suggested)
-        val toTop = atLift("NB-0-L").apply { destination = PdrPlace("NB", 5) }
-        assertNull("lift NB ne ide na V sprat", toTop.checkLift(10 * sec)!!.suggested)
+    fun lift_beyondLiftFloors_asks() {
+        // NB lift ne ide na V sprat.
+        val locator = atLift("NB-0-L")
+        val outcome = locator.liftRide(ride(5.0)) as LiftOutcome.Ask
+        assertEquals(4, outcome.prompt.suggested)
+        assertEquals(PdrPlace("NB", 0), locator.place)
     }
 
+    /** Teren 08.10.2026, V -> III u džepu: stavljanje u džep je napravilo 8 lažnih koraka, tačka ~6-10 m od lifta. */
     @Test
-    fun lift_walkingPastOrStandingAway_noPrompt() {
-        // Hod pored lifta (korak na 0,6 s): nijednom 10 s bez koraka.
+    fun lift_pointWalkedAwayByPocketSteps_stillRidesThatLift() {
         val locator = atLift("NB-0-L")
         val out = outOfLift("NB-0-L")
-        var t = 0L
-        repeat(15) {
-            t += 600_000_000L
-            locator.step(out, stepM, timeNs = t)
-            assertNull(locator.checkLift(t + 500_000_000L))
-        }
-        // Stoji, ali > 3 m od lifta.
+        repeat(8) { locator.step(out, stepM, timeNs = it * 300_000_000L) }
         assertTrue(distance(locator.position(), graph.position(node("NB-0-L"))) > 3.0)
-        assertNull(locator.checkLift(t + 60 * sec))
+        assertEquals(LiftOutcome.Moved(LiftChange("NB", 0, 2)), locator.liftRide(ride(2.0)))
+        assertTrue(distance(locator.position(), graph.position(node("NB-2-L"))) < 0.5)
     }
 
     @Test
-    fun lift_dismissed_asksAgainOnlyAfterStepAndStanding() {
-        val locator = atLift("NB-0-L")
-        locator.checkLift(10 * sec)
-        locator.dismissLift()
-        assertNull(locator.liftPrompt)
-        assertNull("bez koraka se ne pita ponovo", locator.checkLift(60 * sec))
-        // Ušao u lift (korak) i stoji.
-        locator.step(outOfLift("NB-0-L") + 180f, stepM, timeNs = 61 * sec)
-        assertNull(locator.checkLift(70 * sec))
-        assertNotNull(locator.checkLift(71 * sec))
+    fun lift_farFromLiftOrOutside_ignored() {
+        // Kraj hodnika ka Kuli je daleko od lifta.
+        val atEntrance = locatorAt("NB-0-PROLAZ")
+        assertNull(atEntrance.liftRide(ride(2.0)))
+        assertEquals(PdrPlace("NB", 0), atEntrance.place)
+        assertNull(outdoorLocator().liftRide(ride(2.0)))
+        // AMF nema lift.
+        assertNull(locatorAt("AMF-0-S1-D").liftRide(ride(1.0)))
     }
 
     @Test
     fun lift_manualPosition_clearsPrompt() {
         val locator = atLift("NB-0-L")
-        locator.checkLift(10 * sec)
+        locator.liftRide(ride(2.5))
+        assertNotNull(locator.liftPrompt)
         val there = node("NB-2-L")
         locator.setPosition(PdrPlace("NB", 2), Offset(there.x, there.y))
         assertNull(locator.liftPrompt)
@@ -824,32 +877,19 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("NB", 2), locator.place)
     }
 
-    /**
-     * Replay 03.10.2026: "Ovde sam" u holu kod lifta NB I sprata, pa 10-140 s stajanja (beleške) - nije vožnja. Pitanje tek
-     * kad posle označavanja napravi korak (ušao u lift) i stoji.
-     */
     @Test
-    fun lift_afterManualPosition_noPromptUntilStep() {
-        val locator = locatorAt("NB-1-L")
-        assertNull(locator.checkLift(0))
-        assertNull(locator.checkLift(140 * sec))
-        locator.step(outOfLift("NB-1-L") + 180f, stepM, timeNs = 141 * sec)
-        assertNotNull(locator.checkLift(151 * sec))
+    fun lift_dismissed_nextRideHandled() {
+        val locator = atLift("NB-0-L")
+        locator.liftRide(ride(2.5))
+        locator.dismissLift()
+        assertNull(locator.liftPrompt)
+        assertEquals(PdrPlace("NB", 0), locator.place)
+        assertEquals(LiftOutcome.Moved(LiftChange("NB", 0, 1)), locator.liftRide(ride(1.0)))
     }
 
     @Test
     fun lift_kulaAndNtp_floorsOfThatLift() {
-        assertEquals((1..9).reversed().toList(), atLift("KULA-0-L").checkLift(10 * sec)!!.floors)
-        assertEquals(listOf(5, 4, 3, 2, 1), atLift("NTP-0-L2").checkLift(10 * sec)!!.floors)
-    }
-
-    @Test
-    fun lift_onStairsOrCampus_noPrompt() {
-        val (onStairs, _) = atStairNode("NB-0-S")
-        assertNull(onStairs.checkLift(0))
-        assertNull("na stepeništu se ne pita (lift NB je u sredini stepeništa)", onStairs.checkLift(30 * sec))
-        val outside = outdoorLocator()
-        assertNull(outside.checkLift(0))
-        assertNull(outside.checkLift(30 * sec))
+        assertEquals(LiftOutcome.Moved(LiftChange("KULA", 0, 9)), atLift("KULA-0-L").liftRide(ride(9.1)))
+        assertEquals(listOf(5, 4, 3, 2, 1), (atLift("NTP-0-L2").liftRide(ride(1.5)) as LiftOutcome.Ask).prompt.floors)
     }
 }

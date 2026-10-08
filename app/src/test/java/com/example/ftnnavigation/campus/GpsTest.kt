@@ -112,4 +112,32 @@ class GpsTest {
         assertNotNull(route)
         assertTrue(route!!.nodes.first().type in types)
     }
+
+    /**
+     * Teren 08.10.2026 (snimci ekrana): ruta iz sredine ulice je išla do najbližeg čvora u stranu, pa nazad ulicom ("trougao").
+     * Sada kreće sa najbliže tačke staze: sa sredine svake duge staze do njenog kraja = pola staze. (Tačka 2 m u stranu ne
+     * može - neke staze imaju paralelnu stazu na ~2 m.)
+     */
+    @Test
+    fun gpsRoute_fromMiddleOfStreet_startsOnStreet() {
+        val plans = INDOOR_BUILDINGS.map { IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) }
+        val graph = seedGraph(campus, plans).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
+        val types = setOf(NodeType.STAZA, NodeType.ULAZ)
+        val long = graph.edges.filter { e ->
+            val a = graph.node(e.fromId)!!
+            val b = graph.node(e.toId)!!
+            a.buildingId == CAMPUS_ID && b.buildingId == CAMPUS_ID && a.type == NodeType.STAZA && b.type == NodeType.STAZA &&
+                hypot(graph.position(a).x - graph.position(b).x, graph.position(a).y - graph.position(b).y) > 40
+        }
+        assertTrue(long.size > 5)
+        for (edge in long) {
+            val a = graph.position(graph.node(edge.fromId)!!)
+            val b = graph.position(graph.node(edge.toId)!!)
+            val length = hypot(b.x - a.x, b.y - a.y)
+            val px = (a.x + b.x) / 2
+            val py = (a.y + b.y) / 2
+            val route = graph.routeFrom(CAMPUS_ID, 0, (px / campus.widthM).toFloat(), (py / campus.heightM).toFloat(), edge.toId, startTypes = types)!!
+            assertTrue("${edge.fromId} - ${edge.toId}: ${route.lengthM} m", route.lengthM <= length / 2 + 0.5)
+        }
+    }
 }

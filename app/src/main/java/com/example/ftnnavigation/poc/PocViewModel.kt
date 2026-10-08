@@ -61,7 +61,6 @@ import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.settings.AppSettings
 import com.example.ftnnavigation.settings.FloorChange
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -103,7 +102,7 @@ data class PocUiState(
     val headingErrorDeg: Float? = null,
     /** Pređeno (m): koraci punom dužinom, a na stepeništu samo gazište ([PdrLocator.lastStepM]). */
     val distanceM: Float = 0f,
-    /** Pitanje "na koji sprat?" - korisnik stoji kod lifta ([PdrLocator.checkLift]); null = nema pitanja. */
+    /** Pitanje "na koji sprat?" posle vožnje liftom kad broj spratova nije siguran ([PdrLocator.liftRide]); null = nema pitanja. */
     val liftPrompt: LiftPrompt? = null,
 ) {
 
@@ -150,9 +149,6 @@ private const val MAX_START_ACCURACY_M = 20f
 
 /** GPS ruta kreće sa staze ili sa ulaza, ne iz unutrašnjosti zgrade bez plana ili spojnog prolaza. */
 private val GPS_START_TYPES = setOf(NodeType.STAZA, NodeType.ULAZ)
-
-/** Koliko često se za vreme praćenja proverava stajanje kod lifta. */
-private const val LIFT_CHECK_MS = 1000L
 
 /** Manja gužva na ruti se ne piše u baneru. */
 private const val MIN_CROWD_PERCENT = 5
@@ -262,9 +258,6 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Senzori za vreme praćenja (od Start do Stop). */
     private var session: PdrSensorSession? = null
-
-    /** Provera stajanja kod lifta za vreme praćenja (koraci stižu samo dok se hoda). */
-    private var liftCheck: Job? = null
 
     /** GPS: radi dok je Mapa na ekranu ([onMapVisible]) i za vreme praćenja. */
     private val gpsRecorder = if (BuildConfig.DEBUG) GpsRecorder(application.filesDir) else null
@@ -579,13 +572,31 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         if (reason == PlaceReason.STEPENICE) onStairChange(locator)
     }
 
-    /** Stoji kod lifta dovoljno dugo -> pitanje na koji sprat, uz vibraciju. */
-    private fun checkLift() {
-        val prompt = locator?.checkLift(SystemClock.elapsedRealtimeNanos()) ?: return
-        recorder?.lift(SystemClock.elapsedRealtimeNanos(), prompt)
-        state = state.copy(liftPrompt = prompt)
-        getApplication<Application>().getSystemService(VibratorManager::class.java)
-            ?.defaultVibrator?.vibrate(VibrationEffect.createWaveform(LIFT_VIBRATION, -1))
+    /**
+     * Prepoznata vožnja liftom: tačka na liftu izračunatog sprata (toast, kao na stepenicama), a kad broj spratova nije
+     * siguran - pitanje na koji sprat, uz vibraciju.
+     */
+    private fun onLiftRide(ride: LiftRide) {
+        val locator = locator ?: return
+        val before = locator.place
+        when (val outcome = locator.liftRide(ride) ?: return) {
+            is LiftOutcome.Moved -> {
+                updatePosition(before, PlaceReason.LIFT)
+                val app = getApplication<Application>()
+                val text = app.getString(
+                    R.string.poc_lift_changed,
+                    floorText(app.resources, outcome.change.fromFloor),
+                    floorText(app.resources, outcome.change.toFloor),
+                )
+                Toast.makeText(app, text, Toast.LENGTH_LONG).show()
+            }
+            is LiftOutcome.Ask -> {
+                recorder?.lift(SystemClock.elapsedRealtimeNanos(), outcome.prompt)
+                state = state.copy(liftPrompt = outcome.prompt)
+                getApplication<Application>().getSystemService(VibratorManager::class.java)
+                    ?.defaultVibrator?.vibrate(VibrationEffect.createWaveform(LIFT_VIBRATION, -1))
+            }
+        }
     }
 
     /** Odgovor na pitanje za lift: pozicija na liftu na spratu [floor] (+ koraci posle izlaska); Mapa ide za njom. */
@@ -749,14 +760,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             onHeading = ::onHeading,
             onStep = ::onStep,
             recorder = recorder,
+            lift = LiftRideDetector(),
+            onLiftRide = ::onLiftRide,
         ).also { it.start() }
         PdrTrackingService.start(app)
-        liftCheck = viewModelScope.launch {
-            while (true) {
-                delay(LIFT_CHECK_MS)
-                checkLift()
-            }
-        }
         state = state.copy(isTracking = true)
         updateGps()
     }
@@ -764,8 +771,6 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     private fun stopTracking() {
         session?.stop()
         session = null
-        liftCheck?.cancel()
-        liftCheck = null
         // Bez praćenja nema koraka koje bi pitanje ponovilo.
         locator?.dismissLift()
         state = state.copy(liftPrompt = null)

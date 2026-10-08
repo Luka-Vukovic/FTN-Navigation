@@ -21,9 +21,9 @@ import com.example.ftnnavigation.R
 import com.example.ftnnavigation.graph.indoorBuilding
 
 /**
- * Pitanje "na koji sprat?" kad korisnik stoji kod lifta ([LiftPrompt]): dugme po spratu do koga lift ide (od najvišeg,
- * kao birač sprata), sprat odredišta istaknut. Dodir van dijaloga ga ne zatvara - dok se vozi, telefon je možda u džepu,
- * a odgovara se posle izlaska; "Nisam u liftu" (ili nazad) ga sklanja.
+ * Pitanje "na koji sprat?" posle vožnje liftom kad broj spratova iz pomeraja nije siguran ([LiftPrompt]): dugme po spratu
+ * do koga lift ide (od najvišeg, kao birač sprata), sprat najbliži izmerenom istaknut. Dodir van dijaloga ga ne zatvara -
+ * telefon je možda u džepu, a odgovara se posle izlaska; "Nisam u liftu" (ili nazad) ga sklanja.
  */
 @Composable
 fun LiftDialog(
