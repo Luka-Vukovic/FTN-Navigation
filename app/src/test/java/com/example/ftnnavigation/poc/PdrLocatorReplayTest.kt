@@ -12,6 +12,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
@@ -88,11 +89,20 @@ class PdrLocatorReplayTest {
             )
         }
         val lift = LiftRideDetector()
+        // PDR_DIRECTION=1: smer koraka računa i [WalkingDirection] (kao na telefonu, uz [PdrLocator.nearStairs]), umesto
+        // smera zabeleženog u S redu - za proveru izmena smera hoda zajedno sa locator-om.
+        val direction = if (System.getenv("PDR_DIRECTION") == "1") WalkingDirection() else null
+        var maxDiff = 0f
         for ((i, f) in lines.withIndex()) {
             val t = f.getOrNull(1)?.toLongOrNull() ?: continue
             when (f[0]) {
-                "R" -> lift.onRotation(FloatArray(9) { f[2 + it].toFloat() })
-                "A" -> lift.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)?.let { ride ->
+                "R" -> FloatArray(9) { f[2 + it].toFloat() }.let {
+                    lift.onRotation(it)
+                    direction?.onRotation(it, t)
+                }
+                "A" -> lift.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t).also {
+                    direction?.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
+                }?.let { ride ->
                     val before = locator.place
                     val ride0 = String.format(Locale.ROOT, "%.1f-%.1f s, %+.1f m", sec(ride.startNs), sec(ride.endNs), ride.heightM)
                     when (val outcome = locator.liftRide(ride)) {
@@ -113,7 +123,16 @@ class PdrLocatorReplayTest {
                 "S" -> {
                     lift.onStep(t)
                     steps++
-                    val reason = locator.step(f[2].toFloat(), stepM, f[3].toInt(), t)
+                    var heading = f[2].toFloat()
+                    var redo = f[3].toInt()
+                    direction?.onStep(t)?.let { step ->
+                        if (step.redoSteps != redo) log(t, "smer: ponovi ${step.redoSteps} (telefon $redo)")
+                        maxDiff = maxOf(maxDiff, abs(angleDiffDeg(step.headingDeg, heading)))
+                        heading = step.headingDeg
+                        redo = step.redoSteps
+                    }
+                    val reason = locator.step(heading, stepM, redo, t)
+                    direction?.nearStairs = locator.nearStairs
                     if (reason != null) log(t, "replay: $reason")
                     row(t, "S")
                 }
@@ -131,6 +150,8 @@ class PdrLocatorReplayTest {
                     if (bias != 0f) locator.applyCorrection = true
                     else if (place.buildingId == locator.place.buildingId && locator.headingErrorDeg?.let { it != 0f } == true) locator.applyCorrection = false
                     if (reason == PlaceReason.START) {
+                        // Zakrenutost kakvu je telefon tada primenjivao (naučena u replay-u može malo da odstupa).
+                        if (bias != 0f) locator.restoreBias(place.buildingId, bias)
                         // Pozicija na Start (od 05.10.2026): replay kreće odatle ako je drugde (Ovde sam pre Start-a).
                         val at = Offset(f[5].toFloat(), f[6].toFloat())
                         val now = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw
@@ -172,6 +193,7 @@ class PdrLocatorReplayTest {
                 }
             }
         }
+        if (direction != null) out.appendLine(String.format(Locale.ROOT, "Smer (WalkingDirection): najveća razlika od telefona %.0f°", maxDiff))
         return out.toString() to track.toString()
     }
 }

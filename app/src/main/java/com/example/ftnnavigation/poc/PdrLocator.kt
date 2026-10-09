@@ -111,6 +111,17 @@ private const val ENTER_SLACK_M = 1.0
 /** Ulazak koji čeka se otkazuje ako se tačka udalji od ulaza više od ovoga. */
 private const val ENTER_CANCEL_M = 12.0
 
+/**
+ * Ulazak i bez tačke u obrisu: tačka najviše ovoliko od ulaza, a poslednjih [ENTER_STEPS] koraka ide kroz vrata ka unutra
+ * (do [ENTER_STEP_ANGLE_DEG] od pravca ulaz -> hodnik). Teren 09.10.2026, NB: koraci su išli na zapad kroz glavni ulaz, a
+ * GPS (5-8 m) je tačku vukao na sever uz zid - ostala je napolju ~35 s, do "Ovde sam".
+ */
+private const val ENTER_STEPS_NEAR_M = 4.0
+
+private const val ENTER_STEPS = 3
+
+private const val ENTER_STEP_ANGLE_DEG = 50.0
+
 /** Tačka na grafu je na kraju hodnika (na čvoru prolaza/ulaza). */
 private const val AT_GATE_M = 0.3
 
@@ -140,6 +151,12 @@ private const val STAIR_ENTER_M = 1.5
  * od bar 6 koraka bi se ovde pogrešno video kao sprat - nije proveravano na terenu.
  */
 private const val STAIR_NEAR_M = 5.0
+
+/**
+ * Tačka na stepeništu ili do ovoliko od čvora stepeništa sa više nivoa -> [PdrLocator.nearStairs] (smer hoda iz ubrzanja
+ * se ne koristi). Krak sa podestom je ~4-6 m od čvora (NTP, NB).
+ */
+private const val STAIR_DIRECTION_NEAR_M = 8.0
 
 /** Koliko poslednjih koraka van stepeništa se pamti za prepoznavanje leta. */
 private const val WATCH_STEPS = 60
@@ -381,19 +398,37 @@ class PdrLocator(
 
     private val gateways: Map<PdrPlace, List<Gateway>> = buildGateways()
 
-    /** Ulaz kampusa ([outside], K-U-...) i čvor zgrade sa planom iza njega. */
-    private class Entrance(val outside: Node, val inside: Node)
+    /**
+     * Ulaz kampusa ([outside], K-U-...) i čvor zgrade sa planom iza njega; [inward]: jedinični pravac od tog čvora ka
+     * hodniku (metri kampusa), null ako ga nema.
+     */
+    private class Entrance(val outside: Node, val inside: Node, val inward: PointM?)
 
-    /** Ulazak čeka: tačka je bila [remainingM] od ulaza [entrance]; [walkedM] je zbir koraka od tada. */
-    private class PendingEntry(val entrance: Entrance, val remainingM: Double) {
+    /**
+     * Ulazak čeka: tačka je bila [remainingM] od ulaza [entrance]; [walkedM] je zbir koraka od tada. [byDirection]: čeka po
+     * koracima kroz vrata ([ENTER_STEPS_NEAR_M]) - broji se samo deo koraka ka unutra.
+     */
+    private class PendingEntry(val entrance: Entrance, val remainingM: Double, val byDirection: Boolean = false) {
         var walkedM = 0.0
     }
 
     private var pendingEntry: PendingEntry? = null
 
+    /** Poslednji koraci napolju (jedinični pravci, metri kampusa) - za ulazak po pravcu koraka. */
+    private val campusSteps = ArrayDeque<PointM>()
+
     private val entrances: Map<String, List<Entrance>> = graph.nodes
         .filter { it.buildingId == CAMPUS_ID && it.type == NodeType.ULAZ }
-        .flatMap { e -> graph.neighbors(e.id).map { it.first }.filter { it.isIndoor }.map { Entrance(e, it) } }
+        .flatMap { e ->
+            graph.neighbors(e.id).map { it.first }.filter { it.isIndoor }.map { inside ->
+                val from = graph.position(inside)
+                val inward = graph.neighbors(inside.id).map { it.first }
+                    .firstOrNull { it.buildingId == inside.buildingId && it.floor == inside.floor }
+                    ?.let { graph.position(it) }
+                    ?.let { to -> distance(from, to).takeIf { it > 0.1 }?.let { PointM((to.x - from.x) / it, (to.y - from.y) / it) } }
+                Entrance(e, inside, inward)
+            }
+        }
         .groupBy { it.inside.buildingId }
 
     /**
@@ -524,6 +559,22 @@ class PdrLocator(
 
     private val liftSteps = mutableListOf<PendingStep>()
 
+    /**
+     * Na stepeništu ili do [STAIR_DIRECTION_NEAR_M] od njega (tačka na grafu, inače slobodna pozicija) - za
+     * [WalkingDirection.nearStairs]. Okret na podestu se prepoznaje tek posle prvog leta, pa se gleda i blizina.
+     */
+    val nearStairs: Boolean
+        get() {
+            if (climb != null) return true
+            if (place.isCampus || passage != null) return false
+            val p = match?.point?.let { Offset(it.x, it.y) } ?: raw ?: return false
+            val here = local(p.x, p.y)
+            return stairs.values.any { stair ->
+                stair.buildingId == place.buildingId &&
+                    stair.nodesOn(place.floor).any { distance(local(it.x, it.y), here) <= STAIR_DIRECTION_NEAR_M }
+            }
+        }
+
     /** Smer za prikaz, u odnosu na "gore" plana mesta. */
     fun headingOnPlan(azimuthDeg: Float): Float = normalizeDeg(azimuthDeg + headingBiasDeg - planUp.getValue(place.buildingId))
 
@@ -548,6 +599,11 @@ class PdrLocator(
         setAnchor(place, point)
         varianceM2 = KNOWN_VARIANCE_M2
         return check
+    }
+
+    /** Zakrenutost zgrade kakvu je telefon imao (replay: START red nosi primenjenu ispravku). */
+    internal fun restoreBias(buildingId: String, deg: Float) {
+        biases[buildingId] = deg
     }
 
     /** Start napolju sa GPS lokacije. */
@@ -690,6 +746,10 @@ class PdrLocator(
         }
         this.raw = raw
         this.match = match
+        if (place.isCampus && lengthM > 0f) {
+            campusSteps.addLast(PointM(dxM / lengthM, dyM / lengthM))
+            if (campusSteps.size > ENTER_STEPS) campusSteps.removeFirst()
+        }
         if (!place.isCampus) {
             watch.step(azimuthDeg, redo, timeNs, match?.point?.let { local(it.x, it.y) } ?: local(raw.x, raw.y))
             watch.trim(WATCH_STEPS)
@@ -768,6 +828,7 @@ class PdrLocator(
         exitDetector = if (place.isCampus) null else BuildingDetector(campus)
         stepsSinceChange = MIN_STEPS_BETWEEN_CHANGES
         pendingEntry = null
+        campusSteps.clear()
     }
 
     /** Prelaz: pozicija na čvoru [node] (zgrada ili kampus). */
@@ -1240,7 +1301,13 @@ class PdrLocator(
     private fun enterBuilding(stepM: Double): PlaceReason? {
         val p = meters(PdrPlace.CAMPUS, raw ?: return null)
         pendingEntry?.let { pending ->
-            pending.walkedM += stepM
+            val inward = pending.entrance.inward
+            val last = campusSteps.lastOrNull()
+            pending.walkedM += if (pending.byDirection && inward != null && last != null) {
+                stepM * maxOf(0.0, last.x * inward.x + last.y * inward.y)
+            } else {
+                stepM
+            }
             if (pending.walkedM >= pending.remainingM - ENTER_SLACK_M) {
                 moveTo(pending.entrance.inside)
                 return PlaceReason.ULAZ
@@ -1259,6 +1326,21 @@ class PdrLocator(
                 return PlaceReason.ULAZ
             }
             pendingEntry = PendingEntry(entrance, toDoor)
+            return null
+        }
+        // Tačka van obrisa (GPS je vuče uz zid), ali koraci idu kroz vrata ka unutra.
+        if (campusSteps.size < ENTER_STEPS) return null
+        val minCos = cos(Math.toRadians(ENTER_STEP_ANGLE_DEG))
+        for (entrance in entrances.values.flatten()) {
+            val inward = entrance.inward ?: continue
+            val toDoor = distance(graph.position(entrance.outside), p)
+            if (toDoor > ENTER_STEPS_NEAR_M) continue
+            if (campusSteps.any { it.x * inward.x + it.y * inward.y < minCos }) continue
+            if (toDoor <= ENTER_SLACK_M) {
+                moveTo(entrance.inside)
+                return PlaceReason.ULAZ
+            }
+            pendingEntry = PendingEntry(entrance, toDoor, byDirection = true)
             return null
         }
         return null

@@ -22,7 +22,8 @@
     <string name="home_nearby_subtitle">Ruta do najbližeg izabrane vrste</string>
     <string name="place_kind_toalet">Toalet</string>
     <string name="place_kind_hrana">Hrana i piće</string>
-    <string name="place_kind_ucenje">Biblioteka i čitaonica</string>
+    <string name="place_kind_ucenje">Mesto za učenje</string>
+    <string name="place_study_table">Sto za učenje</string>
     <string name="place_kind_skriptarnica">Skriptarnica</string>
     <string name="nearby_from">Po vremenu hoda %1$s</string>
     <string name="nearby_nearest">najbliže</string>

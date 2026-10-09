@@ -24,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
+import com.example.ftnnavigation.campus.AMENITY_UCENJE
 import com.example.ftnnavigation.campus.BUILDING_INFO
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.NearbyPlace
@@ -45,10 +46,11 @@ internal fun PlaceKind.labelRes(): Int = when (this) {
     PlaceKind.SKRIPTARNICA -> R.string.place_kind_skriptarnica
 }
 
-/** Naziv mesta za listu i baner rute: sala po nazivu, služba po nazivu zgrade, toalet po vrsti. */
+/** Naziv mesta za listu i baner rute: sala po nazivu, služba po nazivu zgrade, toalet i sto za učenje po vrsti. */
 @Composable
 internal fun placeLabel(node: Node, campus: CampusData): String =
-    node.name ?: campus.buildings.find { it.nodeId == node.id }?.name ?: stringResource(R.string.place_kind_toalet)
+    node.name ?: campus.buildings.find { it.nodeId == node.id }?.name
+        ?: stringResource(if (node.amenity == AMENITY_UCENJE) R.string.place_study_table else R.string.place_kind_toalet)
 
 /**
  * Mesta vrste [kind] po vremenu hoda odakle kreće ruta na Mapi ([routeTo], [routeStart]) - najbliže prvo, uz zgradu,

@@ -422,7 +422,8 @@ def typical_plan(f):
     for room in SPLIT.get(f, ()):
         rooms[room] = None
         rooms += SPLIT_SHAPES[room]
-    return {**TYPICAL, "rooms": [r for r in rooms if r]}
+    tables = [STUDY_TABLES[f][0]] if f in STUDY_TABLES else []
+    return {**TYPICAL, "rooms": [r for r in rooms if r], "tables": tables}
 
 
 def plan_for(f):
@@ -592,6 +593,19 @@ TOILET_BY_LIFTS = ((500, 765), (600, 700), "U640")
 TOILETS_GROUND = [((15, 1479), (15, 1407), "W0")]
 
 
+# Mesto za učenje (teren 09.10.2026, korisnik označio na snimku ekrana III sprata): sto u srednjem hodniku, uz zid velike
+# sobe iznad hodnika (soba 13, x 666-1073) - nije posebna prostorija. Sprat -> (pravougaonik stola, tačka, čvor hodnika).
+# Čvor bez naziva, vrsta UCENJE ("Najbliže mesto" u aplikaciji, uz Biblioteku i Čitaonicu).
+STUDY_TABLES = {3: ((670, 1282, 1069, 1298), (870, 1298), "C870")}
+
+
+def study_tables(g):
+    for f, (_, at, attach) in STUDY_TABLES.items():
+        r = g.node(f, f"UCENJE{at[0]}_{at[1]}", *at, kind="PROSTORIJA")
+        g.amenities[r] = "UCENJE"
+        g.edge(r, f"{BUILDING}-{f}-{attach}")
+
+
 def typical_toilets(f):
     labeled = {room for room, _ in TYPICAL_LABELS[f]}
     block = TOILET_BLOCK_FIRST if f == 1 else TOILET_BLOCK
@@ -614,6 +628,7 @@ def build():
     for f in (1, 2, 3, 4):
         typical_floor(g, f)
         toilets(g, f, typical_toilets(f))
+    study_tables(g)
     top_floor(g)
     for f in range(5):
         for s in STAIRS:  # krakom naviše sa sprata f stiže se na dno kraka naniže sprata iznad
@@ -654,6 +669,7 @@ def write_json(g, path):
 
 C_BG, C_ROOF, C_CORRIDOR, C_STAIRS, C_LIFT = "#FFFFFFFF", "#FFF0F0F0", "#FFE8EEF4", "#FFFFE0B2", "#FFFFCC80"
 C_ENTRANCE, C_WALL, C_OUTER, C_TREAD, C_TERRACE = "#FFC8E6C9", "#FF455A64", "#FF263238", "#FF8D6E63", "#FFDCEDC8"
+C_TABLE = "#FFD7CCC8"
 
 
 def poly(pts):
@@ -706,6 +722,9 @@ def drawable(plan, title):
         t = plan["terraces"]
         parts.append(("Terase (evakuacioni put po krovu)", path(fill=C_TERRACE, data=" ".join(poly(p) for p in t))))
     parts.append(("Hodnici", path(fill=C_CORRIDOR, data=" ".join(poly(p) for p in plan["corridors"]))))
+    if plan.get("tables"):
+        parts.append(("Sto za učenje", path(fill=C_TABLE, stroke=C_WALL, width=2,
+                                             data=" ".join(rect(*t) for t in plan["tables"]))))
     for x0, y0, x1, y1 in plan.get("ramps", []):
         parts.append(("Rampa", path(fill="#FFEEEEEE", data=rect(x0, y0, x1, y1))
                       + path(stroke=C_TREAD, width=2, data=hatch(x0, y0, x1, y1))))

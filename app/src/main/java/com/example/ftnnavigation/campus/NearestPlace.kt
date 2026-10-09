@@ -14,6 +14,9 @@ enum class PlaceKind { TOALET, HRANA, UCENJE, SKRIPTARNICA }
 /** Oznaka vrste u JSON-u planova (generatori `tools/zgrade`, `tools/ntp`: `TOALET`). */
 const val AMENITY_TOALET = "TOALET"
 
+/** Mesto za učenje koje nije prostorija (teren 09.10.2026: sto u hodniku NTP III sprata; `tools/ntp`: `UCENJE`). */
+const val AMENITY_UCENJE = "UCENJE"
+
 /** Sale sa nazivom koje su mesto neke vrste. */
 private val NAMED_PLACES = mapOf(
     "Kiosk" to PlaceKind.HRANA,
@@ -28,6 +31,7 @@ private val SERVICE_PLACES = mapOf("MENZA" to PlaceKind.HRANA)
 /** Vrsta mesta čvora: toalet iz generatora, sala po nazivu, služba kampusa; null - nije mesto za "najbliže". */
 fun placeKindOf(node: Node, campus: CampusData): PlaceKind? = when {
     node.amenity == AMENITY_TOALET -> PlaceKind.TOALET
+    node.amenity == AMENITY_UCENJE -> PlaceKind.UCENJE
     node.type == NodeType.PROSTORIJA -> node.name?.let(NAMED_PLACES::get)
     node.type == NodeType.ZGRADA -> campus.buildings.find { it.nodeId == node.id }?.let { SERVICE_PLACES[it.id] }
     else -> null

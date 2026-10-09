@@ -106,6 +106,7 @@ import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.campus.AMENITY_TOALET
+import com.example.ftnnavigation.campus.AMENITY_UCENJE
 import com.example.ftnnavigation.campus.BuildingCategory
 import com.example.ftnnavigation.campus.ROOM_HOURS
 import com.example.ftnnavigation.campus.CampusData
@@ -601,6 +602,9 @@ private val ROOM_DOT_RADIUS = 5.dp
 /** Natpis toaleta na planu (toaleti nemaju naziv). */
 private const val TOILET_LABEL = "WC"
 
+/** Natpis stola za učenje na planu (nije prostorija, nema naziv). */
+private const val STUDY_LABEL = "Učenje"
+
 /**
  * Natpis sale izmeren i smešten u px plana (pre zuma), za crtanje i za držanje prstom; [dot] je tačka sale.
  * [topLeft] je u ravni natpisa: plan zarotiran oko [dot] nazad za rotaciju mape, pa je natpis na ekranu uspravan.
@@ -610,9 +614,15 @@ private data class PlacedRoomLabel(val node: Node, val layout: TextLayoutResult,
     fun inLabelFrame(at: Offset, rotationDeg: Float): Offset = dot + (at - dot).rotated(rotationDeg)
 }
 
-/** Sale sa nazivom i toaleti (natpis "WC") na spratu [floor] zgrade [buildingId]. */
+/** Sale sa nazivom, toaleti (natpis "WC") i mesta za učenje na spratu [floor] zgrade [buildingId]. */
 private fun BuildingGraph.roomsOn(buildingId: String, floor: Int): List<Node> =
-    nodes.filter { it.buildingId == buildingId && it.floor == floor && it.type == NodeType.PROSTORIJA && (it.name != null || it.amenity == AMENITY_TOALET) }
+    nodes.filter {
+        it.buildingId == buildingId && it.floor == floor && it.type == NodeType.PROSTORIJA &&
+            (it.name != null || it.amenity == AMENITY_TOALET || it.amenity == AMENITY_UCENJE)
+    }
+
+private fun Node.planLabel(building: IndoorBuilding): String =
+    name?.let(building::label) ?: if (amenity == AMENITY_UCENJE) STUDY_LABEL else TOILET_LABEL
 
 /**
  * Natpisi sala na planu veličine [size]. Natpis je deo plana (raste sa zumom, kao tekst na pravom planu) da bi
@@ -632,7 +642,7 @@ private fun Density.placeRoomLabels(
     val gap = size.height * labelHeight / 2
     return rooms.map { node ->
         val dot = Offset(node.x * size.width, node.y * size.height)
-        val label = textMeasurer.measure(node.name?.let(building::label) ?: TOILET_LABEL, style)
+        val label = textMeasurer.measure(node.planLabel(building), style)
         val width = label.size.width.toFloat()
         val height = label.size.height.toFloat()
         // Gore ili dole na planu - na ekranu (u ravni natpisa) taj pravac je zarotiran sa mapom.

@@ -125,6 +125,15 @@ class WalkingDirection {
     /** Odstupanje: smer hoda - pravac telefona (-180..180). */
     val offset: Double get() = offsetDeg
 
+    /**
+     * Korisnik je na stepeništu ili tik uz njega ([PdrLocator.nearStairs], postavlja se posle svakog koraka): pravac hoda iz
+     * ubrzanja se tada ne koristi - ni za ispravku odstupanja, ni posle okreta. Hod niz stepenice ima drugačiji odnos
+     * uzdužnog i vertikalnog ubrzanja, pa je jako merenje bilo ~70-90° pogrešno: velika ispravka sa ponavljanjem koraka
+     * usred kraka, a okret na podestu proglašen "okretom samo telefona" (teren 09.10.2026, NTP III -> II: dvaput ~70° pa
+     * nazad, "poremetio se smer"; isto 05.10. NTP II -> I). Odstupanje ostaje kakvo je bilo pre stepeništa.
+     */
+    var nearStairs = false
+
     /** Nova orijentacija; [matrix] je 3x3 matrica iz `SensorManager.getRotationMatrixFromVector`. */
     fun onRotation(matrix: FloatArray, timestampNs: Long) {
         matrix.copyInto(rotation, endIndex = 9)
@@ -246,6 +255,7 @@ class WalkingDirection {
     fun reset() {
         offsetDeg = 0.0
         anchored = true
+        nearStairs = false
         poseHistory.clear()
         forgetTurns()
         samples.clear()
@@ -306,7 +316,8 @@ class WalkingDirection {
 
         this.turn = null
         steadyPhoneDeg = phone
-        val walk = if (settled) walkAfterTurn(turn, phone) else null
+        // Na stepeništu je okret na podestu okret tela - pravac iz faze tu ne odlučuje.
+        val walk = if (settled && !nearStairs) walkAfterTurn(turn, phone) else null
         val phoneOnly = walk != null && turn.axisTrusted && abs(angleDiff(walk, turn.walkDeg)) <= AXIS_MATCH_DEG
         when {
             phoneOnly -> offsetDeg = angleDiff(turn.walkDeg, phone)
@@ -349,6 +360,11 @@ class WalkingDirection {
      * koraka treba ponoviti u novom smeru (samo posle velike ispravke).
      */
     private fun correctOffset(phone: Double): Int {
+        // Na stepeništu pravac iz faze ne važi (vidi [nearStairs]).
+        if (nearStairs) {
+            lastPhaseDeg = null
+            return 0
+        }
         // Okretanje u tim koracima: pravac bi bio mešavina dva.
         if (!phoneSteady()) return 0
         // Prvi korak posle stajanja: bez koraka pre stajanja (inače jako merenje starog pravca -

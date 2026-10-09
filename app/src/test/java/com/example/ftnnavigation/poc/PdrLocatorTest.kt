@@ -131,6 +131,66 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("NB", 0), locator.place)
     }
 
+    /** Jedinični pravac od ulaza [insideId] (čvor zgrade) ka hodniku, u metrima kampusa. */
+    private fun inwardOf(insideId: String): PointM {
+        val from = graph.position(node(insideId))
+        val to = graph.position(inner(insideId))
+        val len = distance(from, to)
+        return PointM((to.x - from.x) / len, (to.y - from.y) / len)
+    }
+
+    /**
+     * Teren 09.10.2026, NB: koraci kroz glavni ulaz ka unutra, a GPS (5-8 m) vuče tačku uz zid, van obrisa - tačka je ostala
+     * napolju do "Ovde sam". Ulazak po pravcu koraka kroz vrata.
+     */
+    @Test
+    fun fromCampus_stepsThroughDoor_gpsDraggingAlongWall_enters() {
+        val entrance = graph.position(node("K-U-NB-1"))
+        val inward = inwardOf("NB-0-ULAZ")
+        val wall = wallDirection("NB", entrance)
+        val start = PointM(entrance.x - inward.x * 2.5, entrance.y - inward.y * 2.5)
+        val gps = PointM(entrance.x - inward.x * 3 + wall.x * 8, entrance.y - inward.y * 3 + wall.y * 8)
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val azimuth = magneticAzimuth(entrance, PointM(entrance.x + inward.x, entrance.y + inward.y))
+        val entered = (1..8).firstOrNull {
+            locator.onGps(GpsFix(gps, 5f), tracking = true)
+            locator.step(azimuth, stepM) == PlaceReason.ULAZ
+        }
+        assertNotNull("nije ušao (tačka ${locator.position()})", entered)
+        assertEquals(PdrPlace("NB", 0), locator.place)
+    }
+
+    /** Hod spolja uz zid pored ulaza (pravac koraka nije kroz vrata) nije ulazak. */
+    @Test
+    fun fromCampus_walkingAlongWallPastDoor_doesNotEnter() {
+        val entrance = graph.position(node("K-U-NB-1"))
+        val inward = inwardOf("NB-0-ULAZ")
+        val wall = wallDirection("NB", entrance)
+        val start = PointM(entrance.x - inward.x * 1.5 - wall.x * 8, entrance.y - inward.y * 1.5 - wall.y * 8)
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val azimuth = magneticAzimuth(entrance, PointM(entrance.x + wall.x, entrance.y + wall.y))
+        val reasons = (1..20).mapNotNull { locator.step(azimuth, stepM) }
+        assertTrue("$reasons", reasons.isEmpty())
+        assertEquals(PdrPlace.CAMPUS, locator.place)
+    }
+
+    /**
+     * Teren 09.10.2026, NTP prizemlje: tačka na slepom kraju hodnika, korisnik se ~10 m vrti u holu - izvlačenje zaglavljene
+     * tačke ju je stavilo na 15 m udaljen "ULAZ - FTN" i sledeći korak je bio izlazak na kampus.
+     */
+    @Test
+    fun stuckAtCorridorEnd_walkingTowardFarExit_doesNotLeave() {
+        val locator = locatorAt("NTP-0-H450")
+        // Azimuti koraka sa snimka (hod-20261009-112308, 362-383 s): hodnikom do kraja, pa po holu.
+        val azimuths = listOf(
+            249, 246, 243, 232, 223, 210, 200, 177, 184, 200, 217, 230, 227, 224, 224, 223, 229, 230, 235, 235, 236, 231,
+            228, 228, 222, 220, 220, 214, 210, 201, 191, 183,
+        )
+        val reasons = azimuths.mapNotNull { locator.step(it.toFloat(), stepM) }
+        assertTrue("$reasons", reasons.isEmpty())
+        assertEquals(PdrPlace("NTP", 0), locator.place)
+    }
+
     /**
      * Do kraja hodnika [gateId], pa dalje pravcem hodnika dok pozicija ne stigne na [targetId] (kraj hodnika druge
      * zgrade ili ulaz na kampusu). Vraća razloge i broj koraka posle kraja hodnika.

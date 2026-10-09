@@ -360,6 +360,30 @@ class WalkingDirectionTest {
     }
 
     @Test
+    fun nearStairs_strongPhaseFarFromHeading_ignored() {
+        // Teren 09.10.2026 (NTP III -> II): niz stepenice je pravac iz ubrzanja bio ~70-90° od pravog smera, pa je velika
+        // ispravka usred kraka okrenula smer (i ponovila 6 koraka). Isti hod van stepeništa - [sidestep_followedWithinFewSteps].
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        direction.nearStairs = true
+        walk(5.0, 120.0) { inHand(30.0) }
+        allHeadings.forEachIndexed { i, it -> assertNear(30.0, it, 10.0, "korak $i") }
+    }
+
+    @Test
+    fun nearStairs_turnOnLanding_isBodyTurn() {
+        // Okret na podestu: telefon se okreće sa telom, a pravac iz ubrzanja (pogrešan na stepenicama) ostaje star - van
+        // stepeništa bi to bio "okret samo telefona" i koraci bi se ponovili u starom smeru (09.10.2026: 5 koraka).
+        stand(1.0, inHand(0.0))
+        direction.reset()
+        walk(5.0, 0.0) { inHand(0.0) }
+        direction.nearStairs = true
+        walk(4.0, 0.0) { inHand(90.0) }
+        allHeadings.takeLast(6).forEach { assertNear(90.0, it, 10.0) }
+    }
+
+    @Test
     fun standingStill_offsetUnchanged() {
         stand(1.0, inHand(45.0))
         direction.reset()

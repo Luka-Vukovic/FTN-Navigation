@@ -575,7 +575,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         // Kad se smer na stepeništu ne zna, pretpostavlja se ka spratu odredišta.
         locator.destination = target?.node?.let { PdrPlace(it.buildingId, it.floor) }
         val reason = locator.step(step.headingDeg, stepLengthM, step.redoSteps, SystemClock.elapsedRealtimeNanos())
-        state = state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
+        walkingDirection.nearStairs = locator.nearStairs
+        state =state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
         updatePosition(before, reason)
         if (reason == PlaceReason.STEPENICE) onStairChange(locator)
     }

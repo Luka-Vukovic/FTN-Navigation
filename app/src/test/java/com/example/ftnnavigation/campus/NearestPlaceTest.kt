@@ -72,6 +72,20 @@ class NearestPlaceTest {
         }
     }
 
+    /**
+     * Teren 09.10.2026: sto za učenje u srednjem hodniku NTP III sprata (uz zid sobe iznad hodnika, preko puta 313-315) -
+     * mesto za učenje bez naziva, najbliže iz 314.
+     */
+    @Test
+    fun ntpStudyTable_nearestPlaceToLearn() {
+        val tables = graph.nodes.filter { it.amenity == AMENITY_UCENJE }
+        assertEquals(listOf("NTP" to 3), tables.map { it.buildingId to it.floor })
+        assertNull(tables.single().name)
+        val nearest = nearest(PlaceKind.UCENJE, from("NTP-314")).first()
+        assertEquals(tables.single().id, nearest.node.id)
+        assertTrue("${nearest.route.lengthM} m", nearest.route.lengthM < 10)
+    }
+
     @Test
     fun everyKind_hasPlaces_sortedByTime() {
         for (kind in PlaceKind.entries) {
@@ -83,6 +97,9 @@ class NearestPlaceTest {
             setOf("Kiosk", "MENZA"),
             nearest(PlaceKind.HRANA, from("204")).map { it.node.name ?: it.node.id.removePrefix("K-Z-") }.toSet(),
         )
-        assertEquals(setOf("Biblioteka", "Čitaonica"), nearest(PlaceKind.UCENJE, from("204")).map { it.node.name }.toSet())
+        assertEquals(
+            setOf("Biblioteka", "Čitaonica", AMENITY_UCENJE),
+            nearest(PlaceKind.UCENJE, from("204")).map { it.node.name ?: it.node.amenity }.toSet(),
+        )
     }
 }

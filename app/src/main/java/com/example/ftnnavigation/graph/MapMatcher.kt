@@ -55,6 +55,9 @@ private const val SAME_DIRECTION_DEG = 30.0
 
 private val ROOM_TYPES = setOf(NodeType.PROSTORIJA, NodeType.VRATA)
 
+/** Izlazi sa sprata na kraju hodnika (na kampus ili u drugu zgradu). */
+private val EXIT_TYPES = setOf(NodeType.ULAZ, NodeType.PROLAZ)
+
 /**
  * Map-matching PDR pozicije na ivice hoda ([EdgeType.HOD]) jednog sprata zgrade. Posle
  * svakog koraka pozicija se projektuje na najbližu ivicu, ali biraju se samo ivice do kojih se
@@ -198,7 +201,7 @@ class MapMatcher(
         val qy = point.y * scale.heightM + stuckY
         val current = segmentOf(point)
         val best = segmentsNear(point, stuckM + toleranceM)
-            .filter { it != current && (inRoom || !it.isRoom) }
+            .filter { it != current && (inRoom || !it.isRoom) && !beyondDeadEnd(it, qx, qy) }
             .minByOrNull { it.distance(qx, qy) } ?: return null
         if (best.distance(qx, qy) > current.distance(qx, qy) - STUCK_ESCAPE_MARGIN_M) return null
         return fix(best, qx, qy)
@@ -230,6 +233,22 @@ class MapMatcher(
             .filter { it !in branch.segments }
             .minByOrNull { it.distance(qx, qy) } ?: return null
         return fix(nearest, qx, qy)
+    }
+
+    /**
+     * Tačka ([qx], [qy]) je iza izlaza sa sprata (ulaz ili prolaz na kraju hodnika): projekcija na [segment] pada na taj
+     * kraj. Izvlačenje zaglavljene tačke tu ne sme da je stavi - sledeći korak bi bio izlazak, a da korisnik nije prošao
+     * hodnikom do njega (teren 09.10.2026, NTP prizemlje: tačka na kraju hodnika, korisnik se ~10 m vrteo u holu,
+     * izvlačenje na 15 m udaljen "ULAZ - FTN" i odmah izlazak na kampus). Čvor stepeništa (isto list sprata) sme.
+     */
+    private fun beyondDeadEnd(segment: Segment, qx: Double, qy: Double): Boolean {
+        val t = segment.project(qx, qy)
+        val end = when {
+            t <= 0.0 -> segment.a
+            t >= 1.0 -> segment.b
+            else -> return false
+        }
+        return end.type in EXIT_TYPES && incident[end.id]?.size == 1
     }
 
     private fun segmentOf(point: EdgePoint): Segment =

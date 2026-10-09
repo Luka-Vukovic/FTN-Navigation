@@ -31,6 +31,13 @@
             android:fillColor="#FFE8EEF4"
             android:pathData="M350,332 L451,332 L451,1660 L350,1660 Z M451,547 L1000,547 L1000,640 L451,640 Z M451,1280 L1822,1280 L1822,1389 L451,1389 Z M1301,800 L1402,800 L1402,1280 L1301,1280 Z M1305,1389 L1397,1389 L1397,1556 L1305,1556 Z M1765,1389 L1822,1389 L1822,1556 L1765,1556 Z M451,1556 L2081,1556 L2081,1660 L451,1660 Z" />
 
+        <!-- Sto za učenje -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="2"
+            android:fillColor="#FFD7CCC8"
+            android:pathData="M670,1282 L1069,1282 L1069,1298 L670,1298 Z" />
+
         <!-- Stepeništa -->
         <path
             android:fillColor="#FFFFE0B2"
