@@ -35,6 +35,7 @@ object AppSettings {
     private const val PREFS = "settings"
     private const val KEY_AUTO_ROTATE_MAP = "auto_rotate_map"
     private const val KEY_STAIR_TURNS = "stair_turns"
+    private const val KEY_HEADING_ERRORS = "heading_errors"
     private const val KEY_FLOOR_CHANGE = "floor_change"
     private const val KEY_CROWD_ROUTING = "crowd_routing"
     private const val KEY_FAVORITES = "favorite_destinations"
@@ -75,6 +76,16 @@ object AppSettings {
 
     fun setStairTurns(context: Context, turns: Map<String, Int>) =
         prefs(context).edit { putString(KEY_STAIR_TURNS, turns.entries.joinToString(";") { "${it.key}=${it.value}" }) }
+
+    /**
+     * Poslednje izmerene greške smera (stepeni, bez ispravke; prosek je zajednička ispravka) - osobina telefona i držanja,
+     * pa se čuvaju i posle Reset-a i zatvaranja aplikacije. Zapis: "11.6;13.7;7.4".
+     */
+    fun headingErrors(context: Context): List<Float> =
+        prefs(context).getString(KEY_HEADING_ERRORS, null).orEmpty().split(';').mapNotNull { it.toFloatOrNull() }
+
+    fun setHeadingErrors(context: Context, errors: List<Float>) =
+        prefs(context).edit { putString(KEY_HEADING_ERRORS, errors.joinToString(";")) }
 
     /** Omiljena odredišta (nazivi sala, zgrada i službi kao u izboru odredišta), redom dodavanja. */
     fun favorites(context: Context): List<String> = names(context, KEY_FAVORITES)

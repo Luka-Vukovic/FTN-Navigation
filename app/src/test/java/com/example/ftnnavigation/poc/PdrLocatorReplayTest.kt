@@ -161,10 +161,11 @@ class PdrLocatorReplayTest {
                     // Prekidač ispravke iz zakrenutosti u redu: različita od 0 -> uključen; 0 uz naučenu -> isključen.
                     val bias = f[7].toFloat()
                     if (bias != 0f) locator.applyCorrection = true
-                    else if (place.buildingId == locator.place.buildingId && locator.headingErrorDeg?.let { it != 0f } == true) locator.applyCorrection = false
+                    else if (locator.headingErrorDeg?.let { it != 0f } == true) locator.applyCorrection = false
                     if (reason == PlaceReason.START) {
                         // Zakrenutost kakvu je telefon tada primenjivao (naučena u replay-u može malo da odstupa).
-                        if (bias != 0f) locator.restoreBias(place.buildingId, bias)
+                        // Snimci do 09.10.2026 uveče: ispravka je bila po zgradi - ovde postaje zajednička.
+                        if (bias != 0f) locator.restoreBias(bias)
                         // Pozicija na Start (od 05.10.2026): replay kreće odatle ako je drugde (Ovde sam pre Start-a).
                         val at = Offset(f[5].toFloat(), f[6].toFloat())
                         val now = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw

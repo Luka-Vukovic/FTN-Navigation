@@ -312,6 +312,12 @@ private val BIAS_LENGTH_RATIO = 0.5..2.0
 private const val MAX_BIAS_CORRECTION_DEG = 90f
 
 /**
+ * Zajednička ispravka = prosek ovoliko poslednjih merenja. Jedno merenje promaši i 5-10° (NB 09.10.2026: +4 na 62 m, +12 na
+ * 14 m istog dana), a ovoliko ih se skupi za jedan izlazak na teren.
+ */
+private const val SHARED_BIAS_SAMPLES = 5
+
+/**
  * Poređenje PDR puta sa stvarnim pri označavanju ("Ovde sam"), od prethodnog sidra na istom spratu. Ispravka smera
  * NIJE trajno rešenje (korisnik, 03.10.2026) - ovo je pre svega merilo koliko smer trenutno promašuje.
  */
@@ -358,8 +364,8 @@ sealed interface HeadingCheck {
  *
  * Svako
  * ručno označavanje je i sidro: posle bar [MIN_BIAS_DISTANCE_M] hoda sa istog sprata, razlika između PDR puta
- * i stvarnog puta daje zakrenutost smera u toj zgradi (magnetno polje u zgradi), koja važi za dalje korake
- * ako je ispravka uključena ([applyCorrection]); to je privremena pomoć i merilo greške ([HeadingCheck]).
+ * i stvarnog puta daje grešku smera; prosek poslednjih merenja je zajednička ispravka (svuda - napolju i u svim
+ * zgradama), koja važi za dalje korake ako je uključena ([applyCorrection]) i čuva se ([learnedHeadingErrors]).
  *
  * Pozicije su relativne na plan mesta ([place]); na kampusu je "plan" cela mapa (sever gore).
  */
@@ -380,8 +386,23 @@ class PdrLocator(
     var match: MatchedPosition? = null
         private set
 
-    /** Naučena zakrenutost smera po zgradi (iz rekalibracija); dodaje se azimutu sa senzora ako je [applyCorrection]. */
-    private val biases = HashMap<String, Float>()
+    /**
+     * Poslednje pouzdano izmerene greške smera (bez ispravke), sa svih mesta. Zajednička ispravka je njihov prosek: greška je
+     * na terenu skoro uvek bila istog znaka i slična svuda (+4..+17°: napolju, NB, AMF, NTP; 01.-09.10.2026) - osobina
+     * telefona i držanja, ne zgrade. Ranije se učila po zgradi, pa naučena napolju nije važila u NTP-u ("smer baca udesno").
+     */
+    private val headingErrors = ArrayDeque<Float>()
+
+    /** Zajednička ispravka (prosek [headingErrors]); 0 dok nije merena. */
+    private val sharedBias: Float get() = if (headingErrors.isEmpty()) 0f else headingErrors.average().toFloat()
+
+    /** Naučene greške smera (za čuvanje između pokretanja aplikacije), od najstarije. */
+    val learnedHeadingErrors: List<Float> get() = headingErrors.toList()
+
+    fun restoreHeadingErrors(errors: List<Float>) {
+        headingErrors.clear()
+        errors.filter { abs(it) <= MAX_BIAS_CORRECTION_DEG }.takeLast(SHARED_BIAS_SAMPLES).forEach(headingErrors::addLast)
+    }
 
     /**
      * Ispravka smera uključena. Isključena: zakrenutost se i dalje meri i pamti, ali se ne primenjuje - svako
@@ -395,11 +416,11 @@ class PdrLocator(
 
     private var pathInterrupted = false
 
-    /** Ispravka koja se primenjuje u zgradi u kojoj je korisnik (0 ako je isključena ili još nije naučena). */
-    val headingBiasDeg: Float get() = if (applyCorrection) biasOf(place) else 0f
+    /** Ispravka koja se dodaje azimutu (−naučena greška; 0 ako je isključena ili još nije naučena) - ista svuda. */
+    val headingBiasDeg: Float get() = if (applyCorrection) -sharedBias else 0f
 
-    /** Poslednja pouzdano izmerena greška smera (bez ispravke) u zgradi u kojoj je korisnik; null dok nije merena. */
-    val headingErrorDeg: Float? get() = biases[place.buildingId]?.let { angleDiffDeg(0f, it) }
+    /** Naučena greška smera (prosek poslednjih merenja, bez ispravke); null dok nije merena. */
+    val headingErrorDeg: Float? get() = if (headingErrors.isEmpty()) null else sharedBias
 
     private val planUp: Map<String, Float> = (INDOOR_BUILDINGS.map { it.buildingId } + CAMPUS_ID)
         .associateWith { planUpMagneticAzimuthDeg(graph.placement(it), declinationDeg) }
@@ -645,15 +666,19 @@ class PdrLocator(
         }
         learnStairTurn(place)
         val check = checkHeading(place, point)
-        if (check is HeadingCheck.Measured && check.reliable) biases[place.buildingId] = angleDiffDeg(0f, check.errorDeg)
+        if (check is HeadingCheck.Measured && check.reliable) {
+            headingErrors.addLast(angleDiffDeg(check.errorDeg, 0f))
+            if (headingErrors.size > SHARED_BIAS_SAMPLES) headingErrors.removeFirst()
+        }
         setAnchor(place, point)
         varianceM2 = KNOWN_VARIANCE_M2
         return check
     }
 
-    /** Zakrenutost zgrade kakvu je telefon imao (replay: START red nosi primenjenu ispravku). */
-    internal fun restoreBias(buildingId: String, deg: Float) {
-        biases[buildingId] = deg
+    /** Ispravka kakvu je telefon imao ([headingBiasDeg]; replay: START red nosi primenjenu ispravku). */
+    internal fun restoreBias(deg: Float) {
+        headingErrors.clear()
+        headingErrors.addLast(-deg)
     }
 
     /** Start napolju sa GPS lokacije. */
@@ -673,7 +698,10 @@ class PdrLocator(
         clearLift()
     }
 
-    /** Briše poziciju i naučene ispravke smera; mesto ostaje (za prikaz). */
+    /**
+     * Briše poziciju; mesto ostaje (za prikaz). Naučena ispravka smera ostaje - osobina telefona i držanja, ne jednog
+     * praćenja (kao strana okreta na stepeništu).
+     */
     fun reset() {
         raw = null
         match = null
@@ -683,7 +711,6 @@ class PdrLocator(
         exitDetector = null
         rejectedEntrance = null
         stepStarts.clear()
-        biases.clear()
         climb = null
         watch = StairWalk()
         lastStairChange = null
@@ -852,7 +879,6 @@ class PdrLocator(
         return null
     }
 
-    private fun biasOf(place: PdrPlace) = biases[place.buildingId] ?: 0f
 
     /**
      * Korak u metrima plana mesta [plan] (x udesno, y naniže); smer je ispravljen zakrenutošću zgrade u kojoj

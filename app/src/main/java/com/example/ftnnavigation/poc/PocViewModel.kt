@@ -436,6 +436,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             locator = PdrLocator(graph, campus, declination, loadStairPaths(application)).apply {
                 applyCorrection = state.applyHeadingCorrection
                 restoreStairTurns(AppSettings.stairTurns(application))
+                restoreHeadingErrors(AppSettings.headingErrors(application))
             }
             this@PocViewModel.graph = graph
             lastAzimuthDeg?.let(::onHeading)
@@ -691,8 +692,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val place = if (building != null) PdrPlace(building.buildingId, floorOf(building)) else PdrPlace.CAMPUS
         val before = locator.place
         val check = locator.setPosition(place, point)
-        // Ispravka sprata posle stepeništa je mogla da nauči smer okreta.
+        // Ispravka sprata posle stepeništa je mogla da nauči smer okreta, a merenje smera zajedničku ispravku.
         AppSettings.setStairTurns(getApplication(), locator.learnedStairTurns)
+        AppSettings.setHeadingErrors(getApplication(), locator.learnedHeadingErrors)
         // Označavanje sklanja i pitanje za lift (sprat je izabran na planu).
         state = state.copy(isPickingStart = false, liftPrompt = null)
         updatePosition(before, PlaceReason.RUCNO)
@@ -806,7 +808,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         gpsSession.stop()
     }
 
-    // Smer se zadržava - dolazi sa senzora, nije deo sesije praćenja. Ispravke smera se brišu.
+    // Smer se zadržava - dolazi sa senzora, nije deo sesije praćenja. Naučena ispravka smera ostaje (osobina telefona).
     fun reset() {
         stopTracking()
         walkingDirection.reset()

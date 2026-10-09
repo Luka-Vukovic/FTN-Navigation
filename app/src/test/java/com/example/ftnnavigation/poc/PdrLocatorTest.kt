@@ -422,7 +422,7 @@ class PdrLocatorTest {
         assertEquals(90f, locator.headingOnPlan(east + 40f), 0.01f)
     }
 
-    /** Druga rekalibracija: ukupna greška kompasa i koliko je promašio uz ispravku od prve. */
+    /** Druga rekalibracija: ukupna greška kompasa i koliko je promašio uz ispravku od prve; ispravka = prosek merenja. */
     @Test
     fun secondRecalibration_reportsTotalAndResidual() {
         val locator = outdoorLocator()
@@ -431,8 +431,26 @@ class PdrLocatorTest {
         val check = locator.walkEastAndMark(from, 20, compassErrorDeg = 50f) as HeadingCheck.Measured
         assertEquals(50f, check.errorDeg, 0.5f)
         assertEquals(10f, check.residualDeg, 0.5f)
-        assertEquals(50f, locator.headingErrorDeg!!, 0.5f)
-        assertEquals(-50f, locator.headingBiasDeg, 0.5f)
+        assertEquals(45f, locator.headingErrorDeg!!, 0.5f)
+        assertEquals(-45f, locator.headingBiasDeg, 0.5f)
+    }
+
+    /**
+     * Zajednička ispravka (teren 09.10.2026: greška +4..+17° i napolju i u svim zgradama): izmerena napolju važi i u zgradi,
+     * ostaje posle Reset-a, i prenosi se ([learnedHeadingErrors] / [PdrLocator.restoreHeadingErrors]); prosek poslednjih 5.
+     */
+    @Test
+    fun sharedCorrection_measuredOutside_appliesInBuilding_keptAfterReset() {
+        val locator = outdoorLocator()
+        locator.walkEastAndMark(outdoor, 20, compassErrorDeg = 12f)
+        locator.setPosition(PdrPlace("NB", 0), Offset(node("NB-0-ULAZ").x, node("NB-0-ULAZ").y))
+        assertEquals(-12f, locator.headingBiasDeg, 0.5f)
+        locator.reset()
+        assertEquals(12f, locator.headingErrorDeg!!, 0.5f)
+        val other = PdrLocator(graph, campus, declination, stairPaths).apply { restoreHeadingErrors(locator.learnedHeadingErrors) }
+        assertEquals(-12f, other.headingBiasDeg, 0.5f)
+        other.restoreHeadingErrors(listOf(1f, 2f, 3f, 4f, 5f, 6f, 7f))
+        assertEquals(5f, other.headingErrorDeg!!, 1e-4f)
     }
 
     /** Isključena ispravka: označavanje samo meri (celu grešku); uključivanje primenjuje izmereno. */
