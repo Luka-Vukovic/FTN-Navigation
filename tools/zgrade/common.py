@@ -331,7 +331,9 @@ def drawable(plan, viewport, wall, building_name, script, source="snimaka aplika
                           f"M{x0},{y0} L{x1},{y1} M{x1},{y0} L{x0},{y1}" for x0, y0, x1, y1 in lifts))))
     if plan.get("columns"):
         parts.append(("Stubovi", path(fill=C_WALL, data=" ".join(rect(x - 2, y - 2, x + 2, y + 2) for x, y in plan["columns"]))))
-    parts.append(("Prostorije", path(stroke=C_WALL, width=1.5, data=" ".join(rect(*r["rect"]) for r in plan["rooms"]))))
+    # Soba sa "poly" (nije pravougaonik - ITC amfiteatar) crta se po njemu; "rect" ostaje za čvor i vrata.
+    parts.append(("Prostorije", path(stroke=C_WALL, width=1.5, data=" ".join(
+        poly(r["poly"]) if r.get("poly") else rect(*r["rect"]) for r in plan["rooms"]))))
     parts.append(("Spoljni zid", path(stroke=C_OUTER, width=3, data=" ".join(poly(o) for o in outlines))))
     body = "".join(f"\n        <!-- {name} -->\n{p}" for name, p in parts)
     return f"""<?xml version="1.0" encoding="utf-8"?>

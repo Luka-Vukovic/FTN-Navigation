@@ -31,7 +31,7 @@ class NearestPlaceTest {
         // NB: suteren 2, prizemlje 1, I-IV po 2; AMF suteren 2; Kula 8 spratova po 2; F I-III; NTP prizemlje 1, I-IV
         // uz liftove i blok u donjem srednjem redu (i na III - teren 08.10.2026; do tada je tu bio NTP-315).
         assertEquals(
-            mapOf("NB" to 11, "AMF" to 2, "KULA" to 16, "F" to 3, "NTP" to 9),
+            mapOf("NB" to 11, "AMF" to 2, "KULA" to 16, "F" to 3, "NTP" to 9, "ITC" to 8),
             toilets.groupingBy { it.buildingId }.eachCount(),
         )
         for (toilet in toilets) {

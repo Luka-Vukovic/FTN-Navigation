@@ -130,6 +130,7 @@
     <string name="map_mode_ntp">NTP</string>
     <string name="map_mode_f">F-blok</string>
     <string name="map_mode_mi">MI</string>
+    <string name="map_mode_itc">ITC</string>
     <string name="map_mode_more">…</string>
     <string name="map_mode_more_description">Ostale zgrade</string>
     <string name="map_mode_here">Ovde si</string>
@@ -138,6 +139,7 @@
     <string name="kula_location">Kula · %1$s</string>
     <string name="f_location">F-blok · %1$s</string>
     <string name="mi_location">Mašinski institut · %1$s</string>
+    <string name="itc_location">ITC · %1$s</string>
     <string name="floor_ground">prizemlje</string>
     <string name="floor_basement">suteren</string>
     <string name="floor_number">%1$d. sprat</string>
@@ -317,7 +319,7 @@
     <string name="building_info_amf">Zgrada sa velikim salama A1–A4 za predavanja, salama AR0–AR6, Bibliotekom i Skriptarnicom. Iznutra je povezana sa Nastavnim blokom, Kulom, F-blokom i ITC-om, pa se do njih ne mora napolje. U zgradi je i pošta, sa ulazom spolja sa zapadne strane.</string>
     <string name="building_info_f">Prizemlje i tri sprata sa salama F 0xx–F 3xx. Do F-bloka se iznutra stiže pasarelom iz Amfiteatara, koja vodi na podest glavnog stepeništa između prizemlja i I sprata.</string>
     <string name="building_info_kula">Najviša zgrada fakulteta. Iznutra je povezana sa Nastavnim blokom i Amfiteatrima.</string>
-    <string name="building_info_itc">Istraživačko-tehnološki centar. Iznutra je povezan sa Amfiteatrima.</string>
+    <string name="building_info_itc">Istraživačko-tehnološki centar: prizemlje (dve učionice, klub) i četiri sprata, veliki amfiteatar ITCA1 je na trećem spratu. Glavni ulaz je sa severa, a iz prizemlja se iznutra prelazi u Amfiteatre.</string>
     <string name="building_info_mi">Instituti Mašinskog odseka: prizemlje i I sprat, dugački deo sa glavnim ulazom (portirnica) i tri krila - A i B, V i G, D i Đ. Oznaka sale MI A2-1 znači krilo A. Zgrada nije povezana sa ostalima, do nje se ide spolja.</string>
     <string name="building_info_ntp">Naučno-tehnološki park. Ovde su sale sa oznakom NTP. Do njega se ide spolja.</string>
     <string name="building_info_dgg">Departman za građevinarstvo i geodeziju, sa laboratorijama. Do njega se ide spolja.</string>

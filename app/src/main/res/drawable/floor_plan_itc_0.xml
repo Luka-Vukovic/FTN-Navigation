@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Prizemlje - ITC. GENERISANO skriptom tools/zgrade/build_itc.py (ne menjati ručno).
+    Šematski precrtano sa ispravljenih fotografija evakuacionih planova (teren 09.10.2026); koordinate su px plana
+    (zajednički sistem NB, AMF, Kule i F-bloka, 1 px = 0.1014 m), grupa ih pomera u viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="374dp"
+    android:height="257dp"
+    android:viewportWidth="374"
+    android:viewportHeight="257">
+
+    <group
+        android:translateX="15"
+        android:translateY="30">
+
+        <!-- Unutrašnjost -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M0,0 L344,0 L344,148 L0,148 Z M101,148 L189,148 L189,161 L177,161 L177,212 L101,212 Z" />
+
+        <!-- Hodnici -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M0,61 L117,61 L117,0 L231,0 L231,89 L189,89 L189,161 L177,161 L177,212 L159,212 L159,148 L176,148 L176,100 L117,100 L117,89 L0,89 Z" />
+
+        <!-- Ulazi -->
+        <path
+            android:fillColor="#FFC8E6C9"
+            android:pathData="M128,-22 L160,-22 L160,0 L128,0 Z M159,205 L177,205 L177,212 L159,212 Z" />
+
+        <!-- Stepeništa -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M142,100 L176,100 L176,148 L142,148 Z M128,-22 L160,-22 L160,-8 L128,-8 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:pathData="M142,106 H176 M142,112 H176 M142,118 H176 M142,124 H176 M142,130 H176 M142,136 H176 M142,142 H176 M134,-22 V-8 M140,-22 V-8 M146,-22 V-8 M152,-22 V-8 M158,-22 V-8" />
+
+        <!-- Liftovi -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:fillColor="#FFFFCC80"
+            android:pathData="M122,100 L140,100 L140,118 L122,118 Z" />
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="0.8"
+            android:pathData="M122,100 L140,118 M140,100 L122,118" />
+
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M0,0 L73,0 L73,61 L0,61 Z M73,0 L117,0 L117,61 L73,61 Z M0,89 L59,89 L59,148 L0,148 Z M59,89 L117,89 L117,148 L59,148 Z M231,0 L344,0 L344,75 L231,75 Z M231,75 L344,75 L344,148 L231,148 Z M158,26 L189,26 L189,56 L158,56 Z M122,118 L140,118 L140,148 L122,148 Z M189,103 L231,103 L231,125 L189,125 Z M189,125 L231,125 L231,148 L189,148 Z M101,148 L159,148 L159,212 L101,212 Z" />
+
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="3"
+            android:pathData="M0,0 L344,0 L344,148 L0,148 Z M101,148 L189,148 L189,161 L177,161 L177,212 L101,212 Z" />
+
+    </group>
+</vector>

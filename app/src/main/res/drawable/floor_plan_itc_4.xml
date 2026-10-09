@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    IV sprat - ITC. GENERISANO skriptom tools/zgrade/build_itc.py (ne menjati ručno).
+    Šematski precrtano sa ispravljenih fotografija evakuacionih planova (teren 09.10.2026); koordinate su px plana
+    (zajednički sistem NB, AMF, Kule i F-bloka, 1 px = 0.1014 m), grupa ih pomera u viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="374dp"
+    android:height="257dp"
+    android:viewportWidth="374"
+    android:viewportHeight="257">
+
+    <group
+        android:translateX="15"
+        android:translateY="30">
+
+        <!-- Krov (niži spratovi) -->
+        <path
+            android:strokeColor="#FFBDBDBD"
+            android:strokeWidth="1"
+            android:fillColor="#FFF0F0F0"
+            android:pathData="M0,0 L344,0 L344,148 L0,148 Z" />
+
+        <!-- Unutrašnjost -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M112,54 L237,54 L237,148 L112,148 Z" />
+
+        <!-- Praznine -->
+        <path
+            android:fillColor="#FFF0F0F0"
+            android:pathData="M0,0 L112,0 L112,148 L0,148 Z M237,0 L344,0 L344,148 L237,148 Z" />
+        <path
+            android:strokeColor="#FFBDBDBD"
+            android:strokeWidth="0.8"
+            android:pathData="M0,6 H112 M0,12 H112 M0,18 H112 M0,24 H112 M0,30 H112 M0,36 H112 M0,42 H112 M0,48 H112 M0,54 H112 M0,60 H112 M0,66 H112 M0,72 H112 M0,78 H112 M0,84 H112 M0,90 H112 M0,96 H112 M0,102 H112 M0,108 H112 M0,114 H112 M0,120 H112 M0,126 H112 M0,132 H112 M0,138 H112 M0,144 H112 M237,6 H344 M237,12 H344 M237,18 H344 M237,24 H344 M237,30 H344 M237,36 H344 M237,42 H344 M237,48 H344 M237,54 H344 M237,60 H344 M237,66 H344 M237,72 H344 M237,78 H344 M237,84 H344 M237,90 H344 M237,96 H344 M237,102 H344 M237,108 H344 M237,114 H344 M237,120 H344 M237,126 H344 M237,132 H344 M237,138 H344 M237,144 H344" />
+
+        <!-- Hodnici -->
+        <path
+            android:fillColor="#FFE8EEF4"
+            android:pathData="M142,54 L181,54 L181,100 L142,100 Z" />
+
+        <!-- Stepeništa -->
+        <path
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M142,100 L176,100 L176,148 L142,148 Z" />
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:pathData="M142,106 H176 M142,112 H176 M142,118 H176 M142,124 H176 M142,130 H176 M142,136 H176 M142,142 H176" />
+
+        <!-- Prostorije -->
+        <path
+            android:strokeColor="#FF455A64"
+            android:strokeWidth="1.5"
+            android:pathData="M112,58 L142,58 L142,95 L112,95 Z M181,54 L237,54 L237,144 L181,144 Z M112,125 L123,125 L123,148 L112,148 Z M112,95 L142,95 L142,125 L112,125 Z" />
+
+        <!-- Spoljni zid -->
+        <path
+            android:strokeColor="#FF263238"
+            android:strokeWidth="3"
+            android:pathData="M112,54 L237,54 L237,148 L112,148 Z" />
+
+    </group>
+</vector>

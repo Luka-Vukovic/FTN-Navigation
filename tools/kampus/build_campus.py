@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ntp"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "zgrade"))
 import build_amf  # noqa: E402 - planovi NB, Amfiteatara, Kule i F-bloka: zajednički sistem, viewport-i, ulazi
 import build_f  # noqa: E402
+import build_itc  # noqa: E402
 import build_mi  # noqa: E402
 import build_kula  # noqa: E402
 import build_nb  # noqa: E402
@@ -88,7 +89,7 @@ NO_HOLES = {"NTP"}
 
 # Zgrade čiji unutrašnji graf postoji u aplikaciji (assets/nb.json, amf.json, kula.json, f.json, ntp.json, mi.json):
 # za njih se ne pravi čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
-WITH_INTERIOR = {"NB", "NTP", "AMF", "KULA", "F", "MI"}
+WITH_INTERIOR = {"NB", "NTP", "AMF", "KULA", "F", "MI", "ITC"}
 
 # Spojni prolazi (unutrašnje veze), OSM way zasebnog dela zgrade između njih.
 PASSAGES = [
@@ -355,6 +356,20 @@ def f_placement(to_campus, nb_placement, m_per_px):
     }
 
 
+def itc_placement(to_campus, nb_placement, m_per_px):
+    """ITC je u koordinatama evakuacionog plana (build_itc.py: gore sever) - zajednički sistem zarotiran za 90° u smeru
+    kazaljke: tačka ITC-a (x, y) je u zajedničkom sistemu build_itc.to_shared, pa je rotacija smeštaja rotacija NB + 90°."""
+    vx, vy, vw, vh = build_itc.VIEWPORT
+    origin = to_campus(build_itc.to_shared((vx, vy)))
+    return {
+        "originX": round(origin[0], 2),
+        "originY": round(origin[1], 2),
+        "rotationDeg": round(nb_placement["rotationDeg"] + 90, 2),
+        "widthM": round(m_per_px * vw, 2),
+        "heightM": round(m_per_px * vh, 2),
+    }
+
+
 def ntp_plan_placement(ring):
     """Plan NTP-a u kampus (build_ntp.plan_transform): transformacija i smeštaj za campus.json."""
     transform, _, z = build_ntp.plan_transform(ring)
@@ -603,6 +618,7 @@ def main():
     shared = {bid: shared_placement(to_campus, placement, m_per_px, module.VIEWPORT)
               for bid, module in (("AMF", build_amf), ("KULA", build_kula))}
     shared["F"] = f_placement(to_campus, placement, m_per_px)
+    shared["ITC"] = itc_placement(to_campus, placement, m_per_px)
     # MI (03.10.2026): plan je u zajedničkom sistemu (build_mi.py: OSM obris preveden u px plana NB).
     shared["MI"] = shared_placement(to_campus, placement, m_per_px, build_mi.VIEWPORT)
     for label, (plan_xy, node) in {
@@ -613,6 +629,8 @@ def main():
         "Kula trem ka AMF": ((236, 376), "K-P-AMF-KULA"),
         "F pasarela ka AMF": (build_f.to_shared(build_f.PASSAGE), "K-P-AMF-F"),
         "MI ulaz": (build_mi.ENTRANCE, "K-U-MI-1"),
+        "ITC ulaz": (build_itc.to_shared(build_itc.ENTRANCE), "K-U-ITC-1"),
+        "ITC prolaz ka AMF": (build_itc.to_shared(build_itc.PASSAGE_AMF), "K-P-ITC-AMF"),
     }.items():
         checks[f"{label} -> {node}"] = math.dist(to_campus(plan_xy), graph.xy(node))
 

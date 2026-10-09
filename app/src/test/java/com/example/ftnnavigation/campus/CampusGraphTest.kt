@@ -5,6 +5,7 @@ import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.KulaPlan
+import com.example.ftnnavigation.graph.ItcPlan
 import com.example.ftnnavigation.graph.MiPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
@@ -149,7 +150,8 @@ class CampusGraphTest {
             .forEach { assertNotNull(it, resolveTarget(it, graph, campus)) }
         // MI ima plan od 03.10.2026 - "do zgrade" je glavni ulaz; zgrada bez plana je jedan čvor K-Z-...
         assertEquals(MiPlan.ENTRANCE_ID, resolveTarget("Mašinski institut", graph, campus)?.node?.id)
-        assertEquals("K-Z-ITC", resolveTarget("Istraživačko-tehnološki centar", graph, campus)?.node?.id)
+        assertEquals(ItcPlan.ENTRANCE_ID, resolveTarget("Istraživačko-tehnološki centar", graph, campus)?.node?.id)
+        assertEquals("K-Z-DGG", resolveTarget("Departman za građevinarstvo i geodeziju", graph, campus)?.node?.id)
     }
 
     /** Početna i obaveštenje: ucrtana sala -> zgrada i sprat, inače samo naziv zgrade / mesta van kampusa. */
@@ -162,7 +164,7 @@ class CampusGraphTest {
             "MF-27" to PlaceLocation.Named("Medicinski fakultet"),
             "Nastavni blok" to PlaceLocation.Named(campus.building("NB")!!.name!!),
             "Menza" to PlaceLocation.Named("Menza"),
-            "ITC04" to PlaceLocation.Named(campus.building("ITC")!!.name!!),
+            "ITC04" to PlaceLocation.Room(ItcPlan, 0), "ITCA1" to PlaceLocation.Room(ItcPlan, 3),
             "MI 24-A" to PlaceLocation.Named(campus.building("MI")!!.name!!),
         ).forEach { (place, location) -> assertEquals(place, location, placeLocation(place, graph, campus)) }
         assertNull(placeLocation("Hodnik", graph, campus))

@@ -95,7 +95,7 @@ sealed interface IndoorBuilding {
 }
 
 /** Sve zgrade sa planom, redom kao na Mapi. */
-val INDOOR_BUILDINGS: List<IndoorBuilding> by lazy { listOf(NbPlan, AmfPlan, KulaPlan, NtpPlan, FPlan, MiPlan) }
+val INDOOR_BUILDINGS: List<IndoorBuilding> by lazy { listOf(NbPlan, AmfPlan, KulaPlan, NtpPlan, FPlan, MiPlan, ItcPlan) }
 
 fun indoorBuilding(buildingId: String): IndoorBuilding? = INDOOR_BUILDINGS.find { it.buildingId == buildingId }
 
@@ -279,5 +279,36 @@ object MiPlan : IndoorBuilding {
     override fun floorDrawable(floor: Int): Int = when (floor) {
         1 -> R.drawable.floor_plan_mi_1
         else -> R.drawable.floor_plan_mi_0
+    }
+}
+
+/**
+ * ITC (Istraživačko-tehnološki centar): prizemlje ... IV sprat, sa fotografija evakuacionih planova (teren 09.10.2026,
+ * tools/zgrade/build_itc.py), gore sever (jezgro sa stepeništem dole, kao F-blok). Lift P-III. Oznake sala nisu na
+ * planovima: ITCA1 (amfiteatar III) je od korisnika, ostale (ITC03, ITC04, ITCS-01, ITCS-03, ITCS-RC) su pretpostavka.
+ */
+object ItcPlan : IndoorBuilding {
+    const val BUILDING_ID = "ITC"
+
+    /** Glavni ulaz, sever. */
+    const val ENTRANCE_ID = "ITC-0-ULAZ"
+    val FLOORS = 0..4
+
+    override val buildingId get() = BUILDING_ID
+    override val asset get() = "itc.json"
+    override val floors get() = FLOORS
+    override val entranceId get() = ENTRANCE_ID
+    // Plan je 374 x 257 px (NB 750 x 275 sa 0,033) - ista veličina slova u metrima.
+    override val labelHeight get() = 0.035f
+
+    override fun label(name: String) = name
+
+    @DrawableRes
+    override fun floorDrawable(floor: Int): Int = when (floor) {
+        1 -> R.drawable.floor_plan_itc_1
+        2 -> R.drawable.floor_plan_itc_2
+        3 -> R.drawable.floor_plan_itc_3
+        4 -> R.drawable.floor_plan_itc_4
+        else -> R.drawable.floor_plan_itc_0
     }
 }
