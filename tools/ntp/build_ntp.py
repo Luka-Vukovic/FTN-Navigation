@@ -423,6 +423,10 @@ def typical_plan(f):
         rooms[room] = None
         rooms += SPLIT_SHAPES[room]
     tables = [STUDY_TABLES[f][0]] if f in STUDY_TABLES else []
+    for x0, y0, x1, y1 in tables:
+        # Niša za sto u donjem zidu sobe 13.
+        (a, top), _, (b, bottom), _ = rooms[STUDY_TABLE_ROOM]
+        rooms[STUDY_TABLE_ROOM] = [(a, top), (b, top), (b, bottom), (x1, bottom), (x1, y0), (x0, y0), (x0, bottom), (a, bottom)]
     return {**TYPICAL, "rooms": [r for r in rooms if r], "tables": tables}
 
 
@@ -596,7 +600,10 @@ TOILETS_GROUND = [((15, 1479), (15, 1407), "W0")]
 # Mesto za učenje (teren 09.10.2026, korisnik označio na snimku ekrana III sprata): sto u srednjem hodniku, uz zid velike
 # sobe iznad hodnika (soba 13, x 666-1073) - nije posebna prostorija. Sprat -> (pravougaonik stola, tačka, čvor hodnika).
 # Čvor bez naziva, vrsta UCENJE ("Najbliže mesto" u aplikaciji, uz Biblioteku i Čitaonicu).
-STUDY_TABLES = {3: ((670, 1282, 1069, 1298), (870, 1298), "C870")}
+# Sto je uvučen u zid sobe 13 (niša; teren 09.10.2026 uveče: "sam sto bi trebalo da je u stvari uvučen") - ranije je bio
+# nacrtan u hodniku (y 1282-1298). Dubina niše = dubina stola (~0,5 m) je PRETPOSTAVKA.
+STUDY_TABLES = {3: ((670, 1262, 1069, 1280), (870, 1298), "C870")}
+STUDY_TABLE_ROOM = 13
 
 
 def study_tables(g):

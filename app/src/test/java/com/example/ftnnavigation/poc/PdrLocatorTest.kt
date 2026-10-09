@@ -175,6 +175,58 @@ class PdrLocatorTest {
     }
 
     /**
+     * Teren 09.10.2026 uveče, NTP: korisnik ide pravo ka PASAŽ-u i ~2 koraka od zida skreće uz zid ka glavnom ulazu - ulazak
+     * kroz PASAŽ je okinuo, a tačka je stajala na ulazu dok je on hodao uz zid (kasnije lažan izlazak na drugom kraju PASAŽ-a).
+     * Sada se ulazak vraća napolje čim pomeraj koraka ide uz zid, a tačka na grafu ne odmiče.
+     */
+    @Test
+    fun enteredThenWalkingAlongWall_backOutside() {
+        val entrance = graph.position(node("K-U-NTP-1"))
+        val inward = inwardOf("NTP-0-ULAZ-PASAZ-I")
+        val main = graph.position(node("K-U-NTP-3"))
+        val wall = wallDirection("NTP", entrance).let { w -> if (w.x * (main.x - entrance.x) + w.y * (main.y - entrance.y) > 0) w else PointM(-w.x, -w.y) }
+        val start = PointM(entrance.x - inward.x * 6, entrance.y - inward.y * 6)
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val towardDoor = magneticAzimuth(start, entrance)
+        val entered = (1..12).firstOrNull { locator.step(towardDoor, stepM) == PlaceReason.ULAZ }
+        assertNotNull("nije ušao", entered)
+        assertEquals(PdrPlace("NTP", 0), locator.place)
+        val alongWall = magneticAzimuth(entrance, PointM(entrance.x + wall.x, entrance.y + wall.y))
+        val back = (1..10).firstOrNull { locator.step(alongWall, stepM) == PlaceReason.NIJE_USAO }
+        assertNotNull("ostao u zgradi", back)
+        assertEquals(PdrPlace.CAMPUS, locator.place)
+        // Ne ulazi odmah opet kroz isti ulaz.
+        val again = (1..4).mapNotNull { locator.step(alongWall, stepM) }
+        assertTrue("$again", again.isEmpty())
+    }
+
+    /** Ulazak pa hod hodnikom u zgradu (pravac ulaza) ostaje u zgradi. */
+    @Test
+    fun enteredThenWalkingIn_staysInside() {
+        val entrance = graph.position(node("K-U-NTP-1"))
+        val inward = inwardOf("NTP-0-ULAZ-PASAZ-I")
+        val start = PointM(entrance.x - inward.x * 6, entrance.y - inward.y * 6)
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val azimuth = magneticAzimuth(start, entrance)
+        val reasons = (1..25).mapNotNull { locator.step(azimuth, stepM) }
+        assertEquals(listOf(PlaceReason.ULAZ), reasons)
+        assertEquals(PdrPlace("NTP", 0), locator.place)
+    }
+
+    /** Tačka napolju nesumnjivo duboko u obrisu zgrade sa planom (ulaz nije prepoznat) -> na najbliži hodnik prizemlja. */
+    @Test
+    fun deepInsideOutline_entersNearestCorridor() {
+        val outline = campus.building("NTP")!!
+        val deep = (0..450 step 2).flatMap { x -> (0..345 step 2).map { y -> PointM(x.toDouble(), y.toDouble()) } }
+            .first { outline.contains(it) && outline.distanceToWallM(it) >= 20 }
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(deep)) }
+        val reasons = (1..6).mapNotNull { locator.step(it * 90f, 0.3f) }
+        assertEquals(listOf(PlaceReason.ULAZ), reasons)
+        assertEquals(PdrPlace("NTP", 0), locator.place)
+        assertNotNull(locator.match)
+    }
+
+    /**
      * Teren 09.10.2026, NTP prizemlje: tačka na slepom kraju hodnika, korisnik se ~10 m vrti u holu - izvlačenje zaglavljene
      * tačke ju je stavilo na 15 m udaljen "ULAZ - FTN" i sledeći korak je bio izlazak na kampus.
      */
@@ -692,6 +744,48 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("NTP", 3), locator.place)
         assertEquals(false, locator.lastStairChange!!.guessed)
         assertNull(locator.learnedStairTurns["NTP/S1"])
+    }
+
+    /**
+     * Teren 09.10.2026 uveče, NTP S1 III -> II -> I -> P (hod-20261009-182930: azimut, vreme u 0,1 s). Na I spratu je okret
+     * ka sledećem kraku počinjao postepeno posle kraja kraka od 12 gazišta, pa je tačka izlazila sa stepeništa i I -> P nije
+     * prepoznato ("posle toga na prizemlje nije lepo prešao"; NTP krak ima ~14 koraka).
+     */
+    @Test
+    fun ntpStairs_threeFloorsDown_gradualTurnOnLandings() {
+        val steps = listOf(
+            327 to 8, 326 to 11, 323 to 19, 324 to 26, 325 to 37, 326 to 43, 327 to 50, 328 to 55, 330 to 61, 331 to 67,
+            334 to 73, 335 to 80, 335 to 86, 335 to 91, 335 to 98, 335 to 103, 331 to 109, 328 to 115, 318 to 119, 288 to 125,
+            257 to 133, 236 to 139, 207 to 147, 183 to 153, 159 to 163, 154 to 169, 154 to 175, 155 to 182, 154 to 188, 153 to 194,
+            152 to 200, 151 to 206, 152 to 213, 154 to 219, 155 to 226, 155 to 232, 154 to 238, 150 to 244, 141 to 250, 123 to 257,
+            103 to 263, 78 to 269, 54 to 276, 32 to 282, 9 to 289, 348 to 296, 335 to 305, 333 to 311, 334 to 318, 337 to 324,
+            337 to 331, 338 to 336, 340 to 342, 338 to 347, 339 to 353, 340 to 359, 338 to 365, 336 to 371, 334 to 376, 329 to 382,
+            321 to 386, 304 to 394, 285 to 400, 255 to 406, 228 to 413, 205 to 420, 187 to 427, 173 to 432, 156 to 441, 149 to 447,
+            146 to 453, 148 to 459, 149 to 465, 149 to 471, 147 to 477, 149 to 483, 151 to 490, 152 to 496, 152 to 503, 149 to 509,
+            142 to 515, 136 to 523, 130 to 528, 116 to 535, 94 to 542, 68 to 549, 43 to 557, 25 to 564, 5 to 572, 350 to 578,
+            338 to 588, 332 to 594, 326 to 600, 324 to 607, 326 to 614, 328 to 620, 329 to 626, 329 to 633, 325 to 639, 319 to 646,
+            316 to 652, 314 to 659, 309 to 665, 303 to 672, 293 to 677, 276 to 683, 259 to 689, 238 to 695, 219 to 703, 206 to 710,
+            187 to 719, 173 to 724, 157 to 733, 150 to 743, 147 to 749, 145 to 756, 144 to 762, 143 to 768, 144 to 775, 147 to 782,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace("NTP", 3), Offset(0.5409f, 0.470082f)) }
+        val reasons = steps.mapNotNull { (azimuth, t) -> locator.step(azimuth.toFloat(), 0.75f, timeNs = t * 100_000_000L) }
+        assertEquals(List(3) { PlaceReason.STEPENICE }, reasons)
+        assertEquals(PdrPlace("NTP", 0), locator.place)
+    }
+
+    /**
+     * Teren 09.10.2026 uveče, NTP III: "Ovde sam" pored S1, pa hod ka hodniku ~90° od kraka (hod-20261009-182421) - tačka je
+     * krenula krakom (prag 100° od smera kraka), korisnik je dvaput ponovo pokrenuo praćenje. Korak bliži smeru ka hodniku
+     * nego smeru kraka nije na kraku.
+     */
+    @Test
+    fun besideStairs_walkingTowardCorridor_staysOnFloor() {
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace("NTP", 3), Offset(0.55188125f, 0.43177563f)) }
+        val s1 = graph.position(node("NTP-3-S1"))
+        listOf(59, 58).forEach { locator.step(it.toFloat(), 0.75f) }
+        // Ranije: prvi korak na krak, drugi nazad na čvor S1, pa opet na krak čim je tačka bila do 1,5 m od njega.
+        assertNotNull("na grafu hodnika", locator.match)
+        assertTrue("odmakao se od stepeništa", distance(locator.position(), s1) > 1.5)
     }
 
     /**

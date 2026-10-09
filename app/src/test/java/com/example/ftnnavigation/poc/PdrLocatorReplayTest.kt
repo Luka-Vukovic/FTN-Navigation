@@ -35,6 +35,9 @@ class PdrLocatorReplayTest {
         .let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private val declination = 5.5f
+
+    // PDR_FULL_STEPS=1: svaki korak pune dužine (kao pre 09.10.2026 uveče) - za poređenje.
+    private val fullSteps = System.getenv("PDR_FULL_STEPS") == "1"
     // Snimci bez `K` reda (pre 08.10.2026) su hodani sa 0,8 m.
     private var stepM = 0.8f
 
@@ -88,6 +91,14 @@ class PdrLocatorReplayTest {
                     free?.let { String.format(Locale.ROOT, "%.2f", it.x) } ?: "", free?.let { String.format(Locale.ROOT, "%.2f", it.y) } ?: "", edge),
             )
         }
+        // Vrh koraka (dužina koraka po jačini): iz S reda (od 09.10.2026 uveče), a za starije snimke iz istog detektora
+        // ponovo pušten kroz A redove (k-ti detektovan korak = k-ti S red; posle pauze nov detektor, kao na telefonu).
+        val peaks = ArrayDeque<Float>()
+        var detector = AccelStepDetector { _, peak -> peaks.addLast(peak) }
+        for (f in lines) when (f[0]) {
+            "A" -> detector.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), f[1].toLong())
+            "C" -> detector = AccelStepDetector { _, peak -> peaks.addLast(peak) }
+        }
         val lift = LiftRideDetector()
         // PDR_DIRECTION=1: smer koraka računa i [WalkingDirection] (kao na telefonu, uz [PdrLocator.nearStairs]), umesto
         // smera zabeleženog u S redu - za proveru izmena smera hoda zajedno sa locator-om.
@@ -123,6 +134,8 @@ class PdrLocatorReplayTest {
                 "S" -> {
                     lift.onStep(t)
                     steps++
+                    val recalculated = peaks.removeFirstOrNull()
+                    val peak = f.getOrNull(6)?.toFloatOrNull() ?: recalculated ?: AccelStepDetector.STEP_THRESHOLD
                     var heading = f[2].toFloat()
                     var redo = f[3].toInt()
                     direction?.onStep(t)?.let { step ->
@@ -131,7 +144,7 @@ class PdrLocatorReplayTest {
                         heading = step.headingDeg
                         redo = step.redoSteps
                     }
-                    val reason = locator.step(heading, stepM, redo, t)
+                    val reason = locator.step(heading, if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(peak), redo, t)
                     direction?.nearStairs = locator.nearStairs
                     if (reason != null) log(t, "replay: $reason")
                     row(t, "S")
@@ -193,6 +206,7 @@ class PdrLocatorReplayTest {
                 }
             }
         }
+        if (peaks.isNotEmpty()) out.appendLine("Detektor ponovo pušten: ${peaks.size} koraka više nego S redova (vrhovi možda pomereni)")
         if (direction != null) out.appendLine(String.format(Locale.ROOT, "Smer (WalkingDirection): najveća razlika od telefona %.0f°", maxDiff))
         return out.toString() to track.toString()
     }

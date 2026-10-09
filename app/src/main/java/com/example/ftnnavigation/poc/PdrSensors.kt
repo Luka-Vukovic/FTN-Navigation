@@ -20,7 +20,7 @@ import kotlin.math.abs
  *
  * Oba senzora idu u [direction] (smer hoda, ne pravac telefona). [onHeading] dobija smer za
  * prikaz (azimut u stepenima, 0..360, 0 = sever, u smeru kazaljke), a [onStep] smer hoda koraka
- * (uz broj prethodnih koraka koje treba ponoviti). [lift] (ako je zadat) dobija iste uzorke i korake, a prepoznata
+ * (uz broj prethodnih koraka koje treba ponoviti) i visinu vrha koraka ([AccelStepDetector.stepLengthFactor]). [lift] (ako je zadat) dobija iste uzorke i korake, a prepoznata
  * vožnja liftom ide u [onLiftRide]. [recorder] (debug) snima sve događaje. Događaji stižu na glavnoj niti.
  */
 class PdrSensorSession(
@@ -28,7 +28,7 @@ class PdrSensorSession(
     private val direction: WalkingDirection,
     private val trackSteps: Boolean,
     private val onHeading: (Float) -> Unit,
-    private val onStep: (WalkingDirection.WalkStep) -> Unit,
+    private val onStep: (WalkingDirection.WalkStep, Float) -> Unit,
     private val recorder: SensorRecorder? = null,
     private val lift: LiftRideDetector? = null,
     private val onLiftRide: (LiftRide) -> Unit = {},
@@ -37,11 +37,12 @@ class PdrSensorSession(
     private var lastHeading = Float.NaN
     private var lastAccelNs = 0L
 
-    private val stepDetector = AccelStepDetector {
-        lift?.onStep(lastAccelNs)
-        direction.onStep(lastAccelNs)?.let { step ->
-            recorder?.step(lastAccelNs, step, direction)
-            onStep(step)
+    // Korak stiže kad prođe vrh (do 0,2 s posle prelaska praga), sa vremenom prelaska.
+    private val stepDetector = AccelStepDetector { timeNs, peak ->
+        lift?.onStep(timeNs)
+        direction.onStep(timeNs)?.let { step ->
+            recorder?.step(timeNs, step, direction, peak)
+            onStep(step, peak)
         }
     }
 
@@ -112,7 +113,7 @@ fun PdrHeadingEffect(
 
     LifecycleResumeEffect(sensorManager, direction, enabled) {
         val session = if (enabled) {
-            PdrSensorSession(sensorManager, direction, trackSteps = false, onHeading = { currentOnHeading(it) }, onStep = {})
+            PdrSensorSession(sensorManager, direction, trackSteps = false, onHeading = { currentOnHeading(it) }, onStep = { _, _ -> })
                 .also { it.start() }
         } else {
             null

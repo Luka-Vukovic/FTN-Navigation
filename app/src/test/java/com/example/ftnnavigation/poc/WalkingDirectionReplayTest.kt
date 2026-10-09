@@ -36,7 +36,7 @@ class WalkingDirectionReplayTest {
     private fun replay(file: File): String {
         val direction = WalkingDirection()
         var detected = 0
-        var detector = AccelStepDetector { detected++ }
+        var detector = AccelStepDetector { _, _ -> detected++ }
         val matrix = FloatArray(9)
         var firstNs: Long? = null
         var steps = 0
@@ -77,7 +77,7 @@ class WalkingDirectionReplayTest {
                 "P" -> out.appendLine(String.format(Locale.ROOT, "%8.2f  --- pauza (senzori odjavljeni) ---", sec))
                 "C" -> {
                     // Na telefonu se posle pauze pravi nov detektor koraka.
-                    detector = AccelStepDetector { detected++ }
+                    detector = AccelStepDetector { _, _ -> detected++ }
                     out.appendLine(String.format(Locale.ROOT, "%8.2f  --- nastavak ---", sec))
                 }
             }

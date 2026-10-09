@@ -569,14 +569,18 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    /** Pomera poziciju za jedan korak u smeru hoda (i ponavlja prethodne korake ako [step] traži). */
-    fun onStep(step: WalkingDirection.WalkStep) {
+    /**
+     * Pomera poziciju za jedan korak u smeru hoda (i ponavlja prethodne korake ako [step] traži). Slab korak (nizak [peak]
+     * - sitni koraci pri zaustavljanju) je kraći od podešene dužine ([AccelStepDetector.stepLengthFactor]).
+     */
+    fun onStep(step: WalkingDirection.WalkStep, peak: Float) {
         val locator = locator ?: return
         if (locator.raw == null) return
         val before = locator.place
         // Kad se smer na stepeništu ne zna, pretpostavlja se ka spratu odredišta.
         locator.destination = target?.node?.let { PdrPlace(it.buildingId, it.floor) }
-        val reason = locator.step(step.headingDeg, stepLengthM, step.redoSteps, SystemClock.elapsedRealtimeNanos())
+        val lengthM = stepLengthM * AccelStepDetector.stepLengthFactor(peak)
+        val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, SystemClock.elapsedRealtimeNanos())
         walkingDirection.nearStairs = locator.nearStairs
         state =state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
         updatePosition(before, reason)
@@ -789,6 +793,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         PdrTrackingService.stop(getApplication())
         recorder?.close()
         recorder = null
+        // Smer na Mapi bez praćenja je pravac telefona: odstupanje naučeno u praćenju (npr. +180° - telefon je bio naopako u
+        // džepu) ili smer zadržan dok se premešten telefon smiruje bi ostali do zatvaranja aplikacije (teren 09.10.2026:
+        // "nekad kad napolju otvorim aplikaciju pokazuje skroz suprotan smer, ispravi se kad je zatvorim i ponovo otvorim").
+        walkingDirection.reset()
         state = state.copy(isTracking = false)
         updateGps()
     }

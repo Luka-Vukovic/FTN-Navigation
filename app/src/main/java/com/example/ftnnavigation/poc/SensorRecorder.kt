@@ -14,7 +14,8 @@ import java.time.format.DateTimeFormatter
  * CSV, jedan red po događaju (vreme = `SensorEvent.timestamp`, ns):
  * - `R,t,m0..m8` - matrica rotacije (iz `getRotationMatrixFromVector`),
  * - `A,t,x,y,z` - akcelerometar (koordinate telefona),
- * - `S,t,smer,ponovi,odstupanje,smiren` - korak i šta je [WalkingDirection] tada vratio,
+ * - `S,t,smer,ponovi,odstupanje,smiren,vrh` - korak i šta je [WalkingDirection] tada vratio (vrh: od 09.10.2026 uveče,
+ *   visina vrha koraka - [AccelStepDetector.stepLengthFactor]; t je vreme prelaska praga, red se upisuje posle vrha),
  * - `P,t` / `C,t` - Mapa u pauzi (senzori odjavljeni) / ponovo aktivna,
  * - `G,t,x,y,tačnost_m` - GPS lokacija u metrima kampusa (t = `Location.elapsedRealtimeNanos`, isti
  *   sat); pun GPS snimak je u [GpsRecorder],
@@ -44,8 +45,8 @@ class SensorRecorder private constructor(val file: File) {
 
     fun accelerometer(timestampNs: Long, x: Float, y: Float, z: Float) = write("A,$timestampNs,$x,$y,$z")
 
-    fun step(timestampNs: Long, step: WalkingDirection.WalkStep, direction: WalkingDirection) =
-        write("S,$timestampNs,${step.headingDeg},${step.redoSteps},${direction.offset},${direction.isAnchored}")
+    fun step(timestampNs: Long, step: WalkingDirection.WalkStep, direction: WalkingDirection, peak: Float) =
+        write("S,$timestampNs,${step.headingDeg},${step.redoSteps},${direction.offset},${direction.isAnchored},$peak")
 
     fun gps(fix: GpsFix) = write("G,${fix.elapsedNs},${fix.point.x},${fix.point.y},${fix.accuracyM}")
 
