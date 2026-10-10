@@ -74,9 +74,9 @@ class MiGraphTest {
     /** Sprat: lista na ulazu u lamelu B - B4-0x prizemlje, B4-1 ... B4-5A sprat; galerije su na spratu. */
     @Test
     fun floors_fromWingLists() {
-        assertEquals(0, room("MI B4-0B").floor)
+        assertEquals(0, room(canonicalRoom("MI B4-0B")).floor)
         assertEquals(1, room("MI B4-3").floor)
-        assertEquals(1, room("MI A2-1").floor)
+        assertEquals(1, room(canonicalRoom("MI A2-1")).floor)
         assertEquals(0, room("MI A4").floor)
         assertEquals(1, room("MI D5-Gal.").floor)
         assertEquals(0, room("MI 16").floor)

@@ -31,11 +31,17 @@ private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
  * crticom, a ostale sale F-bloka razmakom ("F 315") - na planu su sve sa razmakom. NTP (teren 03.10.2026): na
  * vratima jedne sobe na II spratu piše 221 i 222 (119-123 na I spratu su od 04.10.2026 posebne sobe). F-blok (table
  * na spratovima): 224 i 225 su jedna soba; 202 i 203 su na tabli dve sobe, a na crtežu jedna. "MI A20" iz rasporeda je
- * A2-0 sa liste lamele A.
+ * A2-0 sa liste lamele A. MI (10.10.2026): sobe su nacrtane tačno kao na evakuacionom planu, a sala ima više nego
+ * soba u krilu - oznake koje se razlikuju samo slovom (B4-0A ... B4-0D) i višak oznaka dele sobu (PRETPOSTAVKA,
+ * ispis tools/zgrade/build_mi.py).
  */
 private val ROOM_ALIASES = mapOf(
     "204A" to "204", "205A" to "205", "208A" to "208", "O12" to "012", "F-208" to "F 208", "NTP-222" to "NTP-221",
     "F 203" to "F 202", "F 225" to "F 224", "MI A20" to "MI A2-0",
+    "MI B1-A" to "MI B1", "MI B1-B" to "MI B1", "MI B4-0B" to "MI B4-0A", "MI B4-0C" to "MI B4-0A",
+    "MI B4-0D" to "MI B4-0A", "MI D4-A" to "MI D4", "MI D4-D" to "MI D4", "MI A2-1" to "MI A2-0", "MI A2-4A" to "MI A2-4",
+    "MI A3-3" to "MI A2-4", "MI B4-1A" to "MI B4-1", "MI B4-B" to "MI B4-A", "MI B4-4A" to "MI B4-4",
+    "MI B4-5A" to "MI B4-5", "MI V4-1" to "MI V3-5", "MI G3-1C" to "MI G3-1A",
 )
 
 /** Oznaka sale iz rasporeda kako je ucrtana na planu (O12 -> 012, 204A -> 204), inače ista oznaka. */
