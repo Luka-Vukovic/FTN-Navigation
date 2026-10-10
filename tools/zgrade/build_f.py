@@ -28,9 +28,9 @@ gornji red je bio pomeren za jednu sobu.
 II sprat: tabla ima 8 soba između stepeništa i istočnog kraja (200-207), crtež 7 - crtež je verovatno tačniji (korisnik),
 a jedina neobična soba crteža je široka 74 px (ostale 25/50): tu tabla ima dve sobe -> "F 202" sa aliasom 203
 (PRETPOSTAVKA). 224/225 je jedna soba (jugozapadni ugao, potvrđuje 3D). III sprat: na 3D-u piše "318" dvaput - druga je
-319 (u rasporedu postoji); uska soba (450-474) nema broj. Prizemlje: brojevi nisu na tablama; severni red 001-006 po
-obrascu; južni red sa boljeg snimka 3D prikaza (teren 04.10.2026): od zapada 012, 011, 011a, 010, 009, 008, 007 (vidi
-floor_0). Do 04.10. je 007 bio istočni kraj severnog reda.
+319 (u rasporedu postoji); uska soba (450-474) nema broj. Prizemlje: od 10.10.2026 precrtano sa jasnije fotografije
+evakuacionog plana, oznake upisao korisnik (vidi floor_0). Ranije (02.-10.10.) šematski crtež sa nišama po 4 sobe i
+brojevima po obrascu - bio je pogrešan (korisnik: "nije baš bila ispravna mapa za F-blok prizemlje").
 
 Veza sa kampusom: samo pasarela iz Amfiteatara (korisnik: "uglavnom samo severni (prolaz ka amfiteatrima), ne znam
 da li se koristi stvarno neki spoljni ulaz"). Pasarela stiže na međunivo glavnog stepeništa (teren 01.10.2026: dole
@@ -86,36 +86,74 @@ def stairs(rect=STAIRS_RECT):
 
 
 def floor_0():
+    """
+    Prizemlje precrtano sa jasnije fotografije evakuacionog plana (teren 10.10.2026, teren/izveštaj9/IMG_20261010_121736.jpg,
+    perspektiva ispravljena po 4 spoljna ugla na 600 x 163). Oznake soba: korisnik ih je upisao na tu fotografiju
+    ("fp obelezeno.png"; korisnik: "nije baš bila ispravna mapa za F-blok prizemlje"). Slaže se i sa 3D prikazom sa table
+    (04.10.2026): južni red od zapada 012 ... 007, istočni kraj bez broja.
+    Istočni kraj: prostorija (ne zna se kakva) sa vratima ka hodniku, iz nje dve sobe bez broja - prva verzija istog dana ju
+    je crtala kao predvorje (deo hodnika), a niše kao otvorene ka hodniku; korisnik: "pravougaonik levo predstavlja prostoriju
+    ... druga dva su mali hodnici koji vode do drugih učionica, ograđeni su zidom i postoje vrata do njih". Južni red: 007-009,
+    010 (vrata u nišu), niša sa 010A-C, 011A, 011B (vrata u nišu), niša sa 011C/D, 011E (vrata u nišu), 012, 012A, soba bez
+    broja. Severni red: soba bez broja, 006-003, 002 (izlaz na spoljne stepenice), 001B, 001A, hol, stepenište, međupodest sa
+    pasarelom ("IZLAZ"), soba bez broja, toaleti.
+    Stepenište (fotografija sa terena IMG_20261010_120816 i strelice na planu): iz hola severni krak vodi gore, ka zapadu, na
+    međupodest odakle ide pasarela; južni krak vodi dole (ispod nema plana). Na I sprat se ide sa međupodesta.
+    """
     return {
         "title": "Prizemlje",
-        "paths": [poly((3, 97), (597, 97)), poly((205, 72), (295, 72)), poly((250, 72), (250, 97)),
-                  poly((353, 72), (443, 72)), poly((398, 72), (398, 97))],
+        # Niše su zatvoreni mali hodnici sa jednim vratima ka glavnom hodniku (korisnik, 10.10.2026 uveče; na planu: niša
+        # 010A-C vrata desno, x 284-294; niša 011C/D vrata levo, x 383-393).
+        "paths": [poly((77, 96), (597, 96)), poly((228, 69), (296, 69)), poly((289, 69), (289, 96)),
+                  poly((378, 71), (422, 71)), poly((388, 71), (388, 96))],
         "corridors": [
-            poly((0, 80), (600, 80), (600, 113), (0, 113)),
-            poly((200, 63), (299, 63), (299, 80), (200, 80)),  # niša sa 4 sobe
-            poly((348, 63), (448, 63), (448, 80), (348, 80)),  # niša sa 4 sobe
-            poly((250, 113), (299, 113), (299, 163), (250, 163)),  # predvorje spoljnih stepenica
-            poly((348, 113), (402, 113), (402, 163), (385, 163)),  # proširenje ka stepeništu
-            poly((452, 113), (489, 113), (489, 163), (452, 163)),  # ka pasareli
+            poly((74, 79), (600, 79), (600, 101), (560, 101), (560, 113), (74, 113)),  # hodnik (zapadni kraj ka toaletu)
+            poly((225, 59), (300, 59), (300, 79), (225, 79)),  # niša 010A-C
+            poly((375, 64), (425, 64), (425, 79), (375, 79)),  # niša 011C/D
+            poly((350, 113), (400, 113), (400, 163), (350, 163)),  # hol ispred stepeništa
+            poly((250, 163), (300, 163), (300, 177), (250, 177)),  # izlaz iz 002 na spoljne stepenice
         ],
-        "entrances": [box(452, 489, 163, 205)],  # pasarela
-        "steps": [box(250, 299, 163, 205)],  # spoljne stepenice (sever)
-        # Južni red (gore): 3D prikaz sa teren 04.10.2026 (IMG_20261004_104721) - od zapada 012, 011, 011a, 010, 009,
-        # 008, 007, istočni kraj bez broja. Pregrade 3D-a padaju na zidove crteža kod 007-009 i 011a; 010 i 011 su na
-        # 3D-u velike sobe, a na crtežu niše sa po 4 male - broj je na sobi niše najbližoj natpisu (PRETPOSTAVKA).
+        "entrances": [box(455, 491, 163, 205)],  # pasarela (IZLAZ)
+        # Krakovi: severni gore (na međupodest), južni dole; spoljne stepenice kod 002.
+        "steps": [box(400, 454, 140, 160), box(400, 454, 116, 138), box(249, 302, 177, 205)],
+        "landings": [box(454, 490, 113, 163)],
         "rooms": [
-            *rooms(0, 0, 80, [(0, 51, None), (51, 100, 7), (100, 151, 8), (151, 200, 9)]),
-            *rooms(0, 0, 63, [(200, 225, None), (225, 250, 10), (250, 275, None), (275, 299, None)]),
-            *rooms(0, 0, 80, [(299, 348, "F 011a")]),
-            *rooms(0, 0, 63, [(348, 373, None), (373, 398, None), (398, 422, 11), (422, 448, None)]),
-            *rooms(0, 0, 80, [(448, 498, None), (498, 548, None), (548, 600, 12)]),
-            # Severni red: 001-006 po obrascu (od stepeništa ka istoku); 007 je po 3D-u u južnom redu, pa je istočni
-            # kraj severnog reda bez broja (na I spratu je istočni kraj poslednji broj severnog reda - 113 - pa bi
-            # ovde mogao biti 006, a ceo red pomeren; ne zna se).
-            *rooms(0, 113, 163, [(0, 51, None), (51, 100, 6), (100, 151, 5), (151, 200, 4), (200, 250, 3),
-                                 (299, 323, 2), (323, 348, 1), (489, 548, None), (548, 600, None)]),
+            # Istočni kraj: prostorija (ne zna se kakva - korisnik: "nije prazan prostor"), vrata ka hodniku u pregradi; iz nje
+            # se ulazi u dve krajnje sobe. Donji zid je stepenast (kao na planu).
+            {**R(0, 74, 79, 115), "poly": [(0, 79), (74, 79), (74, 112), (50, 112), (50, 115), (0, 115)]},
+            R(0, 50, 0, 79, door=(28, 79)),
+            # Zidovi niša (zatvoreni mali hodnici).
+            R(225, 300, 59, 79),
+            R(375, 425, 64, 79),
+            # 007 i 006: vrata desno od pregrade istočne prostorije (na planu x 82-92; na sredini zida su padala na pregradu).
+            R(50, 100, 0, 79, "F 007", door=(87, 79)),
+            *rooms(0, 0, 79, [(100, 150, 8), (150, 200, 9)]),
+            R(200, 225, 0, 79, "F 010", door=(225, 70)),
+            R(225, 250, 0, 59, "F 010A", door=(237, 59)),
+            R(250, 275, 0, 59, "F 010B", door=(262, 59)),
+            R(275, 300, 0, 59, "F 010C", door=(288, 59)),
+            R(300, 350, 0, 79, "F 011A", door=(314, 79)),
+            R(350, 375, 0, 79, "F 011B", door=(375, 71)),
+            R(375, 400, 0, 64, "F 011C", door=(387, 64)),
+            R(400, 425, 0, 64, "F 011D", door=(413, 64)),
+            R(425, 450, 0, 79, "F 011E", door=(425, 71)),
+            R(450, 500, 0, 79, "F 012", door=(486, 79)),
+            R(500, 550, 0, 79, "F 012A", door=(508, 79)),
+            R(550, 600, 0, 79),
+            R(0, 50, 115, 163),
+            R(50, 100, 113, 163, "F 006", door=(87, 113)),
+            *rooms(0, 113, 163, [(100, 150, 5), (150, 200, 4), (200, 250, 3)]),
+            R(250, 300, 113, 163, "F 002", door=(260, 113)),
+            R(300, 325, 113, 163, "F 001B", door=(314, 113)),
+            R(325, 350, 113, 163, "F 001A", door=(332, 113)),
+            R(490, 550, 113, 163),
+            R(550, 600, 113, 163, door=(560, 113), amenity=TOALET),
         ],
-        "stairs": stairs(),
+        # Graf kao ranije: čvor stepeništa (ka I spratu) u kutiji stepeništa, pasarela pravo sa hodnika (krak do međupodesta
+        # je na vezi sa kampusom, STEPS). Probano 10.10.2026: pasarela iz hola preko kraka i međupodesta (kako je na planu) -
+        # replay 04.10. (F -> AMF) više nije prelazio: korisnik je sa "Ovde sam" u hodniku kod x 470 išao pravo ka pasareli,
+        # a tačka je zapela. Prelazi su na terenu radili sa ovim grafom ("Ok su bili prelazi"), pa je novo samo crtež.
+        "stairs": [("S", None, (427, 125))],
         "points": [("PROLAZ-AMF", PASSAGE, "PROLAZ")],
     }
 

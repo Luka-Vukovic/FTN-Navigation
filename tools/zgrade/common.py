@@ -26,7 +26,7 @@ Opis sprata (dict):
                 (AMF S2: dva kraka u nizu) - sve četiri tačke putanje na jednoj liniji
   lifts       - [(ključ, pravougaonik, čvor)]
   points      - [(ključ, (x, y), tip)] - ulazi, prolazi (tip ULAZ/PROLAZ/HODNIK)
-  columns, entrances, steps - samo crtež
+  columns, entrances, steps, landings - samo crtež
 """
 
 import json
@@ -320,8 +320,9 @@ def drawable(plan, viewport, wall, building_name, script, source="snimaka aplika
     if stairs or runs:
         parts.append(("Stepeništa", path(fill=C_STAIRS, data=" ".join(rect(*s) for s in stairs + runs))
                       + path(stroke=C_TREAD, width=0.8, data=" ".join(treads(*s) for s in stairs + runs))))
-    if flights:
-        landings = list(dict.fromkeys(v["landing"] for v in all_variants))
+    # Međupodesti krakova i oni zadati samo za crtež ("landings" - F-blok: međupodest sa pasarelom).
+    landings = list(dict.fromkeys(v["landing"] for v in all_variants)) + plan.get("landings", [])
+    if landings:
         parts.append(("Međupodesti", path(fill=C_STAIRS, stroke=C_TREAD, width=0.8,
                                           data=" ".join(rect(*l) for l in landings))))
     lifts = [l[1] for l in plan.get("lifts", []) if l[1]]

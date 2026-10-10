@@ -26,7 +26,8 @@ stepenište.png, kula spaja nb i amf.png; korisnik, 30.09.2026):
   - GRID-1 i GRID-2 su na -1; GRID ima svoj ulaz sa zapada (korisnik), koji vodi kroz GRID-1.
 Teren 02.10.2026 (korisnik + evakuacioni plan prizemlja, teren/izveštaj2/): gornji red prizemlja je
 "AR0 AR1 X AR2 AR3 X AR4 | stepenište | AR5 X X ? AR6" (X = ne zna se šta je; AR6 je velika soba na kraju, ka
-ITC-u) - pregrade sa evakuacionog plana (FtnGO je imao 7 soba jednu do druge). Kiosk (radnim danom 7-18) je na
+ITC-u) - pregrade sa evakuacionog plana (FtnGO je imao 7 soba jednu do druge). Teren 10.10.2026 (korisnik označio granice
+na snimku ekrana): "AR0 AR1 AR2 AR3 | stepenište | AR4 AR5 AR6" - X sobe su delovi AR sala. Kiosk (radnim danom 7-18) je na
 -1 odmah pored stepeništa S1, desno od njega (korisnik označio na snimku ekrana).
 Na -1 u sredini (ispod amfiteatara) nema prostorija. Pošta (Pošta Srbije, ulaz spolja sa zapada) nije u ovom
 grafu - na mapi kampusa je služba (build_campus.py SERVICES).
@@ -134,11 +135,11 @@ def floor_0():
                       rect_poly(667, 207, 704, 265),  # kraj staklenog prolaza iz NB-a (evakuacioni plan)
                       rect_poly(497, -53, 518, -28)],  # niša ispred S2
         "rooms": [
-            # Evakuacioni plan (teren 02.10.2026): 7 soba levo od stepeništa S2, 5 desno; None = ne zna se šta je.
-            *row(-65, -28, [(170, 259, "AR0"), (259, 295, "AR1"), (295, 331, None), (331, 386, "AR2"),
-                            (386, 420, "AR3"), (420, 452, None), (452, 497, "AR4"),
-                            (587, 630, "AR5"), (630, 665, None), (665, 700, None), (700, 735, None),
-                            (735, 832, "AR6")]),
+            # Teren 10.10.2026 (korisnik označio granice na snimku ekrana, "ar obelezeno.png"): AR0 AR1 AR2 AR3 | S2 | AR4
+            # AR5 AR6 - sobe sa evakuacionog plana spojene (pregrade bez vrata, "liči da su nekad bile odvojene"). Ranije
+            # (02.10.) 7 soba levo od S2 i 5 desno, sa "X" sobama bez naziva između.
+            *row(-65, -28, [(170, 259, "AR0"), (259, 331, "AR1"), (331, 420, "AR2"), (420, 497, "AR3"),
+                            (587, 665, "AR4"), (665, 735, "AR5"), (735, 832, "AR6")]),
             *col(170, 212, [(7, 48, None), (48, 89, None), (89, 130, None), (130, 207, None)]),
             R(287, 402, 7, 207, "Čitaonica", door=(287, 50)),  # FtnGO "Čitaonica (A0)"
             R(402, 545, 7, 207, "A1", doors=[(470, 7), (545, 188)]),  # Amfiteatar "Nikola Tesla"

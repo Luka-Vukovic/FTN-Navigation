@@ -160,11 +160,11 @@ class MapMatcher(
             if (incident.getValue(node.id).size < 3) null else room.id to RoomBranch(room, node, chain)
         }.toMap()
 
-    /** Početna pozicija: najbliža ivica sprata (bez ograničenja), ili null ako ih nema. */
-    fun start(x: Float, y: Float): MatchedPosition? {
+    /** Početna pozicija: najbliža ivica sprata ([corridorOnly]: bez grana sala), ili null ako ih nema. */
+    fun start(x: Float, y: Float, corridorOnly: Boolean = false): MatchedPosition? {
         val px = x * scale.widthM.toDouble()
         val py = y * scale.heightM.toDouble()
-        val nearest = segments.values.minByOrNull { it.distance(px, py) } ?: return null
+        val nearest = segments.values.filter { !corridorOnly || !it.isRoom }.minByOrNull { it.distance(px, py) } ?: return null
         return fix(nearest, px, py)
     }
 

@@ -589,6 +589,87 @@ class PdrLocatorTest {
         assertTrue(locator.place.isCampus)
     }
 
+    /**
+     * Teren 10.10.2026, NTP: detektor je od ranije potvrdio "napolju" (GPS tik uz zid, izlazak blokiran), a prva lokacija
+     * posle Start-a (poslednja poznata, tačnost 25 m) je izbacila korisnika iz hola. Izlazak samo uz tačnu lokaciju.
+     */
+    @Test
+    fun gpsOutsideConfirmedEarlier_inaccurateFix_noExit() {
+        val ntp = campus.building("NTP")!!
+        val door = graph.position(node("NTP-0-ULAZ-FTN"))
+        fun outside(wallM: Double): PointM = (0 until 360 step 2).flatMap { a ->
+            (1..40).map { r -> PointM(door.x + r * Math.cos(Math.toRadians(a.toDouble())), door.y + r * Math.sin(Math.toRadians(a.toDouble()))) }
+        }.filter { p -> campus.buildings.none { it.contains(p) } && campus.buildings.all { it.distanceToWallM(p) >= 3.5 } }
+            .minBy { kotlin.math.abs(ntp.distanceToWallM(it) - wallM) }
+        val locator = locatorAt(inner("NTP-0-ULAZ-FTN").id)
+        assertTrue(List(4) { locator.onGps(GpsFix(outside(5.0), 3f), tracking = true) }.all { it == null })
+        assertNull(locator.onGps(GpsFix(outside(20.0), 25f), tracking = true))
+        assertEquals(PdrPlace("NTP", 0), locator.place)
+        assertEquals(PlaceReason.GPS_IZLAZ, locator.onGps(GpsFix(outside(20.0), 4f), tracking = true))
+    }
+
+    /**
+     * Teren 10.10.2026, NTP: izašao kroz glavni ulaz i stajao ispred vrata (beleška, sitni koraci), a GPS je tačku povukao
+     * u obris - 33 s posle izlaska "ušao" opet. Kroz ulaz kroz koji je izašao ulazi se samo koracima kroz vrata.
+     */
+    @Test
+    fun exitedThroughDoor_standingOutsideGpsPullsIn_noReentry_walkingIn_enters() {
+        val locator = locatorAt(inner("NTP-0-ULAZ").id)
+        val (out, _) = locator.passThrough("NTP-0-ULAZ", "K-U-NTP-3")
+        assertEquals(PlaceReason.PROLAZ, out.last())
+        assertTrue(locator.place.isCampus)
+        val door = graph.position(node("K-U-NTP-3"))
+        val inward = inwardOf("NTP-0-ULAZ")
+        val wall = wallDirection("NTP", door)
+        // GPS 4 m u obrisu, 4 m uz zid od vrata; sitni koraci uz zid.
+        val pulled = PointM(door.x + inward.x * 4 + wall.x * 4, door.y + inward.y * 4 + wall.y * 4)
+        assertTrue(campus.building("NTP")!!.contains(pulled))
+        val along = magneticAzimuth(door, PointM(door.x + wall.x, door.y + wall.y))
+        val reasons = (1..20).flatMap { i ->
+            listOfNotNull(locator.onGps(GpsFix(pulled, 3f), tracking = true), locator.step(along + if (i % 2 == 0) 180f else 0f, 0.3f))
+        }
+        assertTrue("$reasons", PlaceReason.ULAZ !in reasons)
+        assertTrue(locator.place.isCampus)
+        // Kroz vrata ka unutra - ulazi.
+        val back = PdrLocator(graph, campus, declination, stairPaths).apply {
+            setPosition(PdrPlace.CAMPUS, campusOffset(PointM(door.x - inward.x * 3, door.y - inward.y * 3)))
+        }
+        val walkIn = magneticAzimuth(door, PointM(door.x + inward.x, door.y + inward.y))
+        assertTrue(PlaceReason.ULAZ in (1..10).mapNotNull { back.step(walkIn, stepM) })
+    }
+
+    /**
+     * Teren 10.10.2026, NTP: GPS i PDR su korisnika držali ~9 m od glavnog ulaza (uz zid), pa je kroz vrata i hol tačka
+     * "ušla" tek duboko u obrisu - 16 m od vrata, na granu sale 001. Sada na ulaz pored koga je trag prošao, pa koraci od
+     * tog mesta kroz zgradu.
+     */
+    @Test
+    fun deepInsideOutline_afterPassingEntrance_entersThereWithLaterSteps() {
+        val ntp = campus.building("NTP")!!
+        val door = graph.position(node("K-U-NTP-3"))
+        val inward = inwardOf("NTP-0-ULAZ")
+        val wall = wallDirection("NTP", door)
+        val sides = listOf(1.0, -1.0).map { s -> PointM(door.x - inward.x * 3 + wall.x * 8 * s, door.y - inward.y * 3 + wall.y * 8 * s) }
+        val start = sides.first { p ->
+            val deep = PointM(p.x + inward.x * 22, p.y + inward.y * 22)
+            ntp.contains(deep) && ntp.distanceToWallM(deep) >= 16
+        }
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val walkIn = magneticAzimuth(door, PointM(door.x + inward.x, door.y + inward.y))
+        var steps = 0
+        while (locator.place.isCampus) {
+            locator.step(walkIn, stepM)
+            check(++steps < 60) { "nije ušao" }
+        }
+        assertEquals(PdrPlace("NTP", 0), locator.place)
+        // Od mesta gde je trag prošao pored vrata (3 m ispred njih) do ulaska: koraka * dužina - 3 m kroz vrata.
+        val walkedIn = steps * stepM - 3.0
+        val inside = graph.position(node("NTP-0-ULAZ"))
+        assertTrue("${distance(locator.position(), inside)} m od ulaza, hodao ${walkedIn} m", distance(locator.position(), inside) <= walkedIn + 2)
+        val point = locator.match!!.point
+        assertTrue("na hodniku", listOf(point.from, point.to).none { it.type == NodeType.PROSTORIJA || it.type == NodeType.VRATA })
+    }
+
     /** PDR nije video izlaz (stoji kod ulaza), GPS potvrdi napolju -> kampus, na ulazu. */
     @Test
     fun gpsOutside_nearEntrance_exitsThere() {
@@ -827,17 +908,44 @@ class PdrLocatorTest {
      * okret - let koji počinje do 5 m od stepeništa je ipak to stepenište; dalje od stepeništa (šetnja hodnikom) nije.
      */
     @Test
-    fun flightsAlongCorridorNextToStairs_changeFloor_farAway_doNot() {
-        val east = magneticAzimuth(graph.position(node("NB-0-H653_420")), graph.position(node("NB-0-H744_420")))
+    fun flightsNextToStairs_changeFloor_farAway_doNot() {
+        // Let ide pravcem krakova (od 10.10.2026 uslov za stepenište sa nacrtanim krakovima), drugi let bar 9 koraka.
+        val axis = upFlightAzimuth("NB/S", 0)
         val near = locatorAt("NB-0-H653_420")
-        assertEquals(listOf(PlaceReason.STEPENICE), near.flights(east, 180f, first = 8))
+        assertEquals(listOf(PlaceReason.STEPENICE), near.flights(axis, 180f, first = 8, second = 10))
         assertEquals(PdrPlace("NB", 1), near.place)
         // Okret udesno je penjanje: na I sprat se stiže desnim krakom.
         val path1 = stairPath("NB/S", 1)
         assertTrue(distanceToSegment(near.position(), path1[2], path1[3]) < 0.1)
         val far = locatorAt("NB-0-H744_420")
-        assertTrue(far.flights(east, 180f, first = 8).isEmpty())
+        assertTrue(far.flights(axis, 180f, first = 8, second = 10).isEmpty())
         assertEquals(PdrPlace("NB", 0), far.place)
+    }
+
+    /**
+     * Teren 10.10.2026, NB I sprat (snimak 12:30:07): hod po holu popreko na krakove, petlja od ~280° udesno, pa hod
+     * pravcem kraka - bila je to lažna promena na II sprat. Pa hod tamo-amo pravcem krakova sa kratkim drugim "letom"
+     * (8 koraka) - posle prve ispravke lažno I -> P. Ništa od toga nije stepenište.
+     */
+    @Test
+    fun hallNextToStairs_acrossFlightsOrShortSecondRun_noFloorChange() {
+        // Azimuti koraka sa snimka (hod-20261010-123007, 119-160 s): izlazak sa stepeništa u hol, hol popreko na krakove,
+        // petlja udesno, pravcem kraka, okret ulevo, pa nazad.
+        val azimuths = listOf(
+            132.1, 149.9, 160.2, 160.5, 147.2, 127.0, 100.3, 75.3, 60.2, 44.4, 15.3, 350.2, 340.4, 338.6, 338.5, 338.9, 339.0,
+            338.7, 337.8, 334.7, 329.7, 333.7, 11.5, 53.7, 109.3, 147.8, 166.7, 172.8, 177.9, 182.6, 191.3, 210.8, 232.9, 244.5,
+            252.0, 255.5, 256.9, 257.0, 254.2, 251.1, 250.3, 249.3, 247.0, 238.7, 195.0, 136.8, 100.4, 77.2, 74.0, 75.8, 79.4,
+            81.6, 83.5, 87.2, 95.0, 109.5,
+        )
+        val locator = locatorAt("NB-1-H653_423")
+        val reasons = azimuths.mapNotNull { locator.step(it.toFloat(), stepM) }
+        assertTrue("$reasons", reasons.isEmpty())
+        assertEquals(PdrPlace("NB", 1), locator.place)
+        // Tamo-amo pravcem krakova, drugi "let" od 8 koraka.
+        val axis = upFlightAzimuth("NB/S", 1)
+        val back = locatorAt("NB-1-H653_423")
+        assertTrue(back.flights(axis, -180f, first = 10, second = 8).isEmpty())
+        assertEquals(PdrPlace("NB", 1), back.place)
     }
 
     /** Sa najnižeg nivoa se može samo gore - i tako se nauči strana okreta stepeništa bez crteža krakova (Kula). */
@@ -915,6 +1023,24 @@ class PdrLocatorTest {
             check(locator.step(south, stepM) != PlaceReason.STEPENICE) { "promena sprata umesto trema" }
             check(++steps < 60) { "nije stigao u Kulu (na ${locator.place})" }
         }
+    }
+
+    /**
+     * Teren 10.10.2026 (ulazak kroz glavni ulaz AMF-a, -1): hodnikom do S1 i srednjim krakom na podest, nekoliko koraka
+     * dalje (trem ka Kuli), pa okret nazad i bočnim krakom gore. Tačka je preletela krak kao hodnik, otišla trem u Kulu i
+     * vratila se na -1 - sada je međupodest deo oba nivoa: povratak iz trema je okret na podestu, gore u prizemlje.
+     */
+    @Test
+    fun amfS1_fromBasementCorridor_intoPorchAndBack_upToGroundFloor() {
+        val locator = locatorAt("AMF-m1-H257_120")
+        val south = pathAzimuth("AMF/S1", -1, 0, 1)
+        val reasons = mutableListOf<PlaceReason>()
+        repeat(28) { locator.step(south, stepM)?.let(reasons::add) }
+        assertEquals(PdrPlace("AMF", -1), locator.place)
+        val back = (1..4).map { south - 45f * it } + List(16) { south - 180f }
+        back.forEach { locator.step(it, stepM)?.let(reasons::add) }
+        assertTrue("$reasons", PlaceReason.STEPENICE in reasons && PlaceReason.PROLAZ !in reasons)
+        assertEquals(PdrPlace("AMF", 0), locator.place)
     }
 
     /** S2: pravo stepenište (dva kraka u nizu, bez okreta) - iz prizemlja niz oba kraka u suteren, pa u hodnik. */

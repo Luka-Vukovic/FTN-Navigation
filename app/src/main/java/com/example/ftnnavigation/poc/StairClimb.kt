@@ -7,8 +7,11 @@ import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.PointM
 import com.example.ftnnavigation.graph.indoorBuilding
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.min
+import kotlin.math.sin
 
 // Promena sprata na stepeništu (04.10.2026). Telefon nema barometar. Korisnik: "u većini slučajeva su stepenice za
 // gore i dole dovoljno odvojene da se može prepoznati na osnovu toga" (NB: sa podesta sprata levo gore, desno dole).
@@ -231,9 +234,20 @@ class StairWalk {
             if (s * (sums[current.first] - sums[from]) < need - TURN_SLACK_DEG) continue
             if (s * (mean(current) - mean(fromRun)) < need) continue
             pendingAnchor = from
+            flightHeadings = meanHeading(fromRun) to meanHeading(current)
             return s
         }
         return 0
+    }
+
+    /** Srednji smer leta pre okreta i trenutnog leta (magnetski azimut) po poslednjem [floorTurn] koji je prijavio okret. */
+    var flightHeadings: Pair<Float, Float>? = null
+        private set
+
+    private fun meanHeading(run: IntRange): Float {
+        val x = run.sumOf { cos(Math.toRadians(headings[it].toDouble())) }
+        val y = run.sumOf { sin(Math.toRadians(headings[it].toDouble())) }
+        return Math.toDegrees(atan2(y, x)).toFloat()
     }
 
     /**

@@ -266,7 +266,9 @@ def floor_plan(floor):
         rooms.append(R(x0, x1, -1121, AB1_TOP))  # soba na kraju kolone hodnika A|B
         corridors += [B1_NOOK, B1_PASSAGE]
         x_ab = (x0 + x1) / 2
-        paths += [[(x_ab, -1072), (6, -1072)], [(x_ab, -951), (45, -951)]]
+        # Krak ka predvorju B počinje TAČNO na kraju hodnika A|B (top + 5) - na -1072 (1 px pored) nije bio spojen, pa su
+        # A3Gal./2 i B4-5 bile nedostižne (10.10.2026).
+        paths += [[(x_ab, top_ab := AB1_TOP + 5), (6, top_ab)], [(x_ab, -951), (45, -951)]]
         # Hodnici u krilima Đ (po sredini, uz stepenište SĐ) i G (uz levi zid); V: predvorje srednjeg ostrva. G i V su
         # ostrva do kojih se stiže svojim stepeništem iz prizemlja.
         for x0, x1, y0, y1 in SUB_CORRIDORS.values():

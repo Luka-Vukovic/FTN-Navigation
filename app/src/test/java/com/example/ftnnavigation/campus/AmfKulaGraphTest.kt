@@ -138,14 +138,20 @@ class AmfKulaGraphTest {
         assertTrue(ids.containsAll(listOf("AMF-m1-PROLAZ-KULA", "AMF-0-PROLAZ-KULA")))
     }
 
-    /** Teren 02.10.2026: gornji red prizemlja "AR0 AR1 X AR2 AR3 X AR4 | stepenište | AR5 X X ? AR6". */
+    /**
+     * Teren 10.10.2026 (korisnik označio granice): gornji red prizemlja "AR0 AR1 AR2 AR3 | stepenište | AR4 AR5 AR6", bez soba
+     * između (02.10.: "AR0 AR1 X AR2 AR3 X AR4 | stepenište | AR5 X X ? AR6" - X sobe su delovi AR sala).
+     */
     @Test
     fun arRooms_inOrderAroundWideStairs() {
         val xs = (0..6).map { room("AR$it").x }
         assertEquals(xs.sorted(), xs)
         val stairs = checkNotNull(graph.node("AMF-0-S2-D")).x  // prizemlje je najviši nivo S2: samo dno kraka naniže
-        assertTrue(room("AR4").x < stairs && stairs < room("AR5").x)
+        assertTrue(room("AR3").x < stairs && stairs < room("AR4").x)
         assertEquals(xs.last(), graph.rooms.filter { it.buildingId == AmfPlan.BUILDING_ID && it.floor == 0 }.maxOf { it.x })
+        // Gornji red prizemlja: samo AR sale (nema soba bez naziva između njih).
+        val row = plans.getValue(AmfPlan.BUILDING_ID).nodes.filter { it.floor == 0 && it.type == NodeType.PROSTORIJA && it.y < room("AR0").y + 0.01f }
+        assertEquals((0..6).map { "AR$it" }.toSet(), row.mapNotNull { it.name }.toSet())
     }
 
     /** Kiosk (teren 02.10.2026): suteren, odmah pored stepeništa S1; radno vreme radnim danom 7-18. */
