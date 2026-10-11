@@ -60,12 +60,46 @@ class DeparturesTest {
         assertTrue(d.firstOfDay)
         assertEquals(at("10:12"), d.leaveAt) // rok od glavnog ulaza ostaje (Početna)
         assertEquals(at("09:15"), d.notifyAt)
+        assertFalse(d.reminder)
+    }
+
+    /** Posle obaveštenja sat ranije stiže i drugi podsetnik, u uobičajeno vreme (5 min pred rok od glavnog ulaza). */
+    @Test
+    fun firstClassOfDay_secondReminderBeforeLeaving() {
+        val classes = listOf(entry("10:15", "12:00", "101"))
+        val first = next(classes, "07:00")!!
+        val reminder = nextDeparture(agenda(classes), first.notifyAt, routes)!!
+        assertEquals(first.item, reminder.item)
+        assertTrue(reminder.reminder)
+        assertTrue(reminder.firstOfDay)
+        assertEquals(at("10:07"), reminder.notifyAt)
+        assertEquals(first.leaveAt, reminder.leaveAt)
+        // Posle podsetnika - tek sledeće nedelje (sat pre).
+        assertEquals(at("09:15").plusWeeks(1), nextDeparture(agenda(classes), reminder.notifyAt, routes)!!.notifyAt)
+    }
+
+    /** Duga ruta: uobičajeno vreme bi bilo pre obaveštenja sat ranije - drugog podsetnika nema. */
+    @Test
+    fun firstClassOfDay_longRoute_noSecondReminder() {
+        val far = { _: String?, _: String, _: LocalDateTime -> minutes(58) }
+        val d = nextDeparture(agenda(listOf(entry("10:15", "12:00", "101"))), at("07:00"), far)!!
+        assertEquals(at("09:12"), d.notifyAt)
+        assertNull(d.reminderAt)
+        assertEquals(listOf(d), d.reminders())
+    }
+
+    /** Druga stavka u danu ima samo jedno obaveštenje. */
+    @Test
+    fun secondClassOfDay_noSecondReminder() {
+        val classes = listOf(entry("08:15", "10:00", "101"), entry("10:15", "12:00", "102"))
+        val day = agenda(classes)(monday)
+        assertNull(departureFor(day[1], day, routes)!!.reminderAt)
     }
 
     @Test
     fun secondClassOfDay_notHourBefore() {
         val classes = listOf(entry("08:15", "10:00", "101"), entry("10:15", "12:00", "102"))
-        val d = next(classes, "08:00")!!
+        val d = next(classes, "08:08")!! // posle drugog podsetnika za 101 (08:07)
         assertEquals("102", d.item.place)
         assertFalse(d.firstOfDay)
         assertEquals(at("10:08"), d.notifyAt)
@@ -94,7 +128,7 @@ class DeparturesTest {
         val d = next(classes, "07:00")!!
         assertEquals("101", d.item.place)
 
-        val second = nextDeparture(agenda(classes), d.notifyAt, routes)!!
+        val second = nextDeparture(agenda(classes), d.reminders().last().notifyAt, routes)!!
         assertEquals("102", second.item.place)
         assertEquals("101", second.from?.place)
         assertEquals(at("10:13"), second.leaveAt)
@@ -121,7 +155,7 @@ class DeparturesTest {
         assertEquals(at("10:15"), d.leaveAt)
         assertEquals(at("09:15"), d.notifyAt)
         // Nepoznata sala posle druge stavke sa mestom: podsetnik pred početak.
-        val later = next(listOf(entry("08:15", "10:00", "101"), entry("10:15", "12:00", "Fizika")), "08:00")!!
+        val later = next(listOf(entry("08:15", "10:00", "101"), entry("10:15", "12:00", "Fizika")), "08:08")!!
         assertNull(later.route)
         assertEquals(at("10:10"), later.notifyAt)
     }
@@ -138,7 +172,8 @@ class DeparturesTest {
     @Test
     fun passedDeparture_movesToNextDay() {
         val classes = listOf(entry("10:15", "12:00", "101"), entry("09:00", "10:00", "201", day = 2))
-        val d = next(classes, "09:16")!!
+        // Posle obaveštenja sat ranije (09:15) i drugog podsetnika (10:07).
+        val d = next(classes, "10:08")!!
         assertEquals(monday.plusDays(1), d.date)
         assertEquals(LocalDateTime.of(monday.plusDays(1), LocalTime.of(8, 0)), d.notifyAt)
     }
@@ -207,14 +242,18 @@ class DeparturesTest {
         val classes = listOf(entry("09:15", "11:00", "101"))
         val yesterday = monday.minusDays(1).atTime(12, 0)
         assertNull(missed(classes, "08:10", yesterday)) // obaveštenje (08:15, sat pre) još nije na redu
-        assertEquals(at("08:15"), missed(classes, "09:10", yesterday)!!.notifyAt)
+        assertEquals(at("08:15"), missed(classes, "09:00", yesterday)!!.notifyAt)
+        // Propušteni i drugi podsetnik (09:07): stiže samo on.
+        assertTrue(missed(classes, "09:10", yesterday)!!.reminder)
         assertNull(missed(classes, "09:15", yesterday)) // čas je počeo
     }
 
     @Test
     fun missed_alreadyNotified_orSilent_none() {
         val classes = listOf(entry("09:15", "11:00", "101"))
-        assertNull(missed(classes, "09:10", at("08:15")))
+        assertNull(missed(classes, "09:05", at("08:15")))
+        assertTrue(missed(classes, "09:10", at("08:15"))!!.reminder)
+        assertNull(missed(classes, "09:10", at("09:07")))
         val silent = event("09:15", "10:00", place = "Menza", notify = false)
         assertNull(missed(emptyList(), "09:10", at("07:00"), listOf(silent)))
     }

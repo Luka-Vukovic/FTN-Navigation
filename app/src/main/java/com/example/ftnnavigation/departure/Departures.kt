@@ -20,7 +20,9 @@ const val FIRST_OF_DAY_NOTICE_MIN = 60L
  * prethodne stavke). [from] = prethodna stavka istog dana odakle ide ruta (null = od glavnog
  * ulaza). [route] null = mesto nije na mapi (ili ga nema), pa je obaveštenje samo podsetnik.
  * [firstOfDay] = stavka sa mestom pre koje tog dana nema nijedne stavke sa mestom - obaveštenje
- * stiže [FIRST_OF_DAY_NOTICE_MIN] pre početka.
+ * stiže [FIRST_OF_DAY_NOTICE_MIN] pre početka, a [reminderAt] je drugi podsetnik, kao za ostale
+ * stavke ([DEPARTURE_MARGIN_MIN] pred rok; null ako bi stigao pre prvog). [reminder] = ovo je taj
+ * drugi podsetnik ([reminders]).
  */
 data class Departure(
     val item: AgendaItem,
@@ -29,9 +31,15 @@ data class Departure(
     val leaveAt: LocalDateTime,
     val notifyAt: LocalDateTime,
     val firstOfDay: Boolean = false,
+    val reminderAt: LocalDateTime? = null,
+    val reminder: Boolean = false,
 ) {
     val date: LocalDate get() = item.date
     val startAt: LocalDateTime get() = item.startAt
+
+    /** Sva obaveštenja za ovaj polazak: ono u [notifyAt] i, za prvu stavku u danu, drugi podsetnik u [reminderAt]. */
+    fun reminders(): List<Departure> =
+        listOfNotNull(this, reminderAt?.let { copy(notifyAt = it, reminderAt = null, reminder = true) })
 }
 
 /**
@@ -58,6 +66,7 @@ fun nextDeparture(
         val first = day
             .filter { it.notifies }
             .mapNotNull { departureFor(it, day, route, marginMin) }
+            .flatMap { it.reminders() }
             .filter { it.notifyAt.isAfter(after) }
             .minByOrNull { it.notifyAt }
         if (first != null) return first
@@ -68,7 +77,8 @@ fun nextDeparture(
 /**
  * Propušten polazak: obaveštenje je trebalo da stigne posle [notifiedUpTo], a do [now] nije
  * stiglo (telefon ugašen, sistem nije pokrenuo aplikaciju posle restarta), a stavka još nije
- * počela - pa obaveštenje stiže odmah. Od više propuštenih, onaj koji najpre počinje.
+ * počela - pa obaveštenje stiže odmah. Od više propuštenih, onaj koji najpre počinje (od oba
+ * obaveštenja iste stavke - kasnije, drugi podsetnik).
  */
 fun missedDeparture(
     agenda: (LocalDate) -> List<AgendaItem>,
@@ -81,8 +91,9 @@ fun missedDeparture(
     return day
         .filter { it.notifies && it.startAt.isAfter(now) }
         .mapNotNull { departureFor(it, day, route, marginMin) }
+        .flatMap { it.reminders() }
         .filter { it.notifyAt.isAfter(notifiedUpTo) && !it.notifyAt.isAfter(now) }
-        .minByOrNull { it.startAt }
+        .minWithOrNull(compareBy<Departure> { it.startAt }.thenByDescending { it.notifyAt })
 }
 
 /** Prethodna stavka sa mestom: poslednja završena do početka [item] (izborni časovi mogu da se preklapaju). */
@@ -112,7 +123,13 @@ fun departureFor(
     // Obaveštenje usred prethodne stavke ne pomaže - stiže kad se ona završi.
     if (previous != null) notifyAt = maxOf(notifyAt, item.date.atTime(previous.end))
     // Prva stavka sa mestom: ne zna se odakle korisnik kreće. Događaj bez mesta ostaje podsetnik.
+    // Tada stiže i drugi podsetnik, u uobičajeno vreme (ako je posle prvog).
     val firstOfDay = place != null && previous == null
-    if (firstOfDay) notifyAt = minOf(notifyAt, item.startAt.minusMinutes(FIRST_OF_DAY_NOTICE_MIN))
-    return Departure(item, if (fromRoute != null) previous else null, chosen, leaveAt, notifyAt, firstOfDay)
+    var reminderAt: LocalDateTime? = null
+    if (firstOfDay) {
+        val early = item.startAt.minusMinutes(FIRST_OF_DAY_NOTICE_MIN)
+        if (notifyAt.isAfter(early)) reminderAt = notifyAt
+        notifyAt = minOf(notifyAt, early)
+    }
+    return Departure(item, if (fromRoute != null) previous else null, chosen, leaveAt, notifyAt, firstOfDay, reminderAt)
 }
