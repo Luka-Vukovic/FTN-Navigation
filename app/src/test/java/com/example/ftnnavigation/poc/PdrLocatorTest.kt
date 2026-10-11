@@ -608,6 +608,19 @@ class PdrLocatorTest {
         assertEquals(PlaceReason.GPS_IZLAZ, locator.onGps(GpsFix(outside(20.0), 4f), tracking = true))
     }
 
+    /** Proba kod kuće (11.10.2026): tačna GPS lokacija daleko van mape kampusa ne izbacuje iz zgrade ni ne pomera tačku. */
+    @Test
+    fun gpsOffCampusMap_ignored() {
+        val home = PointM(-3000.0, 2500.0)
+        val inside = locatorAt(inner("NTP-0-ULAZ-FTN").id)
+        assertTrue(List(10) { inside.onGps(GpsFix(home, 4f), tracking = true) }.all { it == null })
+        assertEquals(PdrPlace("NTP", 0), inside.place)
+        val outdoors = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(PointM(200.0, 150.0))) }
+        val before = outdoors.position()
+        assertTrue(List(10) { outdoors.onGps(GpsFix(home, 4f), tracking = true) }.all { it == null })
+        assertTrue(distance(outdoors.position(), before) < 0.01)
+    }
+
     /**
      * Teren 10.10.2026, NTP: izašao kroz glavni ulaz i stajao ispred vrata (beleška, sitni koraci), a GPS je tačku povukao
      * u obris - 33 s posle izlaska "ušao" opet. Kroz ulaz kroz koji je izašao ulazi se samo koracima kroz vrata.

@@ -909,6 +909,9 @@ class PdrLocator(
     fun onGps(fix: GpsFix, tracking: Boolean): PlaceReason? {
         val raw = raw ?: return null
         if (passage != null) return null
+        // Lokacija van mape kampusa se ne koristi: tamo tačka ne može da se prikaže, a kod kuće (proba džepa na planu
+        // NTP-a, 11.10.2026) je GPS izlazak izbacivao tačku iz zgrade čim stigne prva tačna lokacija.
+        if (fix.point.x !in 0.0..campus.widthM.toDouble() || fix.point.y !in 0.0..campus.heightM.toDouble()) return null
         if (!place.isCampus) {
             val detector = exitDetector ?: return null
             detector.onFix(fix)
