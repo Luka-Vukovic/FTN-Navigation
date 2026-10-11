@@ -574,14 +574,15 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
      * Pomera poziciju za jedan korak u smeru hoda (i ponavlja prethodne korake ako [step] traži). Slab korak (nizak [peak]
      * - sitni koraci pri zaustavljanju) je kraći od podešene dužine ([AccelStepDetector.stepLengthFactor]).
      */
-    fun onStep(step: WalkingDirection.WalkStep, peak: Float) {
+    fun onStep(step: WalkingDirection.WalkStep, peak: Float, timeNs: Long) {
         val locator = locator ?: return
         if (locator.raw == null) return
         val before = locator.place
         // Kad se smer na stepeništu ne zna, pretpostavlja se ka spratu odredišta.
         locator.destination = target?.node?.let { PdrPlace(it.buildingId, it.floor) }
         val lengthM = stepLengthM * AccelStepDetector.stepLengthFactor(peak)
-        val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, SystemClock.elapsedRealtimeNanos())
+        // Vreme koraka (senzor, isti sat kao elapsedRealtimeNanos) - zadržani koraci ([HandlingGate]) stižu kasnije.
+        val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs)
         walkingDirection.nearStairs = locator.nearStairs
         state =state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
         updatePosition(before, reason)

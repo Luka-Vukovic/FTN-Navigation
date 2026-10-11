@@ -100,19 +100,56 @@ class PdrLocatorReplayTest {
             "C" -> detector = AccelStepDetector { _, peak -> peaks.addLast(peak) }
         }
         val lift = LiftRideDetector()
+        // PDR_DETECTOR=1: koraci iz detektora ponovo puštenog kroz A redove (kao na telefonu, korak u trenutku kad prođe vrh),
+        // smer iz [WalkingDirection]; S redovi se ne koriste - za proveru izmena detektora koraka.
+        val redetect = System.getenv("PDR_DETECTOR") == "1"
         // PDR_DIRECTION=1: smer koraka računa i [WalkingDirection] (kao na telefonu, uz [PdrLocator.nearStairs]), umesto
         // smera zabeleženog u S redu - za proveru izmena smera hoda zajedno sa locator-om.
-        val direction = if (System.getenv("PDR_DIRECTION") == "1") WalkingDirection() else null
+        val direction = if (redetect || System.getenv("PDR_DIRECTION") == "1") WalkingDirection() else null
         var maxDiff = 0f
+        // Koraci uz stanje smera (`-koraci.csv`): vrh, da li je odstupanje poznato (false dok se premešten telefon smiruje).
+        val stepRows = StringBuilder("t,vrh,sidro,odstupanje\n")
+        // Kao na telefonu: koraci prolaze kroz [HandlingGate] (premeštanje telefona u mestu nije hod).
+        val gate = HandlingGate()
+        fun apply(s: HandlingGate.Step) {
+            val reason = locator.step(s.walk.headingDeg, if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak), s.walk.redoSteps, s.timeNs)
+            direction?.nearStairs = locator.nearStairs
+            if (reason != null) log(s.timeNs, "replay: $reason")
+            row(s.timeNs, "S")
+        }
+        fun walk(t: Long, recorded: WalkingDirection.WalkStep?, peak: Float) {
+            lift.onStep(t)
+            steps++
+            val step = direction?.onStep(t)
+            if (direction != null) stepRows.appendLine(String.format(Locale.ROOT, "%.2f,%.2f,%s,%.0f", sec(t), peak, direction.isAnchored, direction.offset))
+            if (step != null && recorded != null) {
+                if (step.redoSteps != recorded.redoSteps) log(t, "smer: ponovi ${step.redoSteps} (telefon ${recorded.redoSteps})")
+                maxDiff = maxOf(maxDiff, abs(angleDiffDeg(step.headingDeg, recorded.headingDeg)))
+            }
+            gate.onStep(HandlingGate.Step(t, step ?: recorded ?: return, peak)).forEach(::apply)
+        }
+        fun newDetector() = AccelStepDetector { timeNs, peak -> walk(timeNs, null, peak) }
+        var liveDetector = newDetector()
+        var redetected = 0
+        var recordedSteps = 0
         for ((i, f) in lines.withIndex()) {
             val t = f.getOrNull(1)?.toLongOrNull() ?: continue
             when (f[0]) {
                 "R" -> FloatArray(9) { f[2 + it].toFloat() }.let {
                     lift.onRotation(it)
                     direction?.onRotation(it, t)
+                    gate.onRotation(it, t).takeIf { n -> n > 0 }?.let { n -> log(t, "odbačeno koraka: $n") }
                 }
-                "A" -> lift.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t).also {
+                "C" -> if (redetect) liveDetector = newDetector()
+                "A" -> run {
+                    // Redosled kao u [PdrSensorSession]: smer, detektor koraka, lift.
                     direction?.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
+                    if (redetect) {
+                        val before = steps
+                        liveDetector.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
+                        redetected += steps - before
+                    }
+                    lift.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
                 }?.let { ride ->
                     val before = locator.place
                     val ride0 = String.format(Locale.ROOT, "%.1f-%.1f s, %+.1f m", sec(ride.startNs), sec(ride.endNs), ride.heightM)
@@ -131,23 +168,12 @@ class PdrLocatorReplayTest {
                     log(t, "telefon: pitanje za lift ${f[3]}")
                 }
                 "K" -> stepM = f[2].toFloat()
-                "S" -> {
-                    lift.onStep(t)
-                    steps++
+                "S" -> if (redetect) {
+                    recordedSteps++
+                } else {
                     val recalculated = peaks.removeFirstOrNull()
                     val peak = f.getOrNull(6)?.toFloatOrNull() ?: recalculated ?: AccelStepDetector.STEP_THRESHOLD
-                    var heading = f[2].toFloat()
-                    var redo = f[3].toInt()
-                    direction?.onStep(t)?.let { step ->
-                        if (step.redoSteps != redo) log(t, "smer: ponovi ${step.redoSteps} (telefon $redo)")
-                        maxDiff = maxOf(maxDiff, abs(angleDiffDeg(step.headingDeg, heading)))
-                        heading = step.headingDeg
-                        redo = step.redoSteps
-                    }
-                    val reason = locator.step(heading, if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(peak), redo, t)
-                    direction?.nearStairs = locator.nearStairs
-                    if (reason != null) log(t, "replay: $reason")
-                    row(t, "S")
+                    walk(t, WalkingDirection.WalkStep(f[2].toFloat(), f[3].toInt()), peak)
                 }
                 "G" -> {
                     val fix = GpsFix(PointM(f[2].toDouble(), f[3].toDouble()), f[4].toFloat(), t)
@@ -182,8 +208,12 @@ class PdrLocatorReplayTest {
                     } else if (reason == PlaceReason.RUCNO) {
                         // Prekidač ispravke: iz H reda koji odmah sledi (ako ga ima).
                         lines.getOrNull(i + 1)?.takeIf { it[0] == "H" && it[4] == "MERENO" }?.let { locator.applyCorrection = it[10].toBoolean() }
+                        // Promašaj: tačka pre "Ovde sam" naspram označene (drugi sprat/zgrada - bez broja).
+                        val placeBefore = locator.place
+                        val before = locator.position()
                         val check = locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()))
-                        log(t, "RUCNO ${place.buildingId} ${place.floor}" + ((check as? HeadingCheck.Measured)?.let {
+                        val miss = before?.takeIf { placeBefore == place }?.let { b -> locator.position()?.let { hypot(it.x - b.x, it.y - b.y) } }
+                        log(t, "RUCNO ${place.buildingId} ${place.floor}" + (miss?.let { String.format(Locale.ROOT, "  promašaj %.1f m", it) } ?: "  promašaj -") + ((check as? HeadingCheck.Measured)?.let {
                             String.format(Locale.ROOT, "  greška %+.1f° put %.0f %%", it.errorDeg, 100 * it.walkedM / it.actualM)
                         } ?: ""))
                         steps = 0
@@ -207,7 +237,9 @@ class PdrLocatorReplayTest {
                 }
             }
         }
-        if (peaks.isNotEmpty()) out.appendLine("Detektor ponovo pušten: ${peaks.size} koraka više nego S redova (vrhovi možda pomereni)")
+        if (direction != null) File("build/pdr-replay", file.nameWithoutExtension + "-koraci.csv").writeText(stepRows.toString())
+        if (redetect) out.appendLine("Detektor: $redetected koraka (telefon $recordedSteps)")
+        else if (peaks.isNotEmpty()) out.appendLine("Detektor ponovo pušten: ${peaks.size} koraka više nego S redova (vrhovi možda pomereni)")
         if (direction != null) out.appendLine(String.format(Locale.ROOT, "Smer (WalkingDirection): najveća razlika od telefona %.0f°", maxDiff))
         return out.toString() to track.toString()
     }

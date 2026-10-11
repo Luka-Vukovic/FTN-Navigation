@@ -20,7 +20,8 @@ import kotlin.math.abs
  *
  * Oba senzora idu u [direction] (smer hoda, ne pravac telefona). [onHeading] dobija smer za
  * prikaz (azimut u stepenima, 0..360, 0 = sever, u smeru kazaljke), a [onStep] smer hoda koraka
- * (uz broj prethodnih koraka koje treba ponoviti) i visinu vrha koraka ([AccelStepDetector.stepLengthFactor]). [lift] (ako je zadat) dobija iste uzorke i korake, a prepoznata
+ * (uz broj prethodnih koraka koje treba ponoviti), visinu vrha koraka ([AccelStepDetector.stepLengthFactor]) i vreme koraka -
+ * samo koraci koje [HandlingGate] pusti (premeštanje telefona u mestu nije hod; zadržani koraci stižu kasnije, sa svojim vremenom). [lift] (ako je zadat) dobija iste uzorke i korake, a prepoznata
  * vožnja liftom ide u [onLiftRide]. [recorder] (debug) snima sve događaje. Događaji stižu na glavnoj niti.
  */
 class PdrSensorSession(
@@ -28,7 +29,7 @@ class PdrSensorSession(
     private val direction: WalkingDirection,
     private val trackSteps: Boolean,
     private val onHeading: (Float) -> Unit,
-    private val onStep: (WalkingDirection.WalkStep, Float) -> Unit,
+    private val onStep: (WalkingDirection.WalkStep, Float, Long) -> Unit,
     private val recorder: SensorRecorder? = null,
     private val lift: LiftRideDetector? = null,
     private val onLiftRide: (LiftRide) -> Unit = {},
@@ -36,13 +37,14 @@ class PdrSensorSession(
     private val rotationMatrix = FloatArray(9)
     private var lastHeading = Float.NaN
     private var lastAccelNs = 0L
+    private val gate = HandlingGate()
 
     // Korak stiže kad prođe vrh (do 0,2 s posle prelaska praga), sa vremenom prelaska.
     private val stepDetector = AccelStepDetector { timeNs, peak ->
         lift?.onStep(timeNs)
         direction.onStep(timeNs)?.let { step ->
             recorder?.step(timeNs, step, direction, peak)
-            onStep(step, peak)
+            for (s in gate.onStep(HandlingGate.Step(timeNs, step, peak))) onStep(s.walk, s.peak, s.timeNs)
         }
     }
 
@@ -54,6 +56,9 @@ class PdrSensorSession(
                     recorder?.rotation(event.timestamp, rotationMatrix)
                     direction.onRotation(rotationMatrix, event.timestamp)
                     lift?.onRotation(rotationMatrix)
+                    if (trackSteps) gate.onRotation(rotationMatrix, event.timestamp).takeIf { it > 0 }?.let {
+                        recorder?.droppedSteps(event.timestamp, it)
+                    }
                     // Senzor javlja ~50 puta u sekundi - prikaz se osvežava tek na promenu od 1°.
                     val heading = direction.heading() ?: return
                     if (lastHeading.isNaN() || abs(angleDiffDeg(heading, lastHeading)) >= 1f) {
@@ -113,7 +118,7 @@ fun PdrHeadingEffect(
 
     LifecycleResumeEffect(sensorManager, direction, enabled) {
         val session = if (enabled) {
-            PdrSensorSession(sensorManager, direction, trackSteps = false, onHeading = { currentOnHeading(it) }, onStep = { _, _ -> })
+            PdrSensorSession(sensorManager, direction, trackSteps = false, onHeading = { currentOnHeading(it) }, onStep = { _, _, _ -> })
                 .also { it.start() }
         } else {
             null

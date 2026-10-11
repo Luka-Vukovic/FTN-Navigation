@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.PI
+import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -11,16 +13,37 @@ class AccelStepDetectorTest {
     private val sampleNs = 20_000_000L // 50 Hz, kao SENSOR_DELAY_GAME
 
     /** Pušta [seconds] sekundi signala kroz detektor; [magnitude] daje jačinu ubrzanja u trenutku t (s). */
-    private fun countSteps(seconds: Double, magnitude: (Double) -> Double): Int {
+    private fun countSteps(seconds: Double, upright: Boolean = false, magnitude: (Double) -> Double): Int {
         var steps = 0
         val detector = AccelStepDetector { _, _ -> steps++ }
         val samples = (seconds * 1e9 / sampleNs).toInt()
         for (i in 0 until samples) {
             val t = i * sampleNs / 1e9
-            // Ceo signal na z osi - detektor gleda samo jačinu vektora.
-            detector.onAccelerometer(0f, 0f, magnitude(t).toFloat(), i * sampleNs)
+            // Ceo signal na jednoj osi: z - telefon leži (u ruci), y - uspravan (džep).
+            val a = magnitude(t).toFloat()
+            if (upright) detector.onAccelerometer(0f, a, 0f, i * sampleNs) else detector.onAccelerometer(0f, 0f, a, i * sampleNs)
         }
         return steps
+    }
+
+    /** Hod u džepu (proba 11.10.2026): korak na 0,9 s, jak udar (5 m/s²) pa odjek 0,27 s kasnije (3 m/s²). */
+    private fun stepWithEcho(t: Double): Double {
+        val phase = t % 0.9
+        fun pulse(at: Double, height: Double) = height * exp(-(phase - at).pow(2) / (2 * 0.05 * 0.05))
+        return 9.81 + pulse(0.2, 5.0) + pulse(0.47, 3.0)
+    }
+
+    @Test
+    fun pocket_echoAfterStrongStep_notCounted() {
+        val steps = countSteps(9.0, upright = true, magnitude = ::stepWithEcho)
+        assertTrue("steps=$steps", steps in 9..10)
+    }
+
+    @Test
+    fun hand_quickSecondPeak_stillCounted() {
+        // U ruci se ne dira: brzi koraci na stepenicama (0,26-0,37 s) su pravi.
+        val steps = countSteps(9.0, magnitude = ::stepWithEcho)
+        assertTrue("steps=$steps", steps in 18..20)
     }
 
     @Test

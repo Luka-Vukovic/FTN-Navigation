@@ -1,5 +1,6 @@
 package com.example.ftnnavigation.poc
 
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
@@ -18,6 +19,12 @@ import kotlin.math.sqrt
 class AccelStepDetector(private val onStep: (timestampNs: Long, peak: Float) -> Unit) {
     private var smoothed = GRAVITY
     private var baseline = GRAVITY
+
+    // Gravitacija u koordinatama telefona (sporo izglađena): uspravan telefon (džep) ima malu z komponentu.
+    private var gravityX = 0f
+    private var gravityY = 0f
+    private var gravityZ = GRAVITY
+
     private var armed = true
     private var lastStepNs = Long.MIN_VALUE / 2
 
@@ -30,6 +37,9 @@ class AccelStepDetector(private val onStep: (timestampNs: Long, peak: Float) -> 
         smoothed += SMOOTH_ALPHA * (magnitude - smoothed)
         baseline += BASELINE_ALPHA * (magnitude - baseline)
         val signal = smoothed - baseline
+        gravityX += BASELINE_ALPHA * (x - gravityX)
+        gravityY += BASELINE_ALPHA * (y - gravityY)
+        gravityZ += BASELINE_ALPHA * (z - gravityZ)
 
         if (pending) {
             if (signal > peak) peak = signal
@@ -38,7 +48,11 @@ class AccelStepDetector(private val onStep: (timestampNs: Long, peak: Float) -> 
                 onStep(lastStepNs, peak)
             }
         }
-        if (armed && signal > STEP_THRESHOLD && timestampNs - lastStepNs >= MIN_STEP_INTERVAL_NS) {
+        val sinceStep = timestampNs - lastStepNs
+        if (armed && signal > STEP_THRESHOLD && sinceStep < POCKET_ECHO_NS && upright()) {
+            // Odjek udara noge uz koju je telefon (džep), ne novi korak - ne broji se ni kad interval prođe.
+            armed = false
+        } else if (armed && signal > STEP_THRESHOLD && sinceStep >= MIN_STEP_INTERVAL_NS) {
             armed = false
             lastStepNs = timestampNs
             pending = true
@@ -46,6 +60,11 @@ class AccelStepDetector(private val onStep: (timestampNs: Long, peak: Float) -> 
         } else if (!armed && signal < RESET_THRESHOLD) {
             armed = true
         }
+    }
+
+    private fun upright(): Boolean {
+        val g = sqrt(gravityX * gravityX + gravityY * gravityY + gravityZ * gravityZ)
+        return g > 0f && abs(gravityZ) < UPRIGHT_Z * g
     }
 
     companion object {
@@ -58,6 +77,15 @@ class AccelStepDetector(private val onStep: (timestampNs: Long, peak: Float) -> 
 
         private const val SMOOTH_ALPHA = 0.25f // uklanja drhtanje ruke
         private const val BASELINE_ALPHA = 0.02f // τ ≈ 1 s, prati gravitaciju/nagib
+
+        /**
+         * Telefon u džepu (uspravan: z gravitacije < [UPRIGHT_Z]) - prelazak praga do [POCKET_ECHO_NS] posle koraka je odjek
+         * istog udara. Proba "Džep i sedenje" 11.10.2026: 50 brojanih koraka -> ~77, posle jakog udara (vrh 2-8) još jedan
+         * 0,25-0,30 s kasnije. Koraka < 0,30 s posle prethodnog je u džepu 7-36 % (po danu), u ruci 2-3 % - a tamo su i pravi
+         * brzi koraci na stepenicama (0,26-0,37 s, 03.10. F 0 -> I), pa važi samo u džepu.
+         */
+        const val POCKET_ECHO_NS = 350_000_000L
+        private const val UPRIGHT_Z = 0.3f
 
         private const val PEAK_DROP = 0.8f
         private const val PEAK_WINDOW_NS = 200_000_000L

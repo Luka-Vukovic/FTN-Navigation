@@ -71,6 +71,9 @@ class SensorRecorder private constructor(val file: File) {
         write(if (prompt != null) "Q,$timestampNs,PITANJE,${prompt.lift.id},${prompt.fromFloor}" else "Q,$timestampNs,ODUSTAO")
 
     /** Dužina koraka (Podešavanja) - na Start i pri promeni za vreme praćenja. */
+    /** [HandlingGate] je odbacio [count] koraka (premeštanje telefona u mestu, ili koraci u mestu pa pauza). */
+    fun droppedSteps(timestampNs: Long, count: Int) = write("D,$timestampNs,$count")
+
     fun stepLength(timestampNs: Long, meters: Float) = write("K,$timestampNs,$meters")
 
     /** Prepoznata vožnja liftom. */
