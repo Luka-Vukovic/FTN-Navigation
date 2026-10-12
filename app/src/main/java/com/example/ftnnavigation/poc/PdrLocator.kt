@@ -188,6 +188,13 @@ private const val GPS_EXIT_GATE_M = 8.0
 private const val STAIR_ENTER_M = 1.5
 
 /**
+ * Ulazak u stepenište iz hodnika samo korakom do ovoliko od pravca hodnik -> stepenište (na planu, sa ispravkom smera).
+ * Bilo 90°: korak skoro popreko je puštao tačku na krak dok je korisnik išao pored stepeništa ili od njega (analiza
+ * promašaja 12.10.2026: NTP II 08.10. 25 m, NTP P 10.10. 11 m - korak 70-87° od pravca; NB P 09.10. 9 m - 71°).
+ */
+private const val STAIR_ENTER_DEG = 50f
+
+/**
  * Let - okret - let dok tačka nije na stepeništu računa se kao stepenište ako je prvi let počeo najviše ovoliko od
  * čvora stepeništa (tačka odluta: PDR korak je 0,8 m, a gazište ~0,3 m). Okret u hodniku tik uz stepenište sa letovima
  * od bar 6 koraka bi se ovde pogrešno video kao sprat - nije proveravano na terenu.
@@ -342,6 +349,45 @@ private const val MAX_BIAS_CORRECTION_DEG = 90f
  */
 private const val SHARED_BIAS_SAMPLES = 5
 
+// Učenje greške smera iz pravca hodnika (12.10.2026): hod duž hodnika ide njegovim pravcem, pa je prosečna razlika smera
+// koraka i pravca ivice greška kompasa koju zajednička ispravka nije pokrila. Analiza promašaja 12.10.2026: greška po danu i
+// zgradi −19..+13° uz zajedničku ispravku, rasipanje ~17° po koraku; NB 04.10. +27° (7,5 m), Kula 03.10. ~+30° (tačka
+// zaglavljena na prolazu, prelaz u AMF nije okinuo).
+
+/** Uči se tek posle ovoliko uzastopnih koraka duž hodnika istog pravca (tačka napreduje). */
+private const val CORRIDOR_RUN_STEPS = 5
+
+/** Korak dalje od ovoliko od pravca hodnika ne uči (skretanje, hol, ulazak u granu). */
+private const val CORRIDOR_LEARN_DEG = 35f
+
+/**
+ * Ivica kraća od ovoga nema pouzdan pravac (spojnice, vrata). Hodnik NB prizemlja je zato uči samo na dugim ivicama (14 od 20
+ * ivica kraće od 3 m - čvorovi naspram vrata). Dužina celog pravog niza ivica umesto jedne ivice je probana (13.10.2026):
+ * NB/NTP bolje, ali u replay-u izgubljeni prolaz Kula -> NB, izlazak iz NTP-a i jedan prolaz u Kuli (srednji 4,37 -> 4,54 m).
+ */
+private const val CORRIDOR_MIN_EDGE_M = 3.0
+
+/** Sitni koraci (zaustavljanje, okretanje u mestu) ne uče. */
+private const val CORRIDOR_MIN_STEP_M = 0.5f
+
+/**
+ * Deo razlike koji jedan korak prenese u ispravku (~50 koraka do pune vrednosti; rasipanje procene ~2°). Replay svih snimaka
+ * sa uključenom ispravkom (12.10.2026): 0,02 - srednji promašaj 4,66 -> 3,94 m, drugo mesto 7 -> 5; 0,05 i 0,1 su lošiji
+ * (4,34 i 4,52 m) - brže učenje hvata i hod po holu.
+ */
+private const val CORRIDOR_GAIN = 0.02f
+
+/** Najveća ispravka iz hodnika (preko toga je verovatno pogrešan hodnik). */
+private const val CORRIDOR_MAX_DEG = 30f
+
+/**
+ * Ispravka iz hodnika se zaboravlja posle ovoliko vremena bez učenja: greška kompasa se menja tokom dana (09.10.2026: ujutru
+ * NTP +13°, uveče NB +16° na drugu stranu - naučenih +9° od jutra je ostalo, prolaz NB -> Kula nije okinuo).
+ */
+private const val CORRIDOR_FORGET_NS = 20 * 60 * 1_000_000_000L
+
+private val ROOM_NODE_TYPES = setOf(NodeType.PROSTORIJA, NodeType.VRATA)
+
 /**
  * Poređenje PDR puta sa stvarnim pri označavanju ("Ovde sam"), od prethodnog sidra na istom spratu. Ispravka smera
  * NIJE trajno rešenje (korisnik, 03.10.2026) - ovo je pre svega merilo koliko smer trenutno promašuje.
@@ -441,8 +487,28 @@ class PdrLocator(
 
     private var pathInterrupted = false
 
-    /** Ispravka koja se dodaje azimutu (−naučena greška; 0 ako je isključena ili još nije naučena) - ista svuda. */
-    val headingBiasDeg: Float get() = if (applyCorrection) -sharedBias else 0f
+    /**
+     * Ispravka koja se dodaje azimutu (−naučena greška + ispravka iz pravca hodnika; 0 ako je isključena ili još nije
+     * naučena) - ista svuda.
+     */
+    val headingBiasDeg: Float get() = if (applyCorrection) -sharedBias + corridorBiasDeg else 0f
+
+    /**
+     * Ispravka naučena iz hoda duž hodnika (vidi [CORRIDOR_GAIN]), preko zajedničke - jedna za sve zgrade (posebno po zgradi je
+     * u replay-u bilo lošije: 3,88 -> 4,46 m srednji promašaj - greška je više osobina telefona i dana). Napolju i dok traje
+     * provera posle ulaska ([entryCheck]) se ne primenjuje: napolju GPS drži poziciju, a provera "ušao pa uz zid nazad napolje"
+     * je osetljiva na smer (10.10.2026, NTP: sa +6° iz F-bloka nije okinula). Briše je Reset.
+     */
+    val corridorBiasDeg: Float get() = if (place.isCampus || entryCheck != null) 0f else learnedCorridorBias
+
+    private var learnedCorridorBias = 0f
+
+    // Vreme koraka kad je ispravka iz hodnika poslednji put učena (null: nije učena ili vreme nije poznato).
+    private var corridorLearnedNs: Long? = null
+
+    // Hod duž hodnika: pravac (na planu, 0..180) i broj uzastopnih koraka kojima tačka napreduje njime.
+    private var corridorAxisDeg: Float? = null
+    private var corridorRun = 0
 
     /** Naučena greška smera (prosek poslednjih merenja, bez ispravke); null dok nije merena. */
     val headingErrorDeg: Float? get() = if (headingErrors.isEmpty()) null else sharedBias
@@ -662,6 +728,9 @@ class PdrLocator(
 
     private var stepsSinceStairExit = STAIR_REENTER_STEPS
 
+    /** Dužina poslednjeg koraka kakvu je dao detektor (i na stepeništu - [lastStepM] je tamo gazište). */
+    private var walkStepM = 0.8f
+
     /** Koraci po spratu van stepeništa: let - okret - let blizu stepeništa je hod po stepeništu i kad tačka nije na njemu. */
     private var watch = StairWalk()
 
@@ -768,6 +837,9 @@ class PdrLocator(
         exitDetector = null
         rejectedEntrance = null
         exitedEntrance = null
+        learnedCorridorBias = 0f
+        corridorLearnedNs = null
+        corridorRun = 0
         stepStarts.clear()
         climb = null
         watch = StairWalk()
@@ -851,8 +923,10 @@ class PdrLocator(
         // Pitanje za lift čeka: korak se pamti (ponavlja se na izabranom spratu), a na ovom spratu ide dalje (možda nije
         // bio u liftu).
         if (liftPrompt != null) liftSteps += PendingStep(azimuthDeg, lengthM, redoSteps, timeNs)
+        forgetCorridorBias(timeNs)
         stepsSinceStairChange++
         lastStepM = if (climb != null) STAIR_STEP_M else lengthM
+        walkStepM = lengthM
         passage?.let { return passageStep(it, azimuthDeg, lengthM) }
         climb?.let { return climbStep(it, azimuthDeg, redoSteps, timeNs) }
         val scale = graph.placement(place.buildingId).scale
@@ -868,6 +942,7 @@ class PdrLocator(
             walkedY = from.walkedY
         }
         val (dxM, dyM) = stepVector(place, azimuthDeg, lengthM)
+        val before = match?.point
         if (place.isCampus) repeat(redo.coerceAtMost(campusTrail.size)) { campusTrail.removeLast() }
         repeat(redo + 1) {
             stepStarts.addLast(StepStart(raw, match, walkedX, walkedY))
@@ -887,6 +962,7 @@ class PdrLocator(
         }
         this.raw = raw
         this.match = match
+        if (redo == 0) learnFromCorridor(before, match?.point, dxM, dyM, lengthM) else corridorRun = 0
         if (!place.isCampus) entryCheck?.let { check -> checkEntry(check, azimuthDeg, lengthM, redo)?.let { return it } }
         if (place.isCampus && lengthM > 0f) {
             campusSteps.addLast(PointM(dxM / lengthM, dyM / lengthM))
@@ -967,6 +1043,7 @@ class PdrLocator(
         climb = null
         landingClimb = null
         watch = StairWalk()
+        corridorRun = 0
         anchorPlace = place
         anchor = meters(place, point, local = true)
         walkedX = 0.0
@@ -1016,6 +1093,64 @@ class PdrLocator(
         )
     }
 
+    /**
+     * Korak tačke od [from] do [to] na grafu sprata (korak [dxM]/[dyM], sa ispravkom smera): ako tačka već [CORRIDOR_RUN_STEPS]
+     * koraka napreduje duž hodnika istog pravca, razlika smera koraka od pravca hodnika pomera [corridorBiasDeg].
+     */
+    private fun learnFromCorridor(from: EdgePoint?, to: EdgePoint?, dxM: Double, dyM: Double, lengthM: Float) {
+        // Za vreme provere posle ulaska ispravka se ne primenjuje ([corridorBiasDeg]) - razlika tada nije merena uz nju.
+        if (from == null || to == null || place.isCampus || entryCheck != null || lengthM < CORRIDOR_MIN_STEP_M ||
+            to.from.type in ROOM_NODE_TYPES || to.to.type in ROOM_NODE_TYPES
+        ) {
+            corridorRun = 0
+            return
+        }
+        val a = local(to.from.x, to.from.y)
+        val b = local(to.to.x, to.to.y)
+        if (distance(a, b) < CORRIDOR_MIN_EDGE_M) {
+            corridorRun = 0
+            return
+        }
+        // Pravac ivice bez smera (0..180) i razlika koraka od njega (−90..90).
+        val axis = normalizeDeg(azimuthOf(b.x - a.x, b.y - a.y)) % 180f
+        val diff = angleDiffDeg(azimuthOf(dxM, dyM), axis).let { if (abs(it) > 90f) angleDiffDeg(it, 180f) else it }
+        val progress = distance(local(from.x, from.y), local(to.x, to.y))
+        val sameAxis = corridorAxisDeg?.let { abs(angleDiffDeg(it, axis)).let { d -> minOf(d, 180f - d) } <= CORRIDOR_LEARN_DEG / 2 } ?: false
+        if (abs(diff) > CORRIDOR_LEARN_DEG || progress < 0.5 * lengthM) {
+            corridorRun = 0
+            corridorAxisDeg = null
+            return
+        }
+        corridorRun = if (sameAxis) corridorRun + 1 else 1
+        corridorAxisDeg = axis
+        if (corridorRun < CORRIDOR_RUN_STEPS || !applyCorrection) return
+        learnedCorridorBias = (learnedCorridorBias - CORRIDOR_GAIN * diff).coerceIn(-CORRIDOR_MAX_DEG, CORRIDOR_MAX_DEG)
+        corridorLearnedNs = lastStepNs
+    }
+
+    // Vreme tekućeg koraka (za [corridorLearnedNs]).
+    private var lastStepNs: Long? = null
+
+    /** Posle [CORRIDOR_FORGET_NS] bez učenja ispravka iz hodnika se briše (počinje se iz zajedničke). */
+    private fun forgetCorridorBias(timeNs: Long?) {
+        lastStepNs = timeNs
+        val learned = corridorLearnedNs ?: return
+        // Starije vreme (koraci ponovljeni posle pitanja za lift) ne briše.
+        if (timeNs != null && timeNs - learned > CORRIDOR_FORGET_NS) {
+            learnedCorridorBias = 0f
+            corridorLearnedNs = null
+        }
+    }
+
+    /** Sidro i PDR put od njega (metri plana mesta sidra, bez smeštaja) - za analizu promašaja u replay-u. */
+    internal class AnchorTrace(val place: PdrPlace, val anchor: PointM, val walkedX: Double, val walkedY: Double, val interrupted: Boolean)
+
+    internal val anchorTrace: AnchorTrace?
+        get() = anchor?.let { AnchorTrace(anchorPlace ?: return null, it, walkedX, walkedY, pathInterrupted) }
+
+    /** Metri plana mesta [place] (bez smeštaja) - za analizu promašaja u replay-u. */
+    internal fun localMeters(place: PdrPlace, p: Offset): PointM = meters(place, p, local = true)
+
     /** Metri plana mesta (bez smeštaja) čvora/tačke. */
     private fun local(x: Float, y: Float): PointM = meters(place, Offset(x, y), local = true)
 
@@ -1052,7 +1187,17 @@ class PdrLocator(
             if (distance(here, s) > min(STAIR_ENTER_M, edge / 2)) return false
             // Samo korakom ka stepeništu - tačka koja se od njega udaljava (tek označena pored stepeništa, pa hod ka hodniku)
             // nije na kraku (teren 09.10.2026 uveče, NTP III: posle 2 koraka od S1 tačka je opet ušla na krak).
-            if (abs(angleDiffDeg(headingOnPlan(azimuthDeg), azimuthOf(s.x - c.x, s.y - c.y))) >= 90f) return false
+            // Ili pravcem kraka: sa podesta sprata između dva kraka (silazak preko više spratova, NTP 10.10.2026) se na krak
+            // naniže stiže sa strane, ne iz hodnika.
+            val heading = headingOnPlan(azimuthDeg)
+            val towardStair = abs(angleDiffDeg(heading, azimuthOf(s.x - c.x, s.y - c.y)))
+            val alongFlight = pathsOf(stair, place.floor)?.minOfOrNull { p ->
+                val (a, b) = if (node.id.endsWith(DOWN_FOOT_SUFFIX)) p[3] to p[2] else p[0] to p[1]
+                val pa = local(a.x, a.y)
+                val pb = local(b.x, b.y)
+                abs(angleDiffDeg(heading, azimuthOf(pb.x - pa.x, pb.y - pa.y)))
+            } ?: towardStair
+            if (min(towardStair, alongFlight) > STAIR_ENTER_DEG) return false
         }
         // Sa dna kraka naniže se (verovatno) silazi; putanju potvrđuje ili menja strana okreta na međupodestu.
         climb = Climb(stair, watch).apply {
@@ -1467,9 +1612,24 @@ class PdrLocator(
             return
         }
         showClimb(climb)
-        val point = match?.point?.let { Offset(it.x, it.y) } ?: raw!!
+        val point = afterFlight(climb) ?: match?.point?.let { Offset(it.x, it.y) } ?: raw!!
         raw = point
         match = matcherFor(place)?.start(point.x, point.y)
+    }
+
+    /**
+     * Silazi posle drugog kraka (hodao je pravo dalje - podest sprata, hodnik): tačka na ivici dno kraka - hodnik, koliko je
+     * tim koracima prešao, a ne na dnu kraka. Analiza promašaja 12.10.2026, NTP II 08.10.: tačka je ostala na čvoru S2, korisnik
+     * je skrenuo hodnikom ka liftovima (korak popreko na ivicu do hodnika - bez napretka), pa je posle 3 koraka opet ušla na
+     * krak i tu ostala (25 m promašaja). null: nije taj slučaj.
+     */
+    private fun afterFlight(climb: Climb): Offset? {
+        if (climb.part != ClimbPart.SECOND || climb.progress < 1.0 || climb.straight <= 0 || pathOf(climb) == null) return null
+        val foot = (if (climb.up) climb.stair.downNodes[place.floor] else climb.stair.nodes[place.floor]) ?: return null
+        val corridor = climb.stair.corridor(foot)
+        val length = distance(local(foot.x, foot.y), local(corridor.x, corridor.y)).takeIf { it > 0 } ?: return null
+        val t = (climb.straight * walkStepM / length).coerceIn(0.0, 1.0).toFloat()
+        return Offset(foot.x + (corridor.x - foot.x) * t, foot.y + (corridor.y - foot.y) * t)
     }
 
     /**

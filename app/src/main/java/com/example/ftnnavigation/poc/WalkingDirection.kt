@@ -119,6 +119,9 @@ class WalkingDirection {
     // Smer koji važi dok se premešten telefon ne smiri.
     private var heldWalkDeg = 0.0
 
+    // Premeštanje je počelo sa telefonom uspravnim (džep).
+    private var fromPocket = false
+
     /** Da li je odstupanje telefona poznato (false dok se premešten telefon ne smiri). */
     val isAnchored: Boolean get() = anchored
 
@@ -163,6 +166,7 @@ class WalkingDirection {
         when {
             anchored -> if (repositioned(timestampNs)) {
                 anchored = false
+                fromPocket = abs(poseHistory.first().up[2]) < POCKET_UP_Z
                 heldWalkDeg = motionStartWalkDeg()
                 poseHistory.clear()
                 unsettledSinceNs = timestampNs
@@ -272,9 +276,13 @@ class WalkingDirection {
     /** Smer hoda za pravac telefona [phone]; dok se premešten telefon ne smiri - smer od pre premeštanja. */
     private fun walking(phone: Double): Double = if (anchored) phone + offsetDeg else heldWalkDeg
 
-    /** Telefon se smirio posle premeštanja: odstupanje tako da se nastavi smer od pre premeštanja. */
+    /**
+     * Telefon se smirio posle premeštanja: odstupanje tako da se nastavi smer od pre premeštanja. Izvađen iz džepa u ruku
+     * (ekranom nagore): odstupanje 0, kao na Start-u - telefon se drži ispred sebe. Smer iz džepa ume da bude pogrešan
+     * (analiza promašaja 12.10.2026, NTP 09.10.: posle vožnje liftom u džepu odstupanje 45° umesto ~0, 24 m promašaja).
+     */
     private fun settle() {
-        offsetDeg = angleDiff(heldWalkDeg, azimuth(smoothE, smoothN))
+        offsetDeg = if (fromPocket && upSlow[2] >= HAND_UP_Z) 0.0 else angleDiff(heldWalkDeg, azimuth(smoothE, smoothN))
         anchored = true
         poseHistory.clear()
         forgetTurns()
@@ -283,6 +291,12 @@ class WalkingDirection {
         stepTimes.clear()
         stepPhoneDegs.clear()
         stepPhases.clear()
+        // Ni pravac telefona iz položaja pre premeštanja (prosek preko dva koraka bi prva dva koraka posle vađenja iz džepa
+        // u ruku vodio između dva položaja - test: 322° umesto 30°).
+        stepSumE = 0.0
+        stepSumN = 0.0
+        prevStepSumE = 0.0
+        prevStepSumN = 0.0
     }
 
     private fun forgetTurns() {
@@ -445,6 +459,13 @@ class WalkingDirection {
 
         /** Okret gravitacije u koordinatama telefona koji znači da je telefon premešten. */
         const val REPOSITION_DEG = 45.0
+
+        /**
+         * "Gore" duž ose Z telefona (ekran): u džepu (uspravan) ispod ovoga, u ruci ekranom nagore iznad [HAND_UP_Z] (snimak
+         * 09.10.2026 11:48: džep |z| < 0,1, ruka 0,75-0,88).
+         */
+        const val POCKET_UP_Z = 0.3
+        const val HAND_UP_Z = 0.5
 
         /**
          * Okret gravitacije se meri u odnosu na stanje od pre ovoliko. Ranije je referenca bila

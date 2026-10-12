@@ -7,6 +7,7 @@ import com.example.ftnnavigation.campus.seedGraph
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
+import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.PointM
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -38,6 +39,9 @@ class PdrLocatorReplayTest {
 
     // PDR_FULL_STEPS=1: svaki korak pune dužine (kao pre 09.10.2026 uveče) - za poređenje.
     private val fullSteps = System.getenv("PDR_FULL_STEPS") == "1"
+    // PDR_CORRECTION=1: "Ispravi smer" uključen ceo snimak (kako god je bio na telefonu) - za proveru učenja smera.
+    private val forceCorrection = System.getenv("PDR_CORRECTION") == "1"
+
     // Snimci bez `K` reda (pre 08.10.2026) su hodani sa 0,8 m.
     private var stepM = 0.8f
 
@@ -56,7 +60,36 @@ class PdrLocatorReplayTest {
             File(outDir, file.nameWithoutExtension + "-putanja.csv").writeText(track)
             println(events)
         }
+        File(outDir, "promasaji.csv").writeText(misses.toString())
     }
+
+    /**
+     * Red `promasaji.csv` za "Ovde sam" ([marked] na [place]): sidro (poslednji START / RUCNO / prelaz - [anchorKind]),
+     * PDR put od sidra, prikazana i slobodna pozicija - sve u metrima plana mesta (bez smeštaja).
+     */
+    private fun missRow(file: File, t: Double, steps: Int, anchorKind: String, locator: PdrLocator, place: PdrPlace, marked: Offset): String {
+        fun f(v: Double?) = v?.let { String.format(Locale.ROOT, "%.2f", it) } ?: ""
+        val here = locator.place
+        val m = locator.localMeters(place, marked)
+        val shown = (locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw)?.let { locator.localMeters(here, it) }
+        val free = locator.raw?.let { locator.localMeters(here, it) }
+        val trace = locator.anchorTrace
+        val edge = locator.match?.point?.let { "${it.from.type}-${it.to.type}" } ?: ""
+        // Koliko je označeno mesto daleko od grafa sprata (tačka zalepljena za graf ne može bliže).
+        val offGraph = if (place.isCampus) null else graph.nearestEdgePoint(place.buildingId, place.floor,
+            graph.placement(place.buildingId).toMeters(marked.x, marked.y), NodeType.entries.toSet())?.second
+        return listOf(
+            file.nameWithoutExtension.removePrefix("hod-"), f(t), steps.toString(), anchorKind,
+            "${place.buildingId} ${place.floor}", "${here.buildingId} ${here.floor}", "${trace?.place?.buildingId ?: ""} ${trace?.place?.floor ?: ""}",
+            (trace?.interrupted ?: false).toString(), f(trace?.anchor?.x), f(trace?.anchor?.y), f(trace?.walkedX), f(trace?.walkedY),
+            f(m.x), f(m.y), f(shown?.x), f(shown?.y), f(free?.x), f(free?.y), edge, f(locator.headingBiasDeg.toDouble()),
+            f(offGraph),
+        ).joinToString(",")
+    }
+
+    private val misses = StringBuilder(
+        "snimak,t,koraka,sidro,oznaceno,mesto,mesto_sidra,prekinuto,sidro_x,sidro_y,put_x,put_y,x,y,prikaz_x,prikaz_y,slobodna_x,slobodna_y,ivica,ispravka,van_grafa,graf_x,graf_y\n",
+    )
 
     private fun PdrLocator.position(): PointM? {
         val p = match?.point?.let { Offset(it.x, it.y) } ?: raw ?: return null
@@ -68,9 +101,11 @@ class PdrLocatorReplayTest {
         locator.clearRedo()
         stepM = 0.8f
         val out = StringBuilder("Snimak ${file.name}\n")
-        val track = StringBuilder("t,vrsta,mesto,sprat,x,y,gps_x,gps_y,tacnost,slobodna_x,slobodna_y,ivica\n")
+        val track = StringBuilder("t,vrsta,mesto,sprat,x,y,gps_x,gps_y,tacnost,slobodna_x,slobodna_y,ivica,smer,duzina\n")
         val t0 = lines.firstNotNullOf { it.getOrNull(1)?.toLongOrNull() }
         var steps = 0
+        // Odakle je poslednje sidro (START, RUCNO, prelaz) - za `promasaji.csv`.
+        var anchorKind = "-"
         fun sec(t: Long) = (t - t0) / 1e9
         fun log(t: Long, text: String) {
             val p = locator.position()
@@ -79,16 +114,19 @@ class PdrLocatorReplayTest {
                     locator.place.buildingId, locator.place.floor, p?.let { String.format(Locale.ROOT, "%.1f, %.1f", it.x, it.y) } ?: "-"),
             )
         }
-        fun row(t: Long, kind: String, gps: GpsFix? = null) {
+        fun row(t: Long, kind: String, gps: GpsFix? = null, azimuthDeg: Float? = null, lengthM: Float? = null) {
             val p = locator.position() ?: return
-            // Slobodna PDR pozicija (pre lepljenja na graf) i ivica na kojoj je tačka.
+            // Slobodna PDR pozicija (pre lepljenja na graf) i ivica na kojoj je tačka; za korak i smer na planu (sa
+            // ispravkom) i dužina.
             val placement = graph.placement(locator.place.buildingId)
             val free = locator.match?.let { placement.toMeters(it.x, it.y) }
             val edge = locator.match?.point?.let { "${it.from.id} ${it.to.id} ${String.format(Locale.ROOT, "%.2f", it.t)}" } ?: ""
             track.appendLine(
-                String.format(Locale.ROOT, "%.2f,%s,%s,%d,%.2f,%.2f,%s,%s,%s,%s,%s,%s", sec(t), kind, locator.place.buildingId, locator.place.floor,
+                String.format(Locale.ROOT, "%.2f,%s,%s,%d,%.2f,%.2f,%s,%s,%s,%s,%s,%s,%s,%s", sec(t), kind, locator.place.buildingId, locator.place.floor,
                     p.x, p.y, gps?.point?.x ?: "", gps?.point?.y ?: "", gps?.accuracyM ?: "",
-                    free?.let { String.format(Locale.ROOT, "%.2f", it.x) } ?: "", free?.let { String.format(Locale.ROOT, "%.2f", it.y) } ?: "", edge),
+                    free?.let { String.format(Locale.ROOT, "%.2f", it.x) } ?: "", free?.let { String.format(Locale.ROOT, "%.2f", it.y) } ?: "", edge,
+                    azimuthDeg?.let { String.format(Locale.ROOT, "%.0f", locator.headingOnPlan(it)) } ?: "",
+                    lengthM?.let { String.format(Locale.ROOT, "%.2f", it) } ?: ""),
             )
         }
         // Vrh koraka (dužina koraka po jačini): iz S reda (od 09.10.2026 uveče), a za starije snimke iz istog detektora
@@ -112,10 +150,12 @@ class PdrLocatorReplayTest {
         // Kao na telefonu: koraci prolaze kroz [HandlingGate] (premeštanje telefona u mestu nije hod).
         val gate = HandlingGate()
         fun apply(s: HandlingGate.Step) {
-            val reason = locator.step(s.walk.headingDeg, if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak), s.walk.redoSteps, s.timeNs)
+            val lengthM = if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak)
+            val reason = locator.step(s.walk.headingDeg, lengthM, s.walk.redoSteps, s.timeNs)
             direction?.nearStairs = locator.nearStairs
+            if (reason != null) anchorKind = reason.name
             if (reason != null) log(s.timeNs, "replay: $reason")
-            row(s.timeNs, "S")
+            row(s.timeNs, "S", azimuthDeg = s.walk.headingDeg, lengthM = lengthM)
         }
         fun walk(t: Long, recorded: WalkingDirection.WalkStep?, peak: Float) {
             lift.onStep(t)
@@ -154,7 +194,10 @@ class PdrLocatorReplayTest {
                     val before = locator.place
                     val ride0 = String.format(Locale.ROOT, "%.1f-%.1f s, %+.1f m", sec(ride.startNs), sec(ride.endNs), ride.heightM)
                     when (val outcome = locator.liftRide(ride)) {
-                        is LiftOutcome.Moved -> log(t, "replay: vožnja $ride0, ${before.floor} -> ${outcome.change.toFloor}")
+                        is LiftOutcome.Moved -> {
+                            anchorKind = "LIFT"
+                            log(t, "replay: vožnja $ride0, ${before.floor} -> ${outcome.change.toFloor}")
+                        }
                         is LiftOutcome.Ask -> log(t, "replay: vožnja $ride0, pitanje (predlog ${outcome.prompt.suggested})")
                         null -> log(t, "replay: vožnja $ride0, nije kod lifta")
                     }
@@ -178,6 +221,7 @@ class PdrLocatorReplayTest {
                 "G" -> {
                     val fix = GpsFix(PointM(f[2].toDouble(), f[3].toDouble()), f[4].toFloat(), t)
                     val reason = locator.onGps(fix, tracking = true)
+                    if (reason != null) anchorKind = reason.name
                     if (reason != null) log(t, "replay: $reason")
                     row(t, "G", fix)
                 }
@@ -186,7 +230,7 @@ class PdrLocatorReplayTest {
                     val place = PdrPlace(f[3], f[4].toInt())
                     // Prekidač ispravke iz zakrenutosti u redu: različita od 0 -> uključen; 0 uz naučenu -> isključen.
                     val bias = f[7].toFloat()
-                    if (bias != 0f) locator.applyCorrection = true
+                    if (bias != 0f || forceCorrection) locator.applyCorrection = true
                     else if (locator.headingErrorDeg?.let { it != 0f } == true) locator.applyCorrection = false
                     if (reason == PlaceReason.START) {
                         // Zakrenutost kakvu je telefon tada primenjivao (naučena u replay-u može malo da odstupa).
@@ -204,27 +248,39 @@ class PdrLocatorReplayTest {
                             log(t, "START ${place.buildingId} ${place.floor}")
                         }
                         steps = 0
+                        anchorKind = "START"
                         row(t, "L")
                     } else if (reason == PlaceReason.RUCNO) {
                         // Prekidač ispravke: iz H reda koji odmah sledi (ako ga ima).
-                        lines.getOrNull(i + 1)?.takeIf { it[0] == "H" && it[4] == "MERENO" }?.let { locator.applyCorrection = it[10].toBoolean() }
+                        lines.getOrNull(i + 1)?.takeIf { it[0] == "H" && it[4] == "MERENO" }?.let { locator.applyCorrection = it[10].toBoolean() || forceCorrection }
                         // Promašaj: tačka pre "Ovde sam" naspram označene (drugi sprat/zgrada - bez broja).
                         val placeBefore = locator.place
                         val before = locator.position()
+                        val missLine = missRow(file, sec(t), steps, anchorKind, locator, place, Offset(f[5].toFloat(), f[6].toFloat()))
                         val check = locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()))
+                        // Označeno mesto zalepljeno za graf (ono što aplikacija posle prikazuje).
+                        val snapped = (locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw)?.let { locator.localMeters(place, it) }
+                        misses.appendLine(missLine + String.format(Locale.ROOT, ",%.2f,%.2f", snapped?.x ?: Double.NaN, snapped?.y ?: Double.NaN))
                         val miss = before?.takeIf { placeBefore == place }?.let { b -> locator.position()?.let { hypot(it.x - b.x, it.y - b.y) } }
                         log(t, "RUCNO ${place.buildingId} ${place.floor}" + (miss?.let { String.format(Locale.ROOT, "  promašaj %.1f m", it) } ?: "  promašaj -") + ((check as? HeadingCheck.Measured)?.let {
                             String.format(Locale.ROOT, "  greška %+.1f° put %.0f %%", it.errorDeg, 100 * it.walkedM / it.actualM)
-                        } ?: ""))
+                        } ?: "") + String.format(Locale.ROOT, "  hodnik %+.1f°", locator.corridorBiasDeg))
                         steps = 0
+                        anchorKind = "RUCNO"
                         row(t, "L")
                     } else if (reason == PlaceReason.LIFT) {
                         // Telefon: vožnja ili izbor u pitanju (snimci do 08.10.2026: pitanje posle stajanja). Replay je već
                         // na tom spratu (sam prepoznao vožnju) - ništa; čeka pitanje - izbor; inače se postavlja kao telefon.
                         val note = when {
-                            locator.liftPrompt != null -> if (locator.selectLiftFloor(place.floor) != null) "" else " (?)"
+                            locator.liftPrompt != null -> if (locator.selectLiftFloor(place.floor) != null) {
+                                anchorKind = "LIFT"
+                                ""
+                            } else {
+                                " (?)"
+                            }
                             locator.place == place -> " (replay već tu)"
                             else -> {
+                                anchorKind = "LIFT"
                                 locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()), measure = false)
                                 " (replay nije prepoznao - postavljeno)"
                             }

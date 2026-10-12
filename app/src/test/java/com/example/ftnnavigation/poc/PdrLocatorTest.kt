@@ -19,6 +19,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.random.Random
@@ -473,6 +474,31 @@ class PdrLocatorTest {
         assertEquals(90f, locator.headingOnPlan(east + 40f), 0.01f)
     }
 
+    /**
+     * Ispravka iz pravca hodnika (12.10.2026): hod hodnikom NB prizemlja (istočni deo - duge ivice; zapadni deo je podeljen
+     * na ivice kraće od 3 m i tu se ne uči) sa kompasom +10° - ispravka ide ka −10°; posle 20 min bez učenja se zaboravlja
+     * (09.10.2026: jutarnja iz NTP-a je uveče u NB-u bila pogrešna). Isključena ispravka ne uči.
+     */
+    @Test
+    fun corridorWalk_learnsCompassError_forgottenAfterTwentyMinutes() {
+        val azimuth = magneticAzimuth(graph.position(node("NB-0-H744_420")), graph.position(node("NB-0-H1015_420"))) + 10f
+        val off = locatorAt("NB-0-H744_420").apply { applyCorrection = false }
+        repeat(30) { off.step(azimuth, stepM, timeNs = it * 600_000_000L) }
+        assertEquals(0f, off.corridorBiasDeg, 0f)
+
+        val locator = locatorAt("NB-0-H744_420")
+        repeat(30) { locator.step(azimuth, stepM, timeNs = it * 600_000_000L) }
+        assertEquals(PdrPlace("NB", 0), locator.place)
+        assertTrue("naučeno ${locator.corridorBiasDeg}", locator.corridorBiasDeg in -10f..-2f)
+        assertEquals(locator.corridorBiasDeg, locator.headingBiasDeg, 1e-6f)
+        val learned = locator.corridorBiasDeg
+        locator.step(azimuth, stepM, timeNs = 30 * 600_000_000L + 10 * 60_000_000_000L)
+        assertTrue("posle 10 min još važi", locator.corridorBiasDeg <= learned)
+        locator.step(azimuth, stepM, timeNs = 31 * 600_000_000L + 31 * 60_000_000_000L)
+        // Isti korak posle brisanja već ponovo uči (deo stepena).
+        assertEquals(0f, locator.corridorBiasDeg, 0.5f)
+    }
+
     /** Ispravka uključena/isključena usred puta: PDR put je mešavina dva smera - ne meri se. */
     @Test
     fun correctionToggledWhileWalking_notMeasured() {
@@ -815,6 +841,53 @@ class PdrLocatorTest {
         val downFoot = graph.position(node("NB-2-S-D"))
         assertTrue(distance(locator.position(), downFoot) > 1.0)
         assertEquals(stepM, locator.lastStepM, 1e-6f)
+    }
+
+    /**
+     * Analiza promašaja 12.10.2026 (NTP II 08.10., NTP P 10.10., NB P 09.10.): korak 70-87° od pravca ka stepeništu je
+     * puštao tačku na krak dok je korisnik išao pored stepeništa - sada samo korak do 50° od tog pravca ili pravca kraka.
+     */
+    @Test
+    fun besideStairNode_stepAcross_doesNotClimb() {
+        val foot = node("NB-1-S")
+        val corridor = stairs.getValue(stairKey(foot)).corridor(foot)
+        val footM = graph.position(foot)
+        val corridorM = graph.position(corridor)
+        val t = (1.0 / distance(footM, corridorM)).coerceAtMost(0.5).toFloat()
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply {
+            setPosition(PdrPlace("NB", 1), Offset(foot.x + (corridor.x - foot.x) * t, foot.y + (corridor.y - foot.y) * t))
+        }
+        val toward = magneticAzimuth(corridorM, footM)
+        val flight = upFlightAzimuth("NB/S", 1)
+        val across = listOf(toward + 70f, toward - 70f).maxBy { abs(angleDiffDeg(it, flight)) }
+        assertTrue(abs(angleDiffDeg(across, flight)) > 50f)
+        repeat(3) {
+            assertNull(locator.step(across, stepM))
+            assertNotNull("ušao na stepenište (korak ${it + 1})", locator.match)
+        }
+        assertEquals(PdrPlace("NB", 1), locator.place)
+    }
+
+    /**
+     * Silazak sa stepeništa posle drugog kraka (koraci pravo dalje): tačka je na ivici dno kraka - hodnik koliko je tim
+     * koracima prešla, ne na dnu kraka (analiza promašaja 12.10.2026, NTP II 08.10.: tačka je ostala na dnu kraka, korisnik je
+     * skrenuo hodnikom, posle 3 koraka je opet ušla na krak - 25 m).
+     */
+    @Test
+    fun afterSecondFlight_leavingStraight_pointTowardCorridor() {
+        val (locator, away) = atStairs("NB/S", 1)
+        locator.flights(away, 180f)
+        val downFoot = node("NB-2-S-D")
+        val footM = graph.position(downFoot)
+        val corridorM = graph.position(stairs.getValue(stairKey(downFoot)).corridor(downFoot))
+        var steps = 0
+        while (locator.match == null) {
+            locator.step(away + 180f, stepM)
+            check(++steps < 15) { "nije sišao sa stepeništa" }
+        }
+        assertEquals(PdrPlace("NB", 2), locator.place)
+        assertTrue("na ivici ka hodniku", distanceToSegment(locator.position(), footM, corridorM) < 0.1)
+        assertTrue("na dnu kraka: ${distance(locator.position(), footM)} m", distance(locator.position(), footM) > 1.0)
     }
 
     /** Hod do stepeništa i nazad (bez letova) ne menja sprat, a tačka ne kreće uz krak. */

@@ -219,6 +219,28 @@ class WalkingDirectionTest {
         headings.forEach { assertNear(30.0, it, 10.0) }
     }
 
+    /**
+     * Analiza promašaja 12.10.2026 (NTP 09.10.: posle vožnje liftom u džepu odstupanje 45° umesto ~0, 24 m): smer iz džepa
+     * je bio pogrešan (telefon se u džepu okrenuo), a posle vađenja u ruku se nastavljao. Iz džepa u ruku ekranom nagore -
+     * odstupanje 0, kao na Start-u.
+     */
+    @Test
+    fun phoneTakenFromPocketIntoHand_offsetReset() {
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        stand(3.0, inPocket(screenAzimuthDeg = 30.0, walkAzimuthDeg = 30.0))
+        assertTrue(direction.isAnchored)
+        // Telefon se u džepu okrenuo oko uspravne ose: smer iz džepa je sada 45° pogrešan.
+        stand(1.0, inPocket(screenAzimuthDeg = 75.0, walkAzimuthDeg = 30.0))
+        assertNear(75.0, direction.heading()!!, 5.0, "smer u džepu")
+        stand(3.0, inHand(30.0))
+        assertTrue("telefon se nije smirio u ruci", direction.isAnchored)
+        assertNear(0.0, direction.offset.toFloat(), 5.0, "odstupanje")
+        val hs = walk(4.0, 30.0) { inHand(30.0) }
+        hs.forEach { assertNear(30.0, it, 10.0, "u ruci") }
+    }
+
     @Test
     fun phonePutInPocketWhileWalking_thenTurn_isNotStuck() {
         // Telefon ide u džep bez zastajanja; posle toga korisnik skreće - smer mora da prati.
