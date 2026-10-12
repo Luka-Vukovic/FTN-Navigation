@@ -153,6 +153,7 @@ class PdrLocatorReplayTest {
             val lengthM = if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak)
             val reason = locator.step(s.walk.headingDeg, lengthM, s.walk.redoSteps, s.timeNs)
             direction?.nearStairs = locator.nearStairs
+            direction?.onStairs = locator.onStairs
             if (reason != null) anchorKind = reason.name
             if (reason != null) log(s.timeNs, "replay: $reason")
             row(s.timeNs, "S", azimuthDeg = s.walk.headingDeg, lengthM = lengthM)

@@ -50,10 +50,21 @@ private const val STUCK_ESCAPE_MARGIN_M = 1.0
 /** Tačka na ivici bliže čvoru od ovoga (m) je na čvoru. */
 private const val AT_NODE_M = 0.05
 
+/** Korak do ovoliko od pravca hodnika ide punom dužinom duž njega ([MapMatcher.step]). */
+private const val FULL_STEP_DEG = 35.0
+
 /** Ivice čiji se pravci razlikuju za manje od ovoga su isti hodnik (bez skretanja). */
 private const val SAME_DIRECTION_DEG = 30.0
 
 private val ROOM_TYPES = setOf(NodeType.PROSTORIJA, NodeType.VRATA)
+
+/**
+ * Lift je slepa grana kao sala: iz hodnika se ne bira, a posle vožnje se iz njega izlazi granom (ili izvlačenjem kao iz
+ * sale). Vožnja se prepoznaje i kad tačka nije na liftu (do 15 m, [com.example.ftnnavigation.poc.PdrLocator.liftRide]).
+ * Teren 12.10.2026: tačka je iz hola NB II/I sprata ušla u granu lifta i 80 s stajala na liftu dok je korisnik šetao po
+ * holu; u NTP-u III sprat "kao da se zaglavio u nekom liftu" (grana L3) i posle vožnje 18 koraka na liftu.
+ */
+private val DEAD_END_TYPES = ROOM_TYPES + NodeType.LIFT
 
 /** Izlazi sa sprata na kraju hodnika (na kampus ili u drugu zgradu). */
 private val EXIT_TYPES = setOf(NodeType.ULAZ, NodeType.PROLAZ)
@@ -102,8 +113,8 @@ class MapMatcher(
         val by = b.y * scale.heightM.toDouble()
         val length = hypot(bx - ax, by - ay)
 
-        /** Deo grane sale (vrata su uvek samo između sale i hodnika). */
-        val isRoom = a.type in ROOM_TYPES || b.type in ROOM_TYPES
+        /** Deo grane sale (vrata su uvek samo između sale i hodnika) ili lifta. */
+        val isRoom = a.type in DEAD_END_TYPES || b.type in DEAD_END_TYPES
 
         fun other(node: Node) = if (node.id == a.id) b else a
 
@@ -141,12 +152,15 @@ class MapMatcher(
             .groupBy({ it.first }, { it.second })
     }
 
-    /** Slepa grana sale: od sale ([room], list grafa) preko vrata do prvog čvora sa više od dva suseda ([junction]). */
+    /**
+     * Slepa grana sale ili lifta: od sale/lifta ([room], list grafa) preko vrata do prvog čvora sa više od dva suseda
+     * ([junction]).
+     */
     private inner class RoomBranch(val room: Node, val junction: Node, val segments: Set<Segment>)
 
     private val roomBranches: Map<String, RoomBranch> = incident.values.flatten().toSet()
         .flatMap { listOf(it.a, it.b) }
-        .filter { it.type == NodeType.PROSTORIJA && incident[it.id]?.size == 1 }
+        .filter { (it.type == NodeType.PROSTORIJA || it.type == NodeType.LIFT) && incident[it.id]?.size == 1 }
         .distinctBy { it.id }
         .mapNotNull { room ->
             val chain = linkedSetOf<Segment>()
@@ -160,6 +174,20 @@ class MapMatcher(
             if (incident.getValue(node.id).size < 3) null else room.id to RoomBranch(room, node, chain)
         }.toMap()
 
+    private val branchOf: Map<Segment, RoomBranch> = roomBranches.values.flatMap { b -> b.segments.map { it to b } }.toMap()
+
+    /**
+     * Ivica na koju tačka sme sa [current]: iz hodnika samo hodnik; iz slepe grane (sala, lift) hodnik ili ista grana - ne
+     * u susednu granu (teren 12.10.2026, NTP III: posle vožnje liftom tačka je iz grane lifta prešla u granu toaleta pored
+     * njega i tamo ostala). Sala sa dvoja vrata nije slepa grana - iz nje kao ranije.
+     */
+    private fun allowed(segment: Segment, current: Segment): Boolean {
+        if (!segment.isRoom) return true
+        if (!current.isRoom) return false
+        val branch = branchOf[current] ?: return true
+        return branchOf[segment] == branch
+    }
+
     /** Početna pozicija: najbliža ivica sprata ([corridorOnly]: bez grana sala), ili null ako ih nema. */
     fun start(x: Float, y: Float, corridorOnly: Boolean = false): MatchedPosition? {
         val px = x * scale.widthM.toDouble()
@@ -169,15 +197,15 @@ class MapMatcher(
     }
 
     /** Jedan korak [dxM]/[dyM] (metri plana: x udesno, y naniže) od pozicije [from]. */
-    fun step(from: MatchedPosition, dxM: Double, dyM: Double): MatchedPosition {
+    fun step(from: MatchedPosition, stepX: Double, stepY: Double): MatchedPosition {
+        val current = segmentOf(from.point)
+        val (dxM, dyM) = alongCorridor(current, stepX, stepY)
         val px = from.x * scale.widthM + dxM
         val py = from.y * scale.heightM + dyM
         val stepM = hypot(dxM, dyM)
-        val current = segmentOf(from.point)
-        val inRoom = current.isRoom
         val along = current.alignment(dxM, dyM)
         val nearest = segmentsNear(from.point, stepM + toleranceM)
-            .filter { inRoom || !it.isRoom }
+            .filter { it == current || allowed(it, current) }
             .filter { it == current || current.sameDirection(it) || it.alignment(dxM, dyM) > along }
             .minBy { it.distance(px, py) }
         val next = fix(nearest, px, py)
@@ -185,8 +213,27 @@ class MapMatcher(
         val stuckX = from.stuckXM + dxM
         val stuckY = from.stuckYM + dyM
         return escapeRoom(next.point, stuckX, stuckY)
-            ?: escapeStuck(next.point, stuckX, stuckY, inRoom)
+            ?: escapeStuck(next.point, stuckX, stuckY)
             ?: next.copy(stuckXM = stuckX, stuckYM = stuckY)
+    }
+
+    /**
+     * Korak u hodniku do [FULL_STEP_DEG] od pravca ivice: deo duž hodnika je cela dužina koraka (poprečni deo ostaje - za
+     * skretanje u ogranak). Odstupanje je tu greška kompasa, ne hod popreko (hodnik je širok 2-3 m) - bez ovoga tačka
+     * prelazi samo cos(greške) koraka. Teren 12.10.2026, hodnik NB prizemlja ka Kuli (~30 m): smer koraka 20-35° od
+     * hodnika, tačka je kasnila ~10 m ("mnogo kasnije je prešao u Kulu").
+     */
+    private fun alongCorridor(current: Segment, dx: Double, dy: Double): Pair<Double, Double> {
+        if (current.isRoom || current.length == 0.0) return dx to dy
+        val stepM = hypot(dx, dy)
+        if (stepM == 0.0) return dx to dy
+        val ux = (current.bx - current.ax) / current.length
+        val uy = (current.by - current.ay) / current.length
+        val along = dx * ux + dy * uy
+        if (abs(along) < stepM * cos(Math.toRadians(FULL_STEP_DEG))) return dx to dy
+        val cross = -dx * uy + dy * ux
+        val full = if (along >= 0) stepM else -stepM
+        return full * ux - cross * uy to full * uy + cross * ux
     }
 
     /**
@@ -194,14 +241,14 @@ class MapMatcher(
      * ivica dostižna po grafu u dometu tog hoda koja je bar [STUCK_ESCAPE_MARGIN_M] bliža mestu gde bi korisnik
      * bio (tačka + hod bez napretka) od trenutne ivice. Inače null.
      */
-    private fun escapeStuck(point: EdgePoint, stuckX: Double, stuckY: Double, inRoom: Boolean): MatchedPosition? {
+    private fun escapeStuck(point: EdgePoint, stuckX: Double, stuckY: Double): MatchedPosition? {
         val stuckM = hypot(stuckX, stuckY)
         if (stuckM < STUCK_ESCAPE_M) return null
         val qx = point.x * scale.widthM + stuckX
         val qy = point.y * scale.heightM + stuckY
         val current = segmentOf(point)
         val best = segmentsNear(point, stuckM + toleranceM)
-            .filter { it != current && (inRoom || !it.isRoom) && !beyondDeadEnd(it, qx, qy) }
+            .filter { it != current && allowed(it, current) && !beyondDeadEnd(it, qx, qy) }
             .minByOrNull { it.distance(qx, qy) } ?: return null
         if (best.distance(qx, qy) > current.distance(qx, qy) - STUCK_ESCAPE_MARGIN_M) return null
         return fix(best, qx, qy)
@@ -230,7 +277,7 @@ class MapMatcher(
         val qx = jx + stuckX
         val qy = jy + stuckY
         val nearest = reachable(listOf(0.0 to branch.junction), stuckM + toleranceM)
-            .filter { it !in branch.segments }
+            .filter { it !in branch.segments && !it.isRoom }
             .minByOrNull { it.distance(qx, qy) } ?: return null
         return fix(nearest, qx, qy)
     }

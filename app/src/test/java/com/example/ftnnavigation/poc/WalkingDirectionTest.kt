@@ -241,6 +241,28 @@ class WalkingDirectionTest {
         hs.forEach { assertNear(30.0, it, 10.0, "u ruci") }
     }
 
+    /**
+     * Teren 12.10.2026 (Kula, NTP III): "Ovde sam", pa telefon u džep, a telo se za to vreme okrene ~90° - smer od pre
+     * premeštanja to sakrije, pa ceo hod u džepu ide 90° pogrešno. Pravac iz ubrzanja je po koraku slab, ali usrednjen preko
+     * više koraka dosledan - odstupanje se ispravi posle nekoliko koraka, a ti koraci se ponove.
+     */
+    @Test
+    fun phonePutInPocketWhileTurning_walkingDirectionFoundInPocket() {
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        stand(0.5, inPocket(screenAzimuthDeg = 30.0, walkAzimuthDeg = 30.0))
+        assertFalse(direction.isAnchored)
+        // Okret ulevo za 90° dok se telefon smiruje u džepu.
+        stand(3.0, inPocket(screenAzimuthDeg = 300.0, walkAzimuthDeg = 300.0))
+        assertTrue(direction.isAnchored)
+        assertNear(30.0, direction.heading()!!, 10.0, "smer od pre premeštanja")
+        val headings = walk(8.0, 300.0, forwardAmp = 0.3) { t -> inPocket(300.0, 300.0, swingDeg = 25.0 * sin(2 * PI * t)) }
+        headings.takeLast(8).forEach { assertNear(300.0, it, 20.0, "u džepu") }
+        // Koraci pre ispravke su ponovljeni u novom smeru.
+        allHeadings.takeLast(headings.size).drop(2).forEach { assertNear(300.0, it, 20.0, "ponovljeni") }
+    }
+
     @Test
     fun phonePutInPocketWhileWalking_thenTurn_isNotStuck() {
         // Telefon ide u džep bez zastajanja; posle toga korisnik skreće - smer mora da prati.

@@ -3,7 +3,9 @@ package com.example.ftnnavigation.poc
 import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -122,6 +124,9 @@ class WalkingDirection {
     // Premeštanje je počelo sa telefonom uspravnim (džep).
     private var fromPocket = false
 
+    // Džep: odstupanje iz faze po koraku (sin·jačina, cos·jačina, jačina) - [pocketOffset].
+    private val pocketPhases = ArrayDeque<DoubleArray>()
+
     /** Da li je odstupanje telefona poznato (false dok se premešten telefon ne smiri). */
     val isAnchored: Boolean get() = anchored
 
@@ -136,6 +141,13 @@ class WalkingDirection {
      * nazad, "poremetio se smer"; isto 05.10. NTP II -> I). Odstupanje ostaje kakvo je bilo pre stepeništa.
      */
     var nearStairs = false
+
+    /**
+     * Tačka je baš na stepeništu ([PdrLocator.onStairs]) - tada se ne meri ni odstupanje u džepu ([pocketOffset]). Blizina
+     * ([nearStairs], 8 m) tu ne važi: prizemlje Kule je celo do 8 m od stepeništa (teren 12.10.2026, Kula: džep sa
+     * greškom ~90°, ispravka bi stigla posle 2 koraka).
+     */
+    var onStairs = false
 
     /** Nova orijentacija; [matrix] je 3x3 matrica iz `SensorManager.getRotationMatrixFromVector`. */
     fun onRotation(matrix: FloatArray, timestampNs: Long) {
@@ -252,7 +264,40 @@ class WalkingDirection {
         if (afterPause) pauseFromNs = previousStepNs
         stepPhases.addLast(StepPhase(afterPause))
         if (stepPhases.size > MAX_TURN_STEPS + 1) stepPhases.removeFirst()
-        return steer(phone, previousStepNs)
+        val step = steer(phone, previousStepNs)
+        val pocketRedo = pocketOffset(phone)
+        return if (pocketRedo > 0) WalkStep(normalize(phone + offsetDeg), maxOf(pocketRedo, step.redoSteps)) else step
+    }
+
+    /**
+     * Džep: odstupanje iz pravca hoda iz ubrzanja usrednjenog preko poslednjih [POCKET_STEPS] koraka, u koordinatama
+     * telefona (telefon je u džepu vezan za nogu, pa je odstupanje stalno i kroz skretanja; po koraku je merenje slabo,
+     * ali zbir je dosledan). Ako se dosledno razlikuje od trenutnog za više od [POCKET_FIX_DEG] - odstupanje se prebacuje na
+     * njega i koraci u džepu se ponove. Teren 12.10.2026: telo se okrenulo dok je telefon išao u džep (posle "Ovde sam"),
+     * a smer od pre premeštanja je to sakrio - Kula ~90° 10 koraka, NTP III ceo krug ~90° (11 m promašaja); zbir 8 koraka
+     * je bio dosledan (0,95-0,99) i pokazivao pravo odstupanje već posle 2 koraka. Na stepeništu se ne meri ([onStairs]):
+     * tamo je merenje nedosledno. Vraća koliko koraka ponoviti (0 = ništa).
+     */
+    private fun pocketOffset(phone: Double): Int {
+        if (abs(upSlow[2]) >= POCKET_UP_Z) {
+            pocketPhases.clear()
+            return 0
+        }
+        if (onStairs) return 0
+        val (walk, strength) = phase(maxOf(stepTimes.first(), pauseFromNs)) ?: return 0
+        val off = Math.toRadians(angleDiff(walk, phone))
+        pocketPhases.addLast(doubleArrayOf(sin(off) * strength, cos(off) * strength, strength))
+        if (pocketPhases.size > POCKET_STEPS) pocketPhases.removeFirst()
+        if (pocketPhases.size < POCKET_MIN_STEPS) return 0
+        val se = pocketPhases.sumOf { it[0] }
+        val sn = pocketPhases.sumOf { it[1] }
+        val sw = pocketPhases.sumOf { it[2] }
+        if (sw <= 0.0 || hypot(se, sn) / sw < POCKET_CONSISTENCY) return 0
+        val mean = Math.toDegrees(atan2(se, sn))
+        if (abs(angleDiff(mean, offsetDeg)) <= POCKET_FIX_DEG) return 0
+        offsetDeg = angleDiff(mean, 0.0)
+        forgetTurns()
+        return minOf(pocketPhases.size - 1, MAX_TURN_STEPS)
     }
 
     /** Početak praćenja: telefon je u ruci, okrenut napred (odstupanje 0). */
@@ -260,12 +305,14 @@ class WalkingDirection {
         offsetDeg = 0.0
         anchored = true
         nearStairs = false
+        onStairs = false
         poseHistory.clear()
         forgetTurns()
         samples.clear()
         stepTimes.clear()
         stepPhoneDegs.clear()
         stepPhases.clear()
+        pocketPhases.clear()
         pauseFromNs = 0L
         stepSumE = 0.0
         stepSumN = 0.0
@@ -291,6 +338,7 @@ class WalkingDirection {
         stepTimes.clear()
         stepPhoneDegs.clear()
         stepPhases.clear()
+        pocketPhases.clear()
         // Ni pravac telefona iz položaja pre premeštanja (prosek preko dva koraka bi prva dva koraka posle vađenja iz džepa
         // u ruku vodio između dva položaja - test: 322° umesto 30°).
         stepSumE = 0.0
@@ -424,7 +472,11 @@ class WalkingDirection {
      * ubrzanje prednjači vertikalnom, pa vektor pokazuje napred. Null ako ubrzanja nema ili je
      * veza slaba (stajanje, okretanje, udarci).
      */
-    private fun phaseDirection(fromNs: Long): Double? {
+    private fun phaseDirection(fromNs: Long): Double? =
+        phase(fromNs)?.takeIf { it.second >= MIN_PHASE_STRENGTH }?.first
+
+    /** Pravac hoda iz ubrzanja od [fromNs] i jačina veze (0..1), bez praga jačine ([phaseDirection]). */
+    private fun phase(fromNs: Long): Pair<Double, Double>? {
         val window = samples.filter { it.timestampNs >= fromNs }
         val n = window.size
         if (n < MIN_AXIS_SAMPLES) return null
@@ -446,8 +498,7 @@ class WalkingDirection {
         val vertical = (0 until n).sumOf { up[it] * up[it] } / n
         if (horizontal < MIN_AXIS_VARIANCE || vertical == 0.0) return null
         val strength = hypot(ce, cn) / (n * MAX_LAG_SAMPLES) / sqrt(horizontal * vertical)
-        if (strength < MIN_PHASE_STRENGTH) return null
-        return azimuth(ce, cn)
+        return azimuth(ce, cn) to strength
     }
 
     companion object {
@@ -511,6 +562,17 @@ class WalkingDirection {
 
         /** Normalizovana korelacija (0..1) ispod koje se pravac iz ubrzanja ne uzima (snimci: hod uglavnom 0,45-0,9). */
         const val MIN_PHASE_STRENGTH = 0.35
+
+        /** Džep ([pocketOffset]): koliko poslednjih koraka se sabira, od koliko se odlučuje, doslednost zbira. */
+        const val POCKET_STEPS = 8
+        const val POCKET_MIN_STEPS = 4
+        const val POCKET_CONSISTENCY = 0.9
+
+        /**
+         * Džep: ispravka tek kad se usrednjen pravac razlikuje više od ovoga - sitnija odstupanja ostaju (na snimcima
+         * 29.09.2026 je zbir bio pomeren ~25-30° od stvarnog, verovatno noga).
+         */
+        const val POCKET_FIX_DEG = 75.0
         private const val MAX_LAG_SAMPLES = 15 // 0,3 s na 50 Hz: do pola koraka
 
         /** Razmak koraka duži od ovoga je stajanje (bočni hod: do ~2 s po koraku, stajanje od 2,9 s). */

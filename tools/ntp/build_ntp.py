@@ -346,6 +346,9 @@ TOP_LABELS = {
 
 # Isto mesto na svakom spratu (liftovi se na planovima poklapaju); stepenice su susedni spratovi.
 LIFTS = {"L1": (513, 676), "L2": (302, 1505), "L3": (1492, 1516)}
+# I-V sprat: iz L1 se izlazi pravo gore u gornji hodnik (teren 12.10.2026, posle vožnje P -> III: ~1,5 m gore, pa levo ka
+# glavnom hodniku). Do tada je L1 bio vezan koso za U640 (4,4 m udesno), pa je izlazak iz lifta išao zaobilazno.
+LIFT_EXIT = (513, 595)
 STAIRS = ["S1", "S2", "S3"]
 
 # Stepeništa sa dva kraka (evakuacioni planovi svih spratova, ispravljene fotografije; teren 05.10.2026): sa podesta
@@ -440,14 +443,14 @@ def typical_floor(g, f):
         {f"U{x}": (x, 595) for x in (715, 817, 921, 1023)}
     points(g, f, {
         **{f"M{y}": (400, y) for y in (450, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608)},
-        "U640": (640, 595), **top,
+        "U513": LIFT_EXIT, "U640": (640, 595), **top,
         **{f"R{y}": (1350, y) for y in (830, 930, 1160)},
         **{f"C{x}": (x, 1334) for x in (560, 815, 870, 983, 1170, 1350, 1494, 1600, 1795)},
         "K1350": (1350, 1470), "K1795": (1795, 1470),
         **{f"B{x}": (x, 1608) for x in OFFICES[1:]},
     })
     g.chain(f, [f"M{y}" for y in (450, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608)])
-    g.chain(f, ["M595", "U640", *sorted(top, key=lambda k: top[k][0])])
+    g.chain(f, ["M595", "U513", "U640", *sorted(top, key=lambda k: top[k][0])])
     g.chain(f, ["R830", "R930", "R1160", "C1350", "K1350", "B1343"])
     if f == 1:
         # I sprat: hol 119 se završava vratima T3 (x 1785), a sa kraja srednjeg hodnika nema prolaza u donji (sobe 122, 124).
@@ -459,7 +462,7 @@ def typical_floor(g, f):
         g.chain(f, ["C1795", "K1795", "B1819"])
     g.chain(f, ["M1608", *[f"B{x}" for x in OFFICES[1:]]])
     stair_nodes(g, f, {"S1": "M450", "S2": "M1470", "S3": FIRST_CORE if f == 1 else "C1600"})
-    g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), f"NTP-{f}-U640")
+    g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), f"NTP-{f}-U513")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), f"NTP-{f}-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), f"NTP-{f}-{FIRST_CORE if f == 1 else 'C1494'}")
     if f == 1:
@@ -514,7 +517,7 @@ def top_floor(g):
     f = 5
     points(g, f, {
         **{f"M{y}": (400, y) for y in (450, 595, 676, 890, 1112, 1250, 1334, 1470)},
-        **{f"U{x}": (x, 595) for x in (640, 817, 920)},
+        "U513": LIFT_EXIT, **{f"U{x}": (x, 595) for x in (640, 817, 920)},
         **{f"C{x}": (x, 1334) for x in (560, 815, 870, 1025, 1115, 1212)},
         **{f"R{y}": (1115, y) for y in (856, 945, 1035, 1130, 1230)},
         # terasa do desnog jezgra - evakuacioni put, ne vezuje se za hodnik (korisnik, 02.10.2026); jezgro se
@@ -522,12 +525,12 @@ def top_floor(g):
         "T1350": (1350, 1340), "T1494": (1494, 1340), "T1600": (1600, 1340),
     })
     g.chain(f, [f"M{y}" for y in (450, 595, 676, 890, 1112, 1250, 1334, 1470)])
-    g.chain(f, ["M595", "U640", "U817", "U920"])
+    g.chain(f, ["M595", "U513", "U640", "U817", "U920"])
     g.chain(f, ["M1334", "C560", "C815", "C870", "C1025", "C1115", "C1212"])
     g.chain(f, ["T1350", "T1494", "T1600"])
     g.chain(f, ["R856", "R945", "R1035", "R1130", "R1230", "C1115"])
     stair_nodes(g, f, {"S1": "M450", "S2": "M1470", "S3": "T1600"})
-    g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-5-U640")
+    g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-5-U513")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), "NTP-5-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), "NTP-5-T1494")
     for number, center, door, attach in TOP_LABELS.values():

@@ -179,6 +179,9 @@ private const val MIN_STEPS_BETWEEN_CHANGES = 4
  */
 private const val GPS_EXIT_WALL_M = 15.0
 
+/** Izlazak po GPS-u samo uz lokaciju tačnosti do ovoliko (vidi [PdrLocator.onGps]). */
+private const val GPS_EXIT_MAX_ACCURACY_M = 10f
+
 /** Izlazak po GPS-u: ako je PDR bio ovoliko blizu ulaza, izašao je na tom ulazu. */
 private const val GPS_EXIT_GATE_M = 8.0
 
@@ -206,6 +209,9 @@ private const val STAIR_NEAR_M = 5.0
  * zgradama je do ~15-20° (teren 03.-10.10.2026); lažna promena 10.10. (NB I sprat) je imala let ~90° od kraka.
  */
 private const val FLIGHT_AXIS_DEG = 50f
+
+/** Isto, kad je tačka na stepeništu ([PdrLocator.changeFloorOnStairs]) - tada je stepenište verovatnije, prag širi. */
+private const val ON_STAIR_FLIGHT_AXIS_DEG = 65f
 
 /**
  * Let posle okreta pored stepeništa (tačka nije na njemu) bar ovoliko koraka (na stepeništu [FLIGHT_STEPS]). Teren
@@ -280,8 +286,37 @@ private const val STAIR_REENTER_STEPS = 3
 /** Pravo stepenište (bez okreta): sprat se menja posle ovolikog dela puta. */
 private const val STRAIGHT_CHANGE_AT = 0.75
 
+/**
+ * Stepeništa sa izmerenim krakom od 12-14 gazišta (snimci 05.-12.10.2026): okret na prvom kraku pre [FULL_FLIGHT_TURN_AT]
+ * kraka nije međupodest - korisnik se vratio niz krak (ili je hodao po holu uz stepenište pravcem kraka, pa nazad: NB I
+ * sprat 10.10.2026 - posle zabrane grane lifta 12.10. tačka u tom holu stiže do kraka). AMF S1 (kraći srednji krak), F,
+ * Kula i MI nisu mereni.
+ */
+private val FULL_FLIGHT_STAIRS = setOf("NB/S", "NTP/S1", "NTP/S2", "NTP/S3")
+
+/** Vidi [FULL_FLIGHT_STAIRS]: deo kraka (po broju koraka) pre koga okret nije međupodest. */
+private const val FULL_FLIGHT_TURN_AT = 0.6
+
 /** Prvi korak na stepeništu dalje od ovoliko od smera kraka (na planu) - nije krenuo uz krak. */
 private const val NOT_ON_FLIGHT_DEG = 100f
+
+/**
+ * Na prvom kraku (pre promene sprata) ovoliko koraka zaredom dalje od [OFF_FLIGHT_DEG] od smera kraka (na planu) -> nije
+ * na kraku, nego hodnikom pored stepeništa: tačka se vraća u hodnik i ti koraci se ponove tamo. Teren 12.10.2026: NTP III
+ * pored S1 hodnikom naniže (koraci 73-100° od kraka) - tačka je išla krakom i posle okreta u hodniku "sišla" na II; NTP II
+ * posle silaska skrenuo ka liftovima (83-107°) - tačka je nastavila niz sledeći krak; AMF prizemlje pored S2 (koraci
+ * suprotno od kraka) - tačka je sišla na -1 i ostala na stepeništu 30 m od korisnika.
+ */
+private const val OFF_FLIGHT_STEPS = 2
+
+/** Vidi [OFF_FLIGHT_STEPS]. Na pravim krakovima su koraci do ~40° od kraka (kompas, ulazak sa strane). */
+private const val OFF_FLIGHT_DEG = 60f
+
+/**
+ * Posle takvog povratka u hodnik ([OFF_FLIGHT_STEPS]) tačka ne ulazi na isto stepenište dok se ne udalji ovoliko od
+ * njegovih čvorova na spratu (ponovljeni koraci bi je opet uveli).
+ */
+private const val OFF_FLIGHT_CLEAR_M = 3.0
 
 /** Posle kraja drugog kraka još ovoliko koraka pravo -> korisnik je sišao sa stepeništa (podest sprata, hodnik). */
 private const val EXIT_OVERFLOW_STEPS = 3
@@ -716,12 +751,26 @@ class PdrLocator(
 
         /** Varijanta putanje (AMF S1: levi ili desni bočni krak). */
         var variant = 0
+
+        /** Koraci od ulaska u stepenište - ponavljaju se u hodniku ako se pokaže da nije bio na kraku ([OFF_FLIGHT_STEPS]). */
+        val steps = mutableListOf<PendingStep>()
+
+        /** Uzastopni koraci prvog kraka dalje od [OFF_FLIGHT_DEG] od smera kraka. */
+        var offFlight = 0
+
+        /** Pozicija pri ulasku (tačka na grafu, slobodna pozicija, zbir koraka za merenje smera) - za povratak u hodnik. */
+        var entryRaw: Offset? = null
+        var entryMatch: MatchedPosition? = null
+        var entryWalked = 0.0 to 0.0
     }
 
     /** Delovi putanje kroz stepenište: krak, međupodest, drugi krak (već sprat iznad/ispod), podest sprata ka sledećem kraku. */
     private enum class ClimbPart { FIRST, LANDING, SECOND, FLOOR_LANDING }
 
     private var climb: Climb? = null
+
+    /** Stepenište (ključ, sprat) sa koga se tačka upravo vratila u hodnik ([backToCorridor]). */
+    private var offFlightStair: Pair<String, Int>? = null
 
     /** Hod po stepeništu koji se završio pravo u prolaz sa međupodesta ([Climb.exitAhead]) - prolaz ga pamti ([Passage.resume]). */
     private var landingClimb: Climb? = null
@@ -770,6 +819,9 @@ class PdrLocator(
                     stair.nodesOn(place.floor).any { distance(local(it.x, it.y), here) <= STAIR_DIRECTION_NEAR_M }
             }
         }
+
+    /** Tačka je na stepeništu (hod po kraku/podestu) - [WalkingDirection.onStairs]. */
+    val onStairs: Boolean get() = climb != null
 
     /** Smer za prikaz, u odnosu na "gore" plana mesta. */
     fun headingOnPlan(azimuthDeg: Float): Float = normalizeDeg(azimuthDeg + headingBiasDeg - planUp.getValue(place.buildingId))
@@ -842,6 +894,7 @@ class PdrLocator(
         corridorRun = 0
         stepStarts.clear()
         climb = null
+        offFlightStair = null
         watch = StairWalk()
         lastStairChange = null
         clearLift()
@@ -998,7 +1051,9 @@ class PdrLocator(
             // Detektor pamti potvrđeno "napolju" i od ranije (posle toga svaka lokacija prolazi gornji uslov) - izlazak samo uz
             // dovoljno tačnu lokaciju. Teren 10.10.2026, NTP: korisnik u holu, a prva lokacija posle Start-a (poslednja poznata,
             // tačnost 25 m) ga je izbacila napolje 1 s posle Start-a.
-            if (fix.accuracyM > BuildingDetector.MAX_OUTSIDE_ACCURACY_M) return null
+            // Teren 12.10.2026, NTP: korisnik na stepeništu II -> I (uz staklenu fasadu), lokacija tačnosti 19 m daleko od
+            // zgrade - izlazak (i 12 s kasnije sa 11,6 m). Pravi GPS izlasci na snimcima (03.-12.10.) su imali tačnost 3-8,6 m.
+            if (fix.accuracyM > min(BuildingDetector.MAX_OUTSIDE_ACCURACY_M, GPS_EXIT_MAX_ACCURACY_M)) return null
             exitByGps(fix)
             return PlaceReason.GPS_IZLAZ
         }
@@ -1042,6 +1097,7 @@ class PdrLocator(
         passage = null
         climb = null
         landingClimb = null
+        offFlightStair = null
         watch = StairWalk()
         corridorRun = 0
         anchorPlace = place
@@ -1162,8 +1218,15 @@ class PdrLocator(
         // Tek sišao sa stepeništa (kod dna kraka) - ne ulazi odmah opet.
         if (++stepsSinceStairExit < STAIR_REENTER_STEPS) return false
         val point = (match ?: return false).point
+        offFlightStair?.let { (key, floor) ->
+            val here = local(point.x, point.y)
+            val away = floor != place.floor ||
+                stairs[key]?.nodesOn(place.floor)?.all { distance(local(it.x, it.y), here) > OFF_FLIGHT_CLEAR_M } != false
+            if (away) offFlightStair = null
+        }
         val node = listOf(point.from, point.to).firstOrNull { it.type == NodeType.STEPENISTE } ?: return false
         val stair = stairs[stairKey(node)] ?: return false
+        if (offFlightStair?.first == stair.key) return false
         val corridor = stair.corridor(node)
         val other = if (point.from.id == node.id) point.to else point.from
         val s = local(node.x, node.y)
@@ -1200,11 +1263,16 @@ class PdrLocator(
             if (min(towardStair, alongFlight) > STAIR_ENTER_DEG) return false
         }
         // Sa dna kraka naniže se (verovatno) silazi; putanju potvrđuje ili menja strana okreta na međupodestu.
+        val entryRaw = raw
+        val entryMatch = match
         climb = Climb(stair, watch).apply {
             up = !node.id.endsWith(DOWN_FOOT_SUFFIX)
             lastHeading = azimuthDeg
             this.progress = progress
             if (onFlight) flightHeading = azimuthDeg
+            this.entryRaw = entryRaw
+            this.entryMatch = entryMatch
+            entryWalked = walkedX to walkedY
         }.also(::showClimb)
         watch = StairWalk()
         stepStarts.clear()
@@ -1248,23 +1316,25 @@ class PdrLocator(
      * Letovi koje je poslednji [StairWalk.floorTurn] prepoznao paralelni su krakovima stepeništa [stair] (do
      * [FLIGHT_AXIS_DEG], u bilo kom smeru). Stepenište bez crteža krakova nema pravac - tu je uvek true.
      */
-    private fun flightsAlongStair(stair: Stair): Boolean {
+    private fun flightsAlongStair(stair: Stair, walk: StairWalk = watch, toleranceDeg: Float = FLIGHT_AXIS_DEG): Boolean {
         val path = pathsOf(stair, place.floor)?.firstOrNull() ?: return true
-        val (a, b) = watch.flightHeadings ?: return true
+        val (a, b) = walk.flightHeadings ?: return true
         val from = local(path[0].x, path[0].y)
         val to = local(path[1].x, path[1].y)
         val axis = azimuthOf(to.x - from.x, to.y - from.y)
-        fun parallel(heading: Float) = abs(angleDiffDeg(headingOnPlan(heading), axis)).let { it <= FLIGHT_AXIS_DEG || it >= 180 - FLIGHT_AXIS_DEG }
+        fun parallel(heading: Float) = abs(angleDiffDeg(headingOnPlan(heading), axis)).let { it <= toleranceDeg || it >= 180 - toleranceDeg }
         return parallel(a) && parallel(b)
     }
 
     /** Korak na stepeništu: kratak, okret se sabira; okret na podestu menja sprat, hod ka hodniku izlazi sa stepeništa. */
     private fun climbStep(climb: Climb, azimuthDeg: Float, redoSteps: Int, timeNs: Long?): PlaceReason? {
         climb.walk.step(azimuthDeg, redoSteps, timeNs)
+        climb.steps += PendingStep(azimuthDeg, walkStepM, 0, timeNs)
         val (dx, dy) = stepVector(place, azimuthDeg, STAIR_STEP_M)
         walkedX += dx
         walkedY += dy
         val path = pathOf(climb)
+        if (path != null && offFlight(climb, azimuthDeg)) return backToCorridor(climb)
         if (path != null) return if (isStraight(path)) straightStep(climb, azimuthDeg) else pathStep(climb, azimuthDeg)
         climb.offsetX += dx
         climb.offsetY += dy
@@ -1279,6 +1349,38 @@ class PdrLocator(
             return null
         }
         showClimb(climb)
+        return reason
+    }
+
+    /** Korak na prvom kraku (pre promene sprata) i već [OFF_FLIGHT_STEPS] koraka zaredom dalje od [OFF_FLIGHT_DEG] od kraka. */
+    private fun offFlight(c: Climb, azimuthDeg: Float): Boolean {
+        if (c.changes > 0 || c.part != ClimbPart.FIRST || c.entryMatch == null) return false
+        val off = abs(angleDiffDeg(headingOnPlan(azimuthDeg), flightPlanDeg(c)))
+        c.offFlight = if (off > OFF_FLIGHT_DEG) c.offFlight + 1 else 0
+        return c.offFlight >= OFF_FLIGHT_STEPS
+    }
+
+    /**
+     * Nije bio na kraku ([offFlight]) - hodao je hodnikom pored stepeništa: tačka se vraća gde je bila pri ulasku, a koraci od
+     * tada se ponove kao hod hodnikom. Na isto stepenište ne ulazi dok se ne udalji [OFF_FLIGHT_CLEAR_M].
+     */
+    private fun backToCorridor(c: Climb): PlaceReason? {
+        climb = null
+        stepStarts.clear()
+        offFlightStair = c.stair.key to place.floor
+        watch = StairWalk()
+        raw = c.entryRaw
+        match = c.entryMatch
+        walkedX = c.entryWalked.first
+        walkedY = c.entryWalked.second
+        var reason: PlaceReason? = null
+        var walked = 0f
+        for (s in c.steps) {
+            step(s.azimuthDeg, s.lengthM, 0, s.timeNs)?.let { reason = it }
+            walked += lastStepM
+        }
+        // "Pređeno": koraci na stepeništu su već brojani kao gazište, a ponovljeni su punom dužinom.
+        lastStepM = walked - STAIR_STEP_M * (c.steps.size - 1)
         return reason
     }
 
@@ -1386,6 +1488,12 @@ class PdrLocator(
                         // Prvi "krak" duži od [MAX_FIRST_FLIGHT_STEPS] - hodnik pored stepeništa, nije se penjao.
                         else -> (treads(c) + c.straight >= MAX_FIRST_FLIGHT_STEPS).also { if (it) c.progress = 0.0 }
                     }
+                }
+                // Okret pre kraja kraka (NB S, NTP S1-S3 - krak od 12-14 gazišta, tačka na kraku je ispred korisnika): nije
+                // međupodest, vratio se niz krak - nazad na dno kraka.
+                if (c.part == ClimbPart.FIRST && c.changes == 0 && c.stair.key in FULL_FLIGHT_STAIRS && c.progress < FULL_FLIGHT_TURN_AT) {
+                    c.progress = 0.0
+                    return true
                 }
                 // Početak okreta: posle prvog kraka međupodest; posle drugog podest sprata ka sledećem kraku (ako se
                 // okreće na istu stranu kao na međupodestu), inače silazi sa stepeništa.
@@ -1509,6 +1617,11 @@ class PdrLocator(
     private fun changeFloorOnStairs(climb: Climb): PlaceReason? {
         val sense = climb.walk.floorTurn(climb.changes, climb.sense).takeIf { it != 0 } ?: return null
         val stair = climb.stair
+        // Prva promena i na samom stepeništu traži letove pravcem krakova (kao pored njega, [stairTurnNearby]). Teren
+        // 12.10.2026 (posle zabrane grane lifta tačka iz hola NB I sprata stiže do stepeništa): hod hodnikom pa petlja od
+        // ~280° po holu, pa korak ka kraku - "let" pre okreta je bio popreko na krakove (81°). Na stepeništu je prag širi:
+        // 03.10.2026 NB P -> I kompas u stepeništu ~55° pored kraka (drugi let 122° umesto 180°), a to je pravi prelaz.
+        if (climb.changes == 0 && !flightsAlongStair(stair, climb.walk, ON_STAIR_FLIGHT_AXIS_DEG)) return null
         val from = place.floor
         val up = (from + 1) in stair.nodes
         val down = (from - 1) in stair.nodes

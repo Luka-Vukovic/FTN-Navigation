@@ -8,6 +8,19 @@ import org.junit.Test
 /** Prepoznavanje sprata na stepeništu po okretu između letova ([StairWalk]) - pravila sa snimaka 03.10. i 04.10.2026. */
 class StairWalkTest {
 
+    /**
+     * Teren 12.10.2026, Kula: ~40 koraka hodnikom NB-a do stepeništa Kule, pa okret i nazad - povratak je paralelan tom
+     * hodniku, a hodnik nije let (duži od 24 koraka): izlazak sa stepeništa posle par koraka, ne tek posle 43.
+     */
+    @Test
+    fun backAlongLongCorridor_leaves() {
+        val walk = StairWalk()
+        repeat(40) { walk.step(270f) }
+        repeat(4) { walk.step(170f) }
+        val back = (1..6).map { walk.step(95f); walk.leaves(towardCorridorM = 1.5, exitM = 1.2) }
+        assertTrue("$back", back.last())
+    }
+
     private val stepNs = 650_000_000L
 
     /** Hod: [headings] redom, korak na 0,65 s (ili sa pauzom pre koraka iz [pausesBefore]); vraća prvu stranu okreta po koraku. */

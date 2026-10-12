@@ -48,9 +48,10 @@ class MapMatcherTest {
     @Test
     fun compassDrift_staysInCorridor_doesNotJumpThroughWall() {
         // Kompas vuče 10° na jug: čist PDR bi posle 20 koraka bio 2,4 m južno od hodnika, bliže
-        // paralelnom hodniku (3 m) nego svom - ali on se po grafu ne dostiže.
+        // paralelnom hodniku (3 m) nego svom - ali on se po grafu ne dostiže. Duž hodnika je korak cele dužine (od
+        // 12.10.2026; ranije cos(10°) koraka).
         val end = checkNotNull(matcher.start(0.2f, 0.5f)).walk(headingDeg = 100.0, steps = 20)
-        val alongM = 20 * 0.7 * cos(Math.toRadians(10.0))
+        val alongM = 20 * 0.7
         end.assertOn("A", "B", (0.2 + alongM / 100).toFloat(), 0.5f)
         // Odstupanje od ivice je ograničeno tolerancijom.
         assertEquals(0.5f + (MATCH_TOLERANCE_M / 100).toFloat(), end.y, 1e-4f)
@@ -109,7 +110,7 @@ class MapMatcherTest {
         // Kompas vuče 20° ka sobama (sever): slobodna pozicija je posle ~8 koraka na toleranciji iznad hodnika,
         // pa je kod vrata grana sale bliža od hodnika - tačka ipak ostaje u hodniku i prolazi pored vrata.
         val end = checkNotNull(roomMatcher.start(0.8f, 0.5f)).walkIn(roomMatcher, headingDeg = 290.0, steps = 50)
-        val alongM = 50 * 0.7 * cos(Math.toRadians(20.0))
+        val alongM = 50 * 0.7
         end.assertOn("W", "J", (0.8 - alongM / 100).toFloat(), 0.5f)
     }
 

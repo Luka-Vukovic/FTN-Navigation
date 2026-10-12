@@ -271,7 +271,9 @@ class StairWalk {
     /**
      * Korisnik silazi sa stepeništa: trenutni niz koraka (bar [EXIT_RUN_STEPS] - okret na podestu se ne broji, NB P -> I)
      * nije let (nije paralelan nijednom ranijem letu) i odveo ga je ka hodniku bar [exitM] ([towardCorridorM]), ili je
-     * paralelan letu, ali duži od najdužeg leta - hodnik se nastavlja pravcem leta.
+     * paralelan letu, ali duži od najdužeg leta - hodnik se nastavlja pravcem leta. Niz duži od [MAX_FLIGHT_STEPS] nije
+     * let nego hodnik (teren 12.10.2026, Kula: posle ~40 koraka hodnikom NB-a do stepeništa Kule korisnik se okrenuo i
+     * vratio - povratak je paralelan tom hodniku, pa je izlazak tražio 43 koraka; tačka je 25 koraka stajala na stepeništu).
      */
     fun leaves(towardCorridorM: Double, exitM: Double): Boolean {
         val runs = runs()
@@ -279,7 +281,8 @@ class StairWalk {
         if (current.count() < EXIT_RUN_STEPS) return false
         val heading = headings[current.last]
         val parallel = runs.dropLast(1).filter { f ->
-            f.count() >= FLIGHT_STEPS && abs(angleDiffDeg(heading, headings[f.first])).let { it <= PARALLEL_DEG || it >= 180 - PARALLEL_DEG }
+            f.count() in FLIGHT_STEPS..MAX_FLIGHT_STEPS &&
+                abs(angleDiffDeg(heading, headings[f.first])).let { it <= PARALLEL_DEG || it >= 180 - PARALLEL_DEG }
         }
         return if (parallel.isEmpty()) towardCorridorM >= exitM else current.count() > parallel.maxOf { it.count() } + EXTRA_FLIGHT_STEPS
     }

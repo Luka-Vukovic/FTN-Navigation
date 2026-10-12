@@ -584,6 +584,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         // Vreme koraka (senzor, isti sat kao elapsedRealtimeNanos) - zadržani koraci ([HandlingGate]) stižu kasnije.
         val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs)
         walkingDirection.nearStairs = locator.nearStairs
+        walkingDirection.onStairs = locator.onStairs
         state =state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
         updatePosition(before, reason)
         if (reason == PlaceReason.STEPENICE) onStairChange(locator)

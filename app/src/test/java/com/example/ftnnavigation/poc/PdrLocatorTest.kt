@@ -630,6 +630,9 @@ class PdrLocatorTest {
         val locator = locatorAt(inner("NTP-0-ULAZ-FTN").id)
         assertTrue(List(4) { locator.onGps(GpsFix(outside(5.0), 3f), tracking = true) }.all { it == null })
         assertNull(locator.onGps(GpsFix(outside(20.0), 25f), tracking = true))
+        // Teren 12.10.2026, NTP: na stepeništu uz staklenu fasadu lokacije tačnosti 19 m i 11,6 m - nije izlazak.
+        assertNull(locator.onGps(GpsFix(outside(20.0), 19.2f), tracking = true))
+        assertNull(locator.onGps(GpsFix(outside(20.0), 11.6f), tracking = true))
         assertEquals(PdrPlace("NTP", 0), locator.place)
         assertEquals(PlaceReason.GPS_IZLAZ, locator.onGps(GpsFix(outside(20.0), 4f), tracking = true))
     }
@@ -793,7 +796,8 @@ class PdrLocatorTest {
     fun nbStairs_turningRight_goesUp_alongFlights() {
         val (locator, away) = atStairs("NB/S", 1)
         val path1 = stairPath("NB/S", 1)
-        repeat(6) { locator.step(away, stepM) }
+        // 9 koraka uz krak (12 gazišta): okret pre 60 % kraka nije međupodest (FULL_FLIGHT_STAIRS, 12.10.2026).
+        repeat(9) { locator.step(away, stepM) }
         assertEquals(PdrPlace("NB", 1), locator.place)
         assertTrue("na levom kraku", distanceToSegment(locator.position(), path1[0], path1[1]) < 0.1)
         assertTrue("krenuo uz krak", distance(locator.position(), path1[0]) > 1.5)
@@ -982,7 +986,8 @@ class PdrLocatorTest {
         for (errorDeg in listOf(-20f, 20f)) {
             val (locator, away) = atStairs("NB/S", 0)
             val up = away + errorDeg
-            val headings = List(7) { up } + listOf(up + 45f, up + 90f) + List(4) { up + 90f } + listOf(up + 45f) + List(12) { up }
+            // Krak do podesta: 9 koraka (NB krak ima 12 gazišta; okret pre 60 % kraka nije podest - [PdrLocator] FULL_FLIGHT_STAIRS).
+            val headings = List(9) { up } + listOf(up + 45f, up + 90f) + List(4) { up + 90f } + listOf(up + 45f) + List(12) { up }
             val reasons = headings.mapNotNull { locator.step(it, stepM) }
             assertEquals("greška $errorDeg°", PdrPlace("AMF", 0), locator.place)
             assertTrue(PlaceReason.STEPENICE !in reasons)
@@ -1017,11 +1022,13 @@ class PdrLocatorTest {
     fun hallNextToStairs_acrossFlightsOrShortSecondRun_noFloorChange() {
         // Azimuti koraka sa snimka (hod-20261010-123007, 119-160 s): izlazak sa stepeništa u hol, hol popreko na krakove,
         // petlja udesno, pravcem kraka, okret ulevo, pa nazad.
+        // Od 12.10.2026 (tačka više ne ulazi u granu lifta, pa stigne do kraka) samo do okreta nazad: 10 koraka pravcem kraka,
+        // okret ulevo i nazad je na NB isto što i silazak desnim krakom (oba kraka polaze ka severu) - iz azimuta se ne
+        // razlikuje. Na snimku (sa vremenom i ispravkom smera) lažne promene nema.
         val azimuths = listOf(
             132.1, 149.9, 160.2, 160.5, 147.2, 127.0, 100.3, 75.3, 60.2, 44.4, 15.3, 350.2, 340.4, 338.6, 338.5, 338.9, 339.0,
             338.7, 337.8, 334.7, 329.7, 333.7, 11.5, 53.7, 109.3, 147.8, 166.7, 172.8, 177.9, 182.6, 191.3, 210.8, 232.9, 244.5,
-            252.0, 255.5, 256.9, 257.0, 254.2, 251.1, 250.3, 249.3, 247.0, 238.7, 195.0, 136.8, 100.4, 77.2, 74.0, 75.8, 79.4,
-            81.6, 83.5, 87.2, 95.0, 109.5,
+            252.0, 255.5, 256.9, 257.0, 254.2, 251.1, 250.3, 249.3, 247.0, 238.7,
         )
         val locator = locatorAt("NB-1-H653_423")
         val reasons = azimuths.mapNotNull { locator.step(it.toFloat(), stepM) }
@@ -1150,14 +1157,18 @@ class PdrLocatorTest {
 
     private fun ride(floors: Double) = LiftRide(0, 8 * sec, floors * floorM)
 
-    /** Korisnik je iz hodnika ispred lifta [liftId] ušao u lift. */
+    /**
+     * Korisnik je iz hodnika ispred lifta [liftId] ušao u lift. Tačka od 12.10.2026 ne ulazi u granu lifta (kao u salu) -
+     * ostaje u hodniku ispred njega, a vožnja se pripisuje najbližem liftu.
+     */
     private fun atLift(liftId: String): PdrLocator {
         val lift = graph.position(node(liftId))
+        val front = graph.position(inner(liftId))
         val locator = locatorAt(inner(liftId).id)
-        val azimuth = magneticAzimuth(graph.position(inner(liftId)), lift)
+        val azimuth = magneticAzimuth(front, lift)
         val steps = (distance(locator.position(), lift) / stepM).toInt().coerceAtLeast(1)
         for (i in steps - 1 downTo 0) locator.step(azimuth, stepM, timeNs = -i * 600_000_000L)
-        assertTrue("u liftu", distance(locator.position(), lift) < 1.0)
+        assertTrue("ispred lifta", distance(locator.position(), lift) <= distance(front, lift) + 1.0)
         return locator
     }
 
@@ -1183,6 +1194,41 @@ class PdrLocatorTest {
         val fromFirst = atLift("NTP-1-L1")
         assertEquals(LiftOutcome.Moved(LiftChange("NTP", 1, 0)), fromFirst.liftRide(LiftRide(0, 6 * sec, -3.5)))
         assertEquals(PdrPlace("NTP", 0), fromFirst.place)
+    }
+
+    /**
+     * Teren 12.10.2026, NTP III posle vožnje P -> III: iz L1 se izlazi gore u gornji hodnik, pa levo ka glavnom hodniku i
+     * niz njega. Tačka je bila vezana za koso postavljen lift (18 koraka na liftu), pa je prešla u granu toaleta pored njega.
+     */
+    @Test
+    fun ntpLiftExit_upThenLeftIntoMainCorridor() {
+        val locator = atLift("NTP-0-L1")
+        assertEquals(LiftOutcome.Moved(LiftChange("NTP", 0, 3)), locator.liftRide(LiftRide(0, 9 * sec, 11.0)))
+        val lift = graph.position(node("NTP-3-L1"))
+        val exit = graph.position(node("NTP-3-U513"))
+        val corner = graph.position(node("NTP-3-M595"))
+        val main = graph.position(node("NTP-3-M736"))
+        repeat(3) { locator.step(magneticAzimuth(lift, exit), stepM) }
+        repeat(5) { locator.step(magneticAzimuth(exit, corner), stepM) }
+        repeat(5) { locator.step(magneticAzimuth(corner, main), stepM) }
+        assertTrue("u glavnom hodniku", distance(locator.position(), main) < 1.5)
+    }
+
+    /**
+     * Teren 12.10.2026, NTP III: "Ovde sam" tik pored S1 (na kraju glavnog hodnika), pa hodnikom niz hodnik, okret i nazad.
+     * Koraci su bili 70-100° od kraka naniže, a tačka je išla krakom i posle okreta "sišla" na II. Azimuti sa snimka
+     * (hod-20261012-120310, 1116-1145 s).
+     */
+    @Test
+    fun ntpBesideS1_walkingDownCorridorAndBack_staysOnFloor() {
+        val azimuths = listOf(
+            11.6, 5.8, 45.2, 58.7, 65.6, 66.2, 67.3, 68.6, 69.2, 68.1, 67.7, 71.3, 73.1, 73.3, 71.7, 67.4, 65.5, 63.1, 57.4,
+            44.5, 330.1, 290.4, 263.3, 257.0, 255.9, 258.8, 259.6, 257.5, 258.1, 258.8, 257.3, 252.6, 254.7, 261.9, 265.2,
+        )
+        val locator = locatorAt("NTP-3-M450")
+        val reasons = azimuths.mapNotNull { locator.step(it.toFloat(), stepM) }
+        assertTrue("$reasons", PlaceReason.STEPENICE !in reasons)
+        assertEquals(PdrPlace("NTP", 3), locator.place)
     }
 
     /** Stajanje na IV usput (08.10.2026, V -> III): dve vožnje po jedan sprat. */
