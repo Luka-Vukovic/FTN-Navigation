@@ -325,6 +325,18 @@ private const val EXIT_OVERFLOW_STEPS = 3
 private const val LANDING_EXIT_STEPS = 4
 
 /**
+ * Širok međupodest (NB: iza lifta): okret od dva puta po ~90° sa hodom popreko između. Kad je okret na međupodestu već bar
+ * [LANDING_ACROSS_TURN_DEG], a sa međupodesta nema prolaza, do [LANDING_ACROSS_STEPS] koraka pravo je hod preko podesta, ne
+ * izlazak. Teren 12.10.2026, NB II -> III: krak, okret na ~100°, 5 koraka popreko, okret na ~180°, krak - posle 4 koraka
+ * pravo tačka je vraćena na dno kraka i promena sprata je izostala.
+ */
+private const val LANDING_ACROSS_TURN_DEG = 60f
+
+/** Bočni krak naniže u grafu ([PdrLocator] sideDownFlight): najviše ovoliko ivica od dna kraka do ivice sa stepenicima. */
+private const val MAX_DOWN_CHAIN_EDGES = 3
+private const val LANDING_ACROSS_STEPS = 8
+
+/**
  * Drugi krak bez promene sprata posle ovoliko koraka: okret nije bio podest (korisnik se okrenuo i vratio istim krakom,
  * ili let nije bio dovoljno dug za [StairWalk]) - nazad na sprat sa koga je krenuo.
  */
@@ -1224,6 +1236,13 @@ class PdrLocator(
                 stairs[key]?.nodesOn(place.floor)?.all { distance(local(it.x, it.y), here) > OFF_FLIGHT_CLEAR_M } != false
             if (away) offFlightStair = null
         }
+        sideDownFlight(point, azimuthDeg)?.let { (stair, variant, progress) ->
+            beginClimb(stair, up = false, progress, onFlight = true, azimuthDeg, variant)
+            // Smer kraka sa crteža, ne iz ovog koraka - na krak se stiže iz okreta (127-137° naspram kraka 180°), pa bi
+            // sledeći korak niz krak bio "početak okreta na podestu".
+            climb?.let { it.flightHeading = normalizeDeg(flightPlanDeg(it) - headingBiasDeg + planUp.getValue(place.buildingId)) }
+            return true
+        }
         val node = listOf(point.from, point.to).firstOrNull { it.type == NodeType.STEPENISTE } ?: return false
         val stair = stairs[stairKey(node)] ?: return false
         if (offFlightStair?.first == stair.key) return false
@@ -1263,10 +1282,16 @@ class PdrLocator(
             if (min(towardStair, alongFlight) > STAIR_ENTER_DEG) return false
         }
         // Sa dna kraka naniže se (verovatno) silazi; putanju potvrđuje ili menja strana okreta na međupodestu.
+        beginClimb(stair, up = !node.id.endsWith(DOWN_FOOT_SUFFIX), progress, onFlight, azimuthDeg)
+        return true
+    }
+
+    private fun beginClimb(stair: Stair, up: Boolean, progress: Double, onFlight: Boolean, azimuthDeg: Float, variant: Int = 0) {
         val entryRaw = raw
         val entryMatch = match
         climb = Climb(stair, watch).apply {
-            up = !node.id.endsWith(DOWN_FOOT_SUFFIX)
+            this.up = up
+            this.variant = variant
             lastHeading = azimuthDeg
             this.progress = progress
             if (onFlight) flightHeading = azimuthDeg
@@ -1276,7 +1301,56 @@ class PdrLocator(
         }.also(::showClimb)
         watch = StairWalk()
         stepStarts.clear()
-        return true
+    }
+
+    /**
+     * Bočni krak naniže koji u grafu nije stepenište nego HOD ivice od dna kraka naniže do podesta (AMF S1 iz prizemlja: S1-D je
+     * spoj hodnika sa oba bočna kraka, krakovi vode do podesta trema ka Kuli). Ivica hodnik - S1-D je kratka (0,5 m), tačka je
+     * preskoči i ide krakom kao hodnikom, a sprat se ne menja (teren 12.10.2026: silazak P -> -1 levim krakom, pa srednjim, nije
+     * prepoznat; "graf prepoznaje samo jednu stranu stepenica"). Tačka na tim ivicama, korakom niz krak -> silazi tim krakom
+     * (varijanta putanje po kraku najbližem tački). Vraća stepenište, varijantu i pređeni deo kraka.
+     */
+    private fun sideDownFlight(point: EdgePoint, azimuthDeg: Float): Triple<Stair, Int, Double>? {
+        val here = local(point.x, point.y)
+        for (stair in stairs.values) {
+            if (stair.buildingId != place.buildingId || stair.key == offFlightStair?.first) continue
+            val foot = stair.downNodes[place.floor] ?: continue
+            val variants = pathsOf(stair, place.floor) ?: continue
+            if (variants.any(::isStraight) || !onDownChain(stair, foot, point)) continue
+            var best: Triple<Int, Double, Double>? = null
+            variants.forEachIndexed { i, p ->
+                val a = local(p[3].x, p[3].y)
+                val b = local(p[2].x, p[2].y)
+                val len2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)
+                if (len2 <= 0.0) return@forEachIndexed
+                val t = (((here.x - a.x) * (b.x - a.x) + (here.y - a.y) * (b.y - a.y)) / len2).coerceIn(0.0, 1.0)
+                val d = distance(here, PointM(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y)))
+                if (best == null || d < best!!.third) best = Triple(i, t, d)
+            }
+            val (variant, t, _) = best ?: continue
+            val p = variants[variant]
+            val a = local(p[3].x, p[3].y)
+            val b = local(p[2].x, p[2].y)
+            if (abs(angleDiffDeg(headingOnPlan(azimuthDeg), azimuthOf(b.x - a.x, b.y - a.y))) > STAIR_ENTER_DEG) continue
+            return Triple(stair, variant, t)
+        }
+        return null
+    }
+
+    /** Ivica tačke je na putu od dna kraka naniže [foot] ka podestu (ne ka hodniku): HOD ivice do prve sa stepenicima. */
+    private fun onDownChain(stair: Stair, foot: Node, point: EdgePoint): Boolean {
+        val edge = setOf(point.from.id, point.to.id)
+        fun corridorsAround(n: Node, except: String) =
+            graph.neighbors(n.id).map { it.first }.filter { it.id != except && it.floor == foot.floor && it.type == NodeType.HODNIK }
+        // Svaki bočni krak je svoj lanac: od dna kraka preko čvorova sa jednim nastavkom, do ivice sa stepenicima. Lanac bez
+        // nje je hodnik (NTP S3-D ima dva suseda u hodniku - prva verzija je tačku iz hodnika stavila na S3, teren 12.10. ujutru).
+        fun chain(prev: Node, n: Node, acc: List<Set<String>>): List<Set<String>>? {
+            val here = acc + setOf(setOf(prev.id, n.id))
+            if (graph.edge(prev.id, n.id)?.steps == true) return here
+            val next = corridorsAround(n, prev.id).singleOrNull() ?: return null
+            return if (here.size > MAX_DOWN_CHAIN_EDGES) null else chain(n, next, here)
+        }
+        return corridorsAround(foot, stair.corridor(foot).id).any { first -> chain(foot, first, emptyList())?.contains(edge) == true }
     }
 
     /**
@@ -1539,7 +1613,9 @@ class PdrLocator(
                 // Amfiteatri), inače nema kuda - nije se ni penjao (okret u hodniku pored stepeništa) -> nazad na dno kraka.
                 if (c.straight < LANDING_EXIT_STEPS) return false
                 if (c.part == ClimbPart.LANDING) {
-                    c.exitGate = c.stair.nodes[place.floor]?.let { landingGate(c.stair, it) }.takeIf { c.up }
+                    val gate = c.stair.nodes[place.floor]?.let { landingGate(c.stair, it) }.takeIf { c.up }
+                    if (gate == null && abs(c.turned) >= LANDING_ACROSS_TURN_DEG && c.straight < LANDING_ACROSS_STEPS) return false
+                    c.exitGate = gate
                     c.part = ClimbPart.FIRST
                     c.progress = 0.0
                 }

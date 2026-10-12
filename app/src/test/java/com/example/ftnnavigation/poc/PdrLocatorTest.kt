@@ -814,6 +814,21 @@ class PdrLocatorTest {
         assertEquals(0.3f, locator.lastStepM, 1e-6f)
     }
 
+    /**
+     * Teren 12.10.2026 (snimak 175756, NB II -> III): krak, okret ~100° udesno, 5 koraka popreko preko širokog međupodesta
+     * (iza lifta), okret do 180°, krak. Tačka je posle 4 koraka pravo vraćena na dno kraka, a niz popreko je bio "let" -
+     * sprat se nije promenio.
+     */
+    @Test
+    fun nbStairs_walkAcrossWideLanding_goesUp() {
+        val (locator, away) = atStairs("NB/S", 2)
+        val headings = List(12) { away } + listOf(15f, 45f, 75f, 95f).map { away + it } + List(5) { away + 98f } +
+            listOf(115f, 135f, 150f, 165f).map { away + it } + List(9) { away + 180f }
+        val reasons = headings.mapNotNull { locator.step(it, stepM) }
+        assertEquals(listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("NB", 3), locator.place)
+    }
+
     /** Silazak: sa dna desnog kraka (S-D), okret ulevo -> sprat niže, tačka na levom kraku sprata ispod. */
     @Test
     fun nbStairs_fromDownFlight_turningLeft_goesDown() {
@@ -1104,6 +1119,26 @@ class PdrLocatorTest {
             check(++steps < 60) { "nije stigao u Kulu (na ${locator.place})" }
         }
         assertEquals(PdrPlace("KULA", 0), locator.place)
+    }
+
+    /**
+     * Teren 12.10.2026 (snimak 180423, 459-483 s): sa kraja hodnika prizemlja koso na levi bočni krak, niz njega, okret na
+     * podestu i srednjim krakom u suteren. Levog kraka u grafu nije bilo, a tačka je ivicu hodnik - S1-D (0,5 m) preskočila i
+     * išla krakom kao hodnikom - sprat se nije promenio ("graf prepoznaje samo jednu stranu stepenica").
+     */
+    @Test
+    fun amfS1_fromGroundCorridor_leftSideFlightDown_thenMiddleFlight_toBasement() {
+        // Tačka je ivicu hodnik - S1-D već preskočila: na vrhu levog kraka.
+        val locator = locatorAt("AMF-0-S1-D-KRAK-L")
+        val reasons = mutableListOf<PlaceReason>()
+        val down = magneticAzimuth(graph.position(node("AMF-0-S1-D-KRAK-L")), graph.position(node("AMF-0-PODEST-S1-D-L")))
+        // Na snimku 8 koraka niz krak (kratki koraci na stepenicama).
+        repeat(8) { locator.step(down, 0.5f)?.let(reasons::add) }
+        // Okret na podestu (180°) i srednjim krakom naniže.
+        (1..4).forEach { locator.step(down - 45f * it, 0.5f)?.let(reasons::add) }
+        repeat(10) { locator.step(down - 180f, 0.5f)?.let(reasons::add) }
+        assertTrue("$reasons", PlaceReason.STEPENICE in reasons)
+        assertEquals(PdrPlace("AMF", -1), locator.place)
     }
 
     /** S1: iz suterena srednjim krakom i pravo dalje - takođe u trem ka Kuli. */

@@ -68,6 +68,8 @@ S1_FLIGHTS_0 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, down_node=S1_TO
 # Krakovi do podesta su HOD ivice sa stepenicima (STEPS) - ruta "bez stepenica" ne ide tuda.
 KULA_VIA_M1 = ("S1", [("PODEST-S1", (250, 207), STEPS)])
 KULA_VIA_0 = ("S1-D", [("S1-D-KRAK", (277, 176)), ("PODEST-S1-D", (277, 207), STEPS), ("PODEST-S1", (250, 207))])
+# I levi bočni krak (teren 12.10.2026: "graf prepoznaje samo jednu stranu stepenica, bliže čitaonici" - do tada samo desni).
+KULA_VIA_0_L = ("S1-D", [("S1-D-KRAK-L", (222, 176)), ("PODEST-S1-D-L", (222, 207), STEPS), ("PODEST-S1", (250, 207))])
 PASSAGE_KULA = (250, 214)
 
 # S2 (uz zapadni zid, između AR4 i AR5): pravo stepenište - dva kraka u nizu sa podestom između. Iz prizemlja se ulazi
@@ -152,7 +154,8 @@ def floor_0():
         "steps": [NB_PASSAGE_STEPS],
         "voids": [S1_VOID],  # iza ograde na kraju hodnika (ispod: podest i srednji krak S1)
         "points": [("PROLAZ-F", (40, -13), "PROLAZ"), ("PROLAZ-ITC", (832, -10), "PROLAZ"),
-                   ("PROLAZ-NB", (680, 207), "PROLAZ"), ("PROLAZ-KULA", PASSAGE_KULA, "PROLAZ", KULA_VIA_0)],
+                   ("PROLAZ-NB", (680, 207), "PROLAZ"), ("PROLAZ-KULA", PASSAGE_KULA, "PROLAZ", KULA_VIA_0),
+                   ("PROLAZ-KULA", PASSAGE_KULA, "PROLAZ", KULA_VIA_0_L)],
     }
 
 

@@ -53,6 +53,14 @@ private const val MAX_FLIGHT_STEPS = 24
 /** Okret između letova kroz bar ovoliko koraka (na podestu se okreće u hodu; u hodniku u mestu, između dva koraka). */
 private const val MIN_TURN_STEPS = 2
 
+/**
+ * Hod preko širokog međupodesta (NB, iza lifta): niz upravan na let posle okreta (do ovoliko od upravnog) nije let, ako
+ * od leta pre njega do trenutnog leta nije prošlo više od [MAX_LANDING_SPAN_STEPS] koraka. Teren 12.10.2026, NB II -> III:
+ * krak (~352°), 7 koraka popreko (~99°), krak (~176°) - okret je meren od niza popreko (77°) i sprat nije promenjen.
+ */
+private const val ACROSS_LANDING_DEG = 30f
+private const val MAX_LANDING_SPAN_STEPS = 16
+
 /** Pauza duža od ovoga prekida let (NB 04.10.: "koraci" dok korisnik stoji, na 4-42 s). */
 private const val PAUSE_NS = 2_000_000_000L
 
@@ -215,7 +223,7 @@ class StairWalk {
         val runs = runs()
         val current = runs.lastOrNull() ?: return 0
         if (current.count() < FLIGHT_STEPS) return 0
-        val from = anchor ?: runs.dropLast(1).lastOrNull { it.count() >= FLIGHT_STEPS }?.last ?: return 0
+        val from = anchor ?: flightBefore(runs, current) ?: return 0
         // Prva promena: let pre okreta nije duži hod (hodnik), a okret se hodao (na podestu se okreće u hodu kroz više
         // koraka; u hodniku se korisnik okrene u mestu) - šetnja hodnikom gore-dole pored stepeništa nije stepenište.
         if (anchor == null && (from - flightFirst(from) + 1 > MAX_FLIGHT_STEPS || current.first - from < MIN_TURN_STEPS)) return 0
@@ -238,6 +246,19 @@ class StairWalk {
             return s
         }
         return 0
+    }
+
+    /**
+     * Kraj leta pre trenutnog [current]: poslednji raniji niz od bar [FLIGHT_STEPS] koraka. Niz upravan na trenutni let
+     * (hod preko širokog međupodesta) se preskače, ako je let pre njega do [MAX_LANDING_SPAN_STEPS] koraka od trenutnog.
+     */
+    private fun flightBefore(runs: List<IntRange>, current: IntRange): Int? {
+        val flights = runs.dropLast(1).filter { it.count() >= FLIGHT_STEPS }
+        val last = flights.lastOrNull() ?: return null
+        val currentDeg = meanHeading(current)
+        if (abs(abs(angleDiffDeg(meanHeading(last), currentDeg)) - 90f) > ACROSS_LANDING_DEG) return last.last
+        val before = flights.dropLast(1).lastOrNull() ?: return last.last
+        return if (current.first - before.last <= MAX_LANDING_SPAN_STEPS) before.last else last.last
     }
 
     /** Srednji smer leta pre okreta i trenutnog leta (magnetski azimut) po poslednjem [floorTurn] koji je prijavio okret. */

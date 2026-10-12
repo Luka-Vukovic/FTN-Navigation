@@ -177,6 +177,7 @@ class AmfKulaGraphTest {
         assertEquals(
             setOf(
                 "NB-0-S" to "NB-0-PODEST", "AMF-m1-S1" to "AMF-m1-PODEST-S1", "AMF-0-S1-D-KRAK" to "AMF-0-PODEST-S1-D",
+                "AMF-0-S1-D-KRAK-L" to "AMF-0-PODEST-S1-D-L",
                 "K-P-AMF-F" to "F-0-PROLAZ-AMF", "K-P-AMF-F" to "F-1-PROLAZ-AMF",
             ),
             graph.edges.filter { it.steps }.map { it.fromId to it.toId }.toSet(),

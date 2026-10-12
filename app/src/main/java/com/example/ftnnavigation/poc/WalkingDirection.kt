@@ -127,6 +127,17 @@ class WalkingDirection {
     // Džep: odstupanje iz faze po koraku (sin·jačina, cos·jačina, jačina) - [pocketOffset].
     private val pocketPhases = ArrayDeque<DoubleArray>()
 
+    /** Položaj telefona u ruci ("gore" u koordinatama telefona) i odstupanje u hodu sa njim - [rememberGrip]. */
+    private class Grip(val up: DoubleArray, var offsetDeg: Double)
+
+    private val grips = ArrayDeque<Grip>()
+
+    // Uzastopni koraci hoda (razmak < WALK_STEP_NS) od poslednjeg smirivanja - tek tada se položaj pamti.
+    private var walkSteps = 0
+
+    // Odstupanje je postavljeno smirivanjem (pretpostavka), a ne potvrđeno hodom - [restoreGrip] ga sme zameniti.
+    private var offsetFromSettle = false
+
     /** Da li je odstupanje telefona poznato (false dok se premešten telefon ne smiri). */
     val isAnchored: Boolean get() = anchored
 
@@ -260,13 +271,54 @@ class WalkingDirection {
         }
 
         if (!anchored) return WalkStep(normalize(heldWalkDeg))
+        walkSteps = if (stepTimes.size > 1 && timestampNs - previousStepNs < WALK_STEP_NS) walkSteps + 1 else 0
+        // Posle smirivanja zapamćen položaj važi dok korisnik ne krene - u hodu odstupanje uči pravac iz ubrzanja, i položaj
+        // koji se u hodu slučajno poklopi sa zapamćenim ne sme da ga pregazi (jutarnji teren 12.10.2026, NTP III: 23° -> 10°).
+        if (offsetFromSettle) {
+            if (walkSteps >= GRIP_WALK_STEPS) offsetFromSettle = false else restoreGrip()
+        }
         val afterPause = stepTimes.size == 1 || timestampNs - previousStepNs > PAUSE_NS
         if (afterPause) pauseFromNs = previousStepNs
         stepPhases.addLast(StepPhase(afterPause))
         if (stepPhases.size > MAX_TURN_STEPS + 1) stepPhases.removeFirst()
         val step = steer(phone, previousStepNs)
         val pocketRedo = pocketOffset(phone)
+        rememberGrip()
         return if (pocketRedo > 0) WalkStep(normalize(phone + offsetDeg), maxOf(pocketRedo, step.redoSteps)) else step
+    }
+
+    /**
+     * Položaj telefona u ruci (ekranom nagore, nagnut ka licu) u hodu: pamti se sa odstupanjem. Ko gleda u telefon drži ga
+     * nagnutog ka sebi, gornjom ivicom od sebe - isti nagib, isto odstupanje, ma kako se telo u međuvremenu okrenulo.
+     * Pamti se tek posle [GRIP_WALK_STEPS] koraka hoda (rukovanje telefonom u mestu daje lažne korake na 1-2 s).
+     */
+    private fun rememberGrip() {
+        if (walkSteps < GRIP_WALK_STEPS || !isGrip(upSlow) || angleBetween(upFast, upSlow) > SETTLE_DEG) return
+        val known = grips.firstOrNull { angleBetween(it.up, upSlow) < GRIP_MATCH_DEG }
+        if (known != null) {
+            known.offsetDeg = offsetDeg
+            grips.remove(known)
+            grips.addLast(known)
+        } else {
+            grips.addLast(Grip(upSlow.copyOf(), offsetDeg))
+            if (grips.size > MAX_GRIPS) grips.removeFirst()
+        }
+        offsetFromSettle = false
+    }
+
+    /**
+     * Odstupanje iz smirivanja je pretpostavka (smer od pre pokreta). Kad se telefon vrati u zapamćen položaj u ruci, važi
+     * odstupanje tog položaja. Teren 12.10.2026 (NB I sprat): telefon se ~20 s premeštao u ruci (beleška), smirivanja su
+     * ostavila odstupanje −46° iako se vratio u isti položaj kao pre (odstupanje 4°) - na II i III spratu krakovi ~50° pogrešni,
+     * nijedna promena sprata, do restarta aplikacije.
+     */
+    private fun restoreGrip(): Boolean {
+        val grip = grips.lastOrNull { angleBetween(it.up, upSlow) < GRIP_MATCH_DEG } ?: return false
+        if (!isGrip(upSlow)) return false
+        offsetDeg = grip.offsetDeg
+        offsetFromSettle = false
+        forgetTurns()
+        return true
     }
 
     /**
@@ -313,6 +365,9 @@ class WalkingDirection {
         stepPhoneDegs.clear()
         stepPhases.clear()
         pocketPhases.clear()
+        grips.clear()
+        walkSteps = 0
+        offsetFromSettle = false
         pauseFromNs = 0L
         stepSumE = 0.0
         stepSumN = 0.0
@@ -329,7 +384,11 @@ class WalkingDirection {
      * (analiza promašaja 12.10.2026, NTP 09.10.: posle vožnje liftom u džepu odstupanje 45° umesto ~0, 24 m promašaja).
      */
     private fun settle() {
-        offsetDeg = if (fromPocket && upSlow[2] >= HAND_UP_Z) 0.0 else angleDiff(heldWalkDeg, azimuth(smoothE, smoothN))
+        if (!restoreGrip()) {
+            offsetDeg = if (fromPocket && upSlow[2] >= HAND_UP_Z) 0.0 else angleDiff(heldWalkDeg, azimuth(smoothE, smoothN))
+            offsetFromSettle = true
+        }
+        walkSteps = 0
         anchored = true
         poseHistory.clear()
         forgetTurns()
@@ -517,6 +576,22 @@ class WalkingDirection {
          */
         const val POCKET_UP_Z = 0.3
         const val HAND_UP_Z = 0.5
+
+        /**
+         * Zapamćen položaj u ruci ([rememberGrip]): ekranom nagore ([HAND_UP_Z]) i nagnut bar ovoliko (|x, y| gravitacije) -
+         * nagib ka licu nosi i okret telefona u ruci; telefon koji leži ravno ga ne nosi. Teren 12.10.2026: ruka x 0,1, y 0,5.
+         */
+        const val GRIP_MIN_TILT = 0.25
+
+        /** Isti položaj u ruci: "gore" u koordinatama telefona do ovoliko od zapamćenog. */
+        const val GRIP_MATCH_DEG = 15.0
+        const val GRIP_WALK_STEPS = 4
+        private const val MAX_GRIPS = 3
+
+        /** Razmak koraka u hodu (lažni koraci rukovanja telefonom u mestu su na 1-2 s). */
+        private const val WALK_STEP_NS = 900_000_000L
+
+        private fun isGrip(up: DoubleArray) = up[2] >= HAND_UP_Z && hypot(up[0], up[1]) >= GRIP_MIN_TILT
 
         /**
          * Okret gravitacije se meri u odnosu na stanje od pre ovoliko. Ranije je referenca bila

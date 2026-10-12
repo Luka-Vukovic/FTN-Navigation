@@ -263,6 +263,30 @@ class WalkingDirectionTest {
         allHeadings.takeLast(headings.size).drop(2).forEach { assertNear(300.0, it, 20.0, "ponovljeni") }
     }
 
+    /**
+     * Teren 12.10.2026 (NB I sprat, snimak 175756): telefon u ruci nagnut ka licu (gravitacija y 0,5, z 0,85), pa ~20 s
+     * rukovanja u mestu dok se telo okretalo, pa opet isti položaj u ruci. Smirivanja su ostavila odstupanje −46° (smer od
+     * pre pokreta), a telefon se drži isto kao pre - odstupanje tog položaja (0).
+     */
+    @Test
+    fun phoneHandledInPlace_backInSameGrip_offsetOfThatGrip() {
+        fun tilted(yawDeg: Double, pitchDeg: Double): Pose {
+            val th = Math.toRadians(pitchDeg)
+            val f = forward(yawDeg)
+            return Pose(y = f * cos(th) + up * sin(th), z = f * -sin(th) + up * cos(th))
+        }
+        stand(1.0, tilted(30.0, 30.0))
+        direction.reset()
+        walk(5.0, 30.0) { tilted(30.0, 30.0) }
+        // Ekranom nadole, pa nazad u ruku - telo se u međuvremenu okrenulo na 120°.
+        stand(3.0, tilted(200.0, 150.0))
+        assertTrue("telefon se nije smirio ekranom nadole", direction.isAnchored)
+        stand(3.0, tilted(120.0, 30.0))
+        assertTrue("telefon se nije smirio u ruci", direction.isAnchored)
+        assertNear(0.0, direction.offset.toFloat(), 5.0, "odstupanje")
+        walk(3.0, 120.0) { tilted(120.0, 30.0) }.forEach { assertNear(120.0, it, 10.0, "u ruci") }
+    }
+
     @Test
     fun phonePutInPocketWhileWalking_thenTurn_isNotStuck() {
         // Telefon ide u džep bez zastajanja; posle toga korisnik skreće - smer mora da prati.

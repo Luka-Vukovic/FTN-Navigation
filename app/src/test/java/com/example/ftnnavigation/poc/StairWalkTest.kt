@@ -73,6 +73,21 @@ class StairWalkTest {
         assertEquals(1, turns[first])
     }
 
+    /**
+     * Teren 12.10.2026, NB II -> III (snimak 175756, smer na planu): krak ~352°, okret, 7 koraka popreko preko širokog
+     * međupodesta (~99°), okret, krak ~176°. Niz popreko nije let - okret se meri od prvog kraka.
+     */
+    @Test
+    fun walkAcrossWideLanding_stillOneFloor() {
+        val headings = listOf(7f, 4f, 358f, 353f, 351f, 352f, 351f, 350f, 351f, 351f, 351f, 355f, 1f, 17f, 46f, 75f) +
+            listOf(89f, 99f, 98f, 98f, 98f, 101f, 107f) + listOf(119f, 137f, 151f, 160f) +
+            listOf(169f, 174f, 179f, 179f, 175f, 174f, 176f, 179f, 186f)
+        val turns = StairWalk().walk(headings)
+        assertEquals(1, turns.firstOrNull { it != 0 })
+        // Isti hod bez kraka posle podesta (hodnik popreko, pa nazad) - nije sprat.
+        assertTrue(StairWalk().walk(headings.take(23) + List(8) { 280f }).all { it == 0 })
+    }
+
     /** Hodnik gore-dole pored stepeništa: okret u mestu (između dva koraka) nije podest. */
     @Test
     fun inPlaceTurn_notAFloor() {
