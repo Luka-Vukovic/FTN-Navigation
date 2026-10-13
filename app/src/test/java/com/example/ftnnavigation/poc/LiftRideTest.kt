@@ -172,4 +172,41 @@ class LiftRideTest {
         s.run(5.0)
         assertEquals(1, s.rides.size)
     }
+
+    /**
+     * Teren 13.10.2026, NTP V -> P u ruci: "korak" odmah posle polaska i dva tik pred kočenje (trzaji lifta, korisnik stoji)
+     * - tri koraka između impulsa, vožnja nije prepoznata.
+     */
+    @Test
+    fun jerkStepsNextToPulses_stillDetected() {
+        val s = sim()
+        s.run(10.0)
+        s.run(3.0) { -0.5 }
+        s.run(0.3)
+        s.detector.onStep(s.t)
+        s.run(9.0)
+        s.detector.onStep(s.t)
+        s.run(0.3)
+        s.detector.onStep(s.t)
+        s.run(0.3)
+        s.run(3.0) { 0.5 }
+        s.run(5.0)
+        assertEquals(1, s.rides.size)
+        assertTrue(!s.rides.single().up)
+    }
+
+    /**
+     * 11.10.2026 kod kuće (telefon u džep stojeći): mali "polazak", par sekundi rukovanja telefonom (koraci u bučnim
+     * korpama std 0,67-1,4), pa suprotan impuls - nije vožnja. Koraci uz impuls se zanemaruju samo u tihim korpama.
+     */
+    @Test
+    fun handlingBetweenPulses_noRide() {
+        val s = sim()
+        s.run(10.0)
+        s.run(2.0) { 0.4 }
+        s.run(1.5, noise = 0.7, stepEveryS = 0.4)
+        s.run(2.0) { -0.4 }
+        s.run(10.0)
+        assertEquals(emptyList<LiftRide>(), s.rides)
+    }
 }

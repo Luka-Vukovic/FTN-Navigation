@@ -909,6 +909,26 @@ class PdrLocatorTest {
         assertTrue("na dnu kraka: ${distance(locator.position(), footM)} m", distance(locator.position(), footM) > 1.0)
     }
 
+    /**
+     * Teren 13.10.2026, NB II -> III: "malo je zakasnelo prešao sa stepenica na ravni deo, nekih 3 koraka kasnije" - posle kraja
+     * drugog kraka tačka je stajala na vrhu dok se izlazak ne potvrdi. Sada svaki korak dalje pomera tačku ka hodniku.
+     */
+    @Test
+    fun afterSecondFlight_stepsBeforeExitConfirmed_pointMovesTowardCorridor() {
+        val (locator, away) = atStairs("NB/S", 1)
+        locator.flights(away, 180f)
+        val footM = graph.position(node("NB-2-S-D"))
+        val shown = mutableListOf<Double>()
+        while (locator.match == null) {
+            locator.step(away + 180f, stepM)
+            shown += distance(locator.position(), footM)
+            check(shown.size < 15) { "nije sišao sa stepeništa" }
+        }
+        // Poslednja dva koraka pre izlaska (dok se čeka potvrda) već idu od vrha kraka ka hodniku.
+        val (a, b) = shown.dropLast(1).takeLast(2)
+        assertTrue("pre izlaska: $shown", a > 0.3 && b > a)
+    }
+
     /** Hod do stepeništa i nazad (bez letova) ne menja sprat, a tačka ne kreće uz krak. */
     @Test
     fun toStairsAndBack_noFloorChange() {
@@ -1171,6 +1191,25 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("AMF", 0), locator.place)
     }
 
+    /**
+     * Teren 13.10.2026 (hod-20261013-095045, 94-121 s): hodnikom suterena do S1, srednjim krakom na podest, korak-dva ka
+     * tremu i odmah okret (~180°) na desni bočni krak u prizemlje - u trem nije ni ušao. Tačka je stajala na vratima trema,
+     * map-matching ju je vratio niz srednji krak na -1 (na telefonu i lažan izlazak napolje kroz glavni ulaz).
+     */
+    @Test
+    fun amfS1_fromBasement_upMiddleFlight_turnAtPorchDoor_upToGroundFloor() {
+        val azimuths = listOf(
+            75.5, 75.2, 73.6, 75.5, 73.1, 71.2, 71.0, 71.0, 71.9, 71.7, 68.8, 66.8, 65.1, 64.7, 67.8, 69.6, 64.7, 62.6, 64.9,
+            65.3, 64.6, 64.2, 61.3, 59.5, 62.1, 62.7, 62.7, 62.3, 60.7, 51.9, 29.1, 357.8, 324.3, 300.4, 278.8, 271.2, 265.0,
+            258.2, 252.4, 248.7, 242.5, 238.1, 238.2, 239.1, 244.2, 246.9, 246.9, 249.0,
+        )
+        val locator = locatorAt("AMF-m1-H257_60")
+        locator.restoreBias(-8.9f)
+        val reasons = azimuths.mapNotNull { locator.step(it.toFloat(), 0.75f) }
+        assertTrue("$reasons", PlaceReason.STEPENICE in reasons && PlaceReason.PROLAZ !in reasons)
+        assertEquals(PdrPlace("AMF", 0), locator.place)
+    }
+
     /** S2: pravo stepenište (dva kraka u nizu, bez okreta) - iz prizemlja niz oba kraka u suteren, pa u hodnik. */
     @Test
     fun amfS2_straight_fromGroundFloor_downToBasement() {
@@ -1264,6 +1303,38 @@ class PdrLocatorTest {
         val reasons = azimuths.mapNotNull { locator.step(it.toFloat(), stepM) }
         assertTrue("$reasons", PlaceReason.STEPENICE !in reasons)
         assertEquals(PdrPlace("NTP", 3), locator.place)
+    }
+
+    /**
+     * Teren 13.10.2026 (hod-20261013-101142, 172-214 s; i 12.10. uveče): NTP III -> II stepeništem S1, pa sa podesta II
+     * sprata ~8 koraka na jug pored dna sledećeg kraka naniže i istočno ka L1. Pravac sledećeg kraka je istok - tačka je
+     * posle 3 koraka opet ušla na njega ("nije otišao na L1, nego je krenuo na stepenice").
+     */
+    @Test
+    fun ntpS1_downOneFloor_thenPastNextFlightTowardLift_staysOnFloor() {
+        val azimuths = listOf(
+            189.2, 186.2, 173.0, 158.6, 146.0, 137.7, 135.0, 145.0, 169.3, 192.1, 237.8, 270.1, 293.9, 317.7, 323.4, 325.9,
+            327.4, 329.2, 330.7, 328.7, 325.7, 324.1, 323.5, 319.9, 314.7, 315.9, 318.5, 318.3, 311.4, 286.3, 253.5, 223.8,
+            193.5, 177.6, 157.1, 149.6, 145.1, 144.9, 146.0, 146.0, 138.5, 130.5, 130.3, 134.7, 135.0, 138.3, 141.3, 134.3,
+            123.6, 113.6, 96.0, 76.9, 62.5, 50.0, 47.2, 47.3, 44.7, 37.7, 29.0, 8.0, 353.9, 341.2, 334.7, 335.1, 340.2, 350.6,
+        )
+        val locator = locatorAt("NTP-3-U513")
+        locator.restoreBias(-12.2f)
+        val reasons = azimuths.mapNotNull { locator.step(it.toFloat(), 0.75f) }
+        assertEquals(listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("NTP", 2), locator.place)
+        assertNotNull("na grafu sprata, ne na stepeništu", locator.match)
+    }
+
+    /**
+     * Teren 13.10.2026, NTP V -> P liftom L2: −20,3 m = 5,4 sprata (duge vožnje mere malo više). Niže od P lift ne ide ->
+     * P, bez pitanja. Preko pola sprata dalje od poslednjeg sprata i dalje pita ([lift_beyondLiftFloors_asks]).
+     */
+    @Test
+    fun lift_beyondLastFloorByLessThanHalf_movesToLastFloor() {
+        val locator = atLift("NTP-5-L2")
+        assertEquals(LiftOutcome.Moved(LiftChange("NTP", 5, 0)), locator.liftRide(LiftRide(0, 17 * sec, -20.3)))
+        assertEquals(PdrPlace("NTP", 0), locator.place)
     }
 
     /** Stajanje na IV usput (08.10.2026, V -> III): dve vožnje po jedan sprat. */
