@@ -20,6 +20,10 @@ import kotlin.math.sqrt
  * Proba 11.10.2026 (replay): prednji džep 48 -> 8 koraka, jakna 32 -> 0, kauč 20 -> 6, stolica 3 -> 0; hod 50 brojanih i hod sa
  * premeštanjem netaknuti. Teren (59 "Ovde sam"): srednji promašaj 4,8 -> 4,25 m, medijan 2,9 -> 2,1 m.
  *
+ * U džepu (14.10.2026): vađenje ume da traje ~4 s slabih "koraka" (vrh 0,6-1,9) pre nego što se telefon okrene - duže od
+ * potvrde. Zato se iz džepa hod potvrđuje tek uz jak udar noge ([POCKET_STRONG_PEAK]) ili medijanu vrhova od bar
+ * [POCKET_WALK_MEDIAN_PEAK] (hod iz lifta u džepu 09.10.: vrhovi 1,1-2,6), a tih hod posle [POCKET_SOFT_CONFIRM_NS].
+ *
  * Cena: početak hoda kasni dok se ne potvrdi (1,5 s u ruci, pa tačka sustigne), polazak uz premeštanje telefona gubi korake do
  * smirivanja, a 1-2 koraka u mestu pa pauza se ne broje (teren: ~6 % koraka, većinom takvi).
  */
@@ -95,10 +99,19 @@ class HandlingGate {
         if (walking) return listOf(step)
         held += step
         // Iz džepa (uspravan u mirovanju) vađenje počinje i ~2 s pre nego što se telefon okrene, a tačku tada niko ne gleda.
-        val confirmNs = if (abs(restUp[2]) < UPRIGHT_Z) POCKET_CONFIRM_NS else CONFIRM_NS
+        val inPocket = abs(restUp[2]) < UPRIGHT_Z
+        val confirmNs = if (inPocket) POCKET_CONFIRM_NS else CONFIRM_NS
         if (handling || held.size < CONFIRM_STEPS || step.timeNs - held.first().timeNs < confirmNs) return emptyList()
+        // U džepu hod ima jak udar noge uz telefon; vađenje (ruka u džepu) samo slabe "korake" - dok se telefon ne okrene.
+        if (inPocket && !pocketWalk() && step.timeNs - held.first().timeNs < POCKET_SOFT_CONFIRM_NS) return emptyList()
         walking = true
         return held.toList().also { held.clear() }
+    }
+
+    private fun pocketWalk(): Boolean {
+        if (held.any { it.peak >= POCKET_STRONG_PEAK }) return true
+        val peaks = held.map { it.peak }.sorted()
+        return peaks[peaks.size / 2] >= POCKET_WALK_MEDIAN_PEAK
     }
 
     /** Mirovanje: trenutna orijentacija je polazna, ništa se ne premešta. */
@@ -121,6 +134,9 @@ class HandlingGate {
         const val CONFIRM_STEPS = 3
         const val CONFIRM_NS = 1_500_000_000L
         const val POCKET_CONFIRM_NS = 3_000_000_000L
+        const val POCKET_STRONG_PEAK = 3f
+        const val POCKET_WALK_MEDIAN_PEAK = 1.5f
+        const val POCKET_SOFT_CONFIRM_NS = 8_000_000_000L
         private const val UPRIGHT_Z = 0.5
         const val HANDLING_DEG = 30.0
         private const val SETTLE_DEG = 12.0

@@ -22,7 +22,9 @@ class HandlingGateTest {
      * Pušta [seconds] sekundi: orijentacija iz [tilt] (s -> stepeni), koraci u trenucima [steps] (s). Vraća vremena
      * primenjenih koraka (s).
      */
-    private fun run(gate: HandlingGate, seconds: Double, steps: List<Double>, tilt: (Double) -> Double): List<Double> {
+    private fun run(
+        gate: HandlingGate, seconds: Double, steps: List<Double>, peak: Float = 1.5f, tilt: (Double) -> Double,
+    ): List<Double> {
         val applied = mutableListOf<Double>()
         val pending = steps.sorted().toMutableList()
         var t = 0L
@@ -30,7 +32,7 @@ class HandlingGateTest {
             gate.onRotation(matrix(tilt(t / 1e9)), t)
             while (pending.isNotEmpty() && pending.first() * 1e9 <= t) {
                 val ns = (pending.removeAt(0) * 1e9).toLong()
-                gate.onStep(HandlingGate.Step(ns, WalkingDirection.WalkStep(0f), 1.5f)).forEach { applied += Math.round(it.timeNs / 1e6) / 1000.0 }
+                gate.onStep(HandlingGate.Step(ns, WalkingDirection.WalkStep(0f), peak)).forEach { applied += Math.round(it.timeNs / 1e6) / 1000.0 }
             }
             t += rotationNs
         }
@@ -71,6 +73,25 @@ class HandlingGateTest {
         val handling = listOf(2.0, 2.4, 3.1, 3.9, 4.9, 5.8)
         val applied = run(gate, 12.0, handling) { t -> 90.0 - 60.0 * ((t - 4.5) / 1.5).coerceIn(0.0, 1.0) }
         assertTrue("applied=$applied", applied.isEmpty())
+    }
+
+    @Test
+    fun takingOutOfPocketStanding_weakStepsLongBeforeTurn_dropped() {
+        // Proba 14.10.2026 (168-172 s): 7 slabih "koraka" (vrh 0,6-1,3) ~4 s pre nego što se telefon okrene - duže od
+        // potvrde u džepu (3 s), ali bez udara noge.
+        val gate = HandlingGate()
+        val handling = listOf(2.0, 2.9, 3.4, 3.9, 4.4, 5.4, 5.9)
+        val applied = run(gate, 12.0, handling, peak = 0.7f) { t -> 90.0 - 60.0 * ((t - 5.5) / 1.0).coerceIn(0.0, 1.0) }
+        assertTrue("applied=$applied", applied.isEmpty())
+        assertEquals(7, gate.dropped)
+    }
+
+    @Test
+    fun softWalkFromPocket_appliedAfterLongerConfirmation() {
+        // Tih hod sa telefonom u džepu, bez jakog udara - pušta se posle 8 s, svi koraci.
+        val walk = steps(1.0, 0.55, 24)
+        val applied = run(HandlingGate(), 16.0, walk, peak = 0.8f) { t -> 85.0 + 10.0 * sin(2 * Math.PI * t / 1.1) }
+        assertEquals(walk, applied)
     }
 
     @Test
