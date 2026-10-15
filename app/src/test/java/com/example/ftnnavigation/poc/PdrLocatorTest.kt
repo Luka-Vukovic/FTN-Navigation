@@ -929,6 +929,72 @@ class PdrLocatorTest {
         assertTrue("pre izlaska: $shown", a > 0.3 && b > a)
     }
 
+    // Znak stepenica iz ubrzanja ([StairGait], analiza 15.10.2026): ~0 po ravnom, ~1 na kraku pri silasku.
+    private val flatGait = 0f
+    private val stairGait = 1f
+
+    /**
+     * Analiza 15.10.2026: pri silasku je tačka ulazila u stepenište medijana 7-8 koraka pre nego što ubrzanje pokaže krak (hod
+     * po podestu sprata ka kraku) i ti koraci su je spuštali niz krak. Dok koraci liče na ravan hod, tačka čeka na vrhu kraka.
+     */
+    @Test
+    fun descent_flatStepsOnLanding_pointWaitsAtTopOfFlight() {
+        val (locator, _) = atStairNode("NB-2-S-D")
+        val path = stairPath("NB/S", 2)
+        val down = magneticAzimuth(path[3], path[2])
+        repeat(4) { assertNull(locator.step(down, stepM, stairScore = flatGait)) }
+        assertTrue("čeka na vrhu kraka", distance(locator.position(), path[3]) < 0.1)
+        repeat(3) { locator.step(down, stepM, stairScore = stairGait) }
+        val shown = distance(locator.position(), path[3])
+        assertTrue("krenuo niz krak: $shown m", shown > 0.4 * distance(path[3], path[2]) * 3 / 11)
+        assertTrue("na kraku", distanceToSegment(locator.position(), path[3], path[2]) < 0.1)
+
+        // Bez znaka (džep, nema baze) - kao ranije: tačka kreće odmah.
+        val (old, _) = atStairNode("NB-2-S-D")
+        repeat(4) { old.step(down, stepM) }
+        assertTrue(distance(old.position(), path[3]) > 0.5)
+    }
+
+    /** Silazak sa II na I, drugi krak; posle [secondSteps] koraka drugog kraka još [after] koraka pravo sa znakom [gait]. */
+    private fun descentThenStraight(secondSteps: Int, after: Int, gait: Float?): Pair<PdrLocator, Int?> {
+        val (locator, _) = atStairNode("NB-2-S-D")
+        val path = stairPath("NB/S", 2)
+        val down = magneticAzimuth(path[3], path[2])
+        val headings = List(10) { down } + (1..4).map { down - 180f * it / 5 } + List(secondSteps) { down - 180f }
+        assertEquals(listOf(PlaceReason.STEPENICE), headings.mapNotNull { locator.step(it, stepM, stairScore = stairGait) })
+        assertEquals(PdrPlace("NB", 1), locator.place)
+        var left: Int? = null
+        for (i in 1..after) {
+            locator.step(down - 180f, stepM, stairScore = gait)
+            if (locator.match != null) {
+                left = i
+                break
+            }
+        }
+        return locator to left
+    }
+
+    /** Poslednji krak silaska: koraci već liče na ravan hod pre očekivanog broja gazišta - sišao je, tačka izlazi sa stepeništa. */
+    @Test
+    fun descent_flatStepsBeforeTreadCount_leavesStairs() {
+        val (_, flat) = descentThenStraight(secondSteps = 6, after = 10, gait = flatGait)
+        // Medijana poslednja 3 koraka: dva koraka po ravnom su dovoljna.
+        assertEquals("izlazak na drugom koraku po ravnom", 2, flat)
+        // Bez znaka: tek posle preostalih gazišta i 3 koraka pravo.
+        val (_, old) = descentThenStraight(secondSteps = 6, after = 15, gait = null)
+        assertTrue("bez znaka $old", old!! > 5)
+    }
+
+    /** Posle očekivanog broja gazišta koraci i dalje liče na stepenice - krak je duži, tačka još ne izlazi (najviše 4 koraka). */
+    @Test
+    fun descent_stillStairLikeAfterTreadCount_staysOnStairs() {
+        val (onStairs, stillStairs) = descentThenStraight(secondSteps = 11, after = 4, gait = stairGait)
+        assertNull("još na stepeništu", stillStairs)
+        assertNull(onStairs.match)
+        val (_, old) = descentThenStraight(secondSteps = 11, after = 4, gait = null)
+        assertEquals(3, old)
+    }
+
     /** Hod do stepeništa i nazad (bez letova) ne menja sprat, a tačka ne kreće uz krak. */
     @Test
     fun toStairsAndBack_noFloorChange() {

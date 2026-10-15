@@ -263,6 +263,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Smer hoda iz senzora (ne pravac telefona); na Start se pretpostavlja telefon u ruci. */
     val walkingDirection = WalkingDirection()
 
+    /** Korak na stepenicama naspram koraka po ravnom (ubrzanje) - baza je hod korisnika po ravnom, čuva se između Start-ova. */
+    private val stairGait = StairGait()
+
     /** Snimak senzora od Start do Stop (samo debug build) - vidi [SensorRecorder]. */
     private var recorder: SensorRecorder? = null
 
@@ -582,7 +585,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         locator.destination = target?.node?.let { PdrPlace(it.buildingId, it.floor) }
         val lengthM = stepLengthM * AccelStepDetector.stepLengthFactor(peak)
         // Vreme koraka (senzor, isti sat kao elapsedRealtimeNanos) - zadržani koraci ([HandlingGate]) stižu kasnije.
-        val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs)
+        val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs, stairGait.score(timeNs))
+        if (!locator.onStairs) stairGait.flat(timeNs)
         walkingDirection.nearStairs = locator.nearStairs
         walkingDirection.onStairs = locator.onStairs
         state =state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
@@ -785,6 +789,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             recorder = recorder,
             lift = LiftRideDetector(),
             onLiftRide = ::onLiftRide,
+            gait = stairGait,
         ).also { it.start() }
         PdrTrackingService.start(app)
         state = state.copy(isTracking = true)

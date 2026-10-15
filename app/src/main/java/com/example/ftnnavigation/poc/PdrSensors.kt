@@ -33,6 +33,7 @@ class PdrSensorSession(
     private val recorder: SensorRecorder? = null,
     private val lift: LiftRideDetector? = null,
     private val onLiftRide: (LiftRide) -> Unit = {},
+    private val gait: StairGait? = null,
 ) {
     private val rotationMatrix = FloatArray(9)
     private var lastHeading = Float.NaN
@@ -42,6 +43,7 @@ class PdrSensorSession(
     // Korak stiže kad prođe vrh (do 0,2 s posle prelaska praga), sa vremenom prelaska.
     private val stepDetector = AccelStepDetector { timeNs, peak ->
         lift?.onStep(timeNs)
+        gait?.onStep(timeNs)
         direction.onStep(timeNs)?.let { step ->
             recorder?.step(timeNs, step, direction, peak)
             for (s in gate.onStep(HandlingGate.Step(timeNs, step, peak))) onStep(s.walk, s.peak, s.timeNs)
@@ -56,6 +58,7 @@ class PdrSensorSession(
                     recorder?.rotation(event.timestamp, rotationMatrix)
                     direction.onRotation(rotationMatrix, event.timestamp)
                     lift?.onRotation(rotationMatrix)
+                    gait?.onRotation(rotationMatrix)
                     if (trackSteps) {
                         gate.onRotation(rotationMatrix, event.timestamp).takeIf { it > 0 }?.let {
                             recorder?.droppedSteps(event.timestamp, it)
@@ -74,6 +77,8 @@ class PdrSensorSession(
                     lastAccelNs = event.timestamp
                     recorder?.accelerometer(event.timestamp, event.values[0], event.values[1], event.values[2])
                     direction.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
+                    // Pre detektora koraka - korak koji on javi vidi i ovaj uzorak.
+                    gait?.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
                     stepDetector.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
                     lift?.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)?.let { ride ->
                         recorder?.liftRide(event.timestamp, ride)

@@ -118,9 +118,11 @@ class PdrLocatorReplayTest {
         locator.clearRedo()
         stepM = 0.8f
         val out = StringBuilder("Snimak ${file.name}\n")
-        val track = StringBuilder("t,vrsta,mesto,sprat,x,y,gps_x,gps_y,tacnost,slobodna_x,slobodna_y,ivica,smer,duzina\n")
+        val track = StringBuilder("t,vrsta,mesto,sprat,x,y,gps_x,gps_y,tacnost,slobodna_x,slobodna_y,ivica,smer,duzina,znak,stepenice\n")
         val t0 = lines.firstNotNullOf { it.getOrNull(1)?.toLongOrNull() }
         var steps = 0
+        // Znak stepenica poslednjeg koraka ([StairGait]) - za `-putanja.csv`.
+        var lastScore: Float? = null
         // Odakle je poslednje sidro (START, RUCNO, prelaz) - za `promasaji.csv`.
         var anchorKind = "-"
         fun sec(t: Long) = (t - t0) / 1e9
@@ -139,11 +141,13 @@ class PdrLocatorReplayTest {
             val free = locator.match?.let { placement.toMeters(it.x, it.y) }
             val edge = locator.match?.point?.let { "${it.from.id} ${it.to.id} ${String.format(Locale.ROOT, "%.2f", it.t)}" } ?: ""
             track.appendLine(
-                String.format(Locale.ROOT, "%.2f,%s,%s,%d,%.2f,%.2f,%s,%s,%s,%s,%s,%s,%s,%s", sec(t), kind, locator.place.buildingId, locator.place.floor,
+                String.format(Locale.ROOT, "%.2f,%s,%s,%d,%.2f,%.2f,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s", sec(t), kind, locator.place.buildingId, locator.place.floor,
                     p.x, p.y, gps?.point?.x ?: "", gps?.point?.y ?: "", gps?.accuracyM ?: "",
                     free?.let { String.format(Locale.ROOT, "%.2f", it.x) } ?: "", free?.let { String.format(Locale.ROOT, "%.2f", it.y) } ?: "", edge,
                     azimuthDeg?.let { String.format(Locale.ROOT, "%.0f", locator.headingOnPlan(it)) } ?: "",
-                    lengthM?.let { String.format(Locale.ROOT, "%.2f", it) } ?: ""),
+                    lengthM?.let { String.format(Locale.ROOT, "%.2f", it) } ?: "",
+                    if (kind == "S") lastScore?.let { String.format(Locale.ROOT, "%.2f", it) } ?: "" else "",
+                    locator.onStairs),
             )
         }
         // Vrh koraka (dužina koraka po jačini): iz S reda (od 09.10.2026 uveče), a za starije snimke iz istog detektora
@@ -155,6 +159,8 @@ class PdrLocatorReplayTest {
             "C" -> detector = AccelStepDetector { _, peak -> peaks.addLast(peak) }
         }
         val lift = LiftRideDetector()
+        // Znak stepenica iz ubrzanja (kao na telefonu); PDR_GAIT=0 - bez njega, za poređenje.
+        val gait = StairGait().takeIf { System.getenv("PDR_GAIT") != "0" }
         // PDR_DETECTOR=1: koraci iz detektora ponovo puštenog kroz A redove (kao na telefonu, korak u trenutku kad prođe vrh),
         // smer iz [WalkingDirection]; S redovi se ne koriste - za proveru izmena detektora koraka.
         val redetect = System.getenv("PDR_DETECTOR") == "1"
@@ -170,7 +176,9 @@ class PdrLocatorReplayTest {
         var confirm: Confirm? = null
         fun apply(s: HandlingGate.Step) {
             val lengthM = if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak)
-            val reason = locator.step(s.walk.headingDeg, lengthM, s.walk.redoSteps, s.timeNs)
+            lastScore = gait?.score(s.timeNs)
+            val reason = locator.step(s.walk.headingDeg, lengthM, s.walk.redoSteps, s.timeNs, lastScore)
+            if (!locator.onStairs) gait?.flat(s.timeNs)
             direction?.nearStairs = locator.nearStairs
             direction?.onStairs = locator.onStairs
             if (reason != null) anchorKind = reason.name
@@ -179,6 +187,7 @@ class PdrLocatorReplayTest {
         }
         fun walk(t: Long, recorded: WalkingDirection.WalkStep?, peak: Float) {
             lift.onStep(t)
+            gait?.onStep(t)
             steps++
             val step = direction?.onStep(t)
             if (direction != null) stepRows.appendLine(String.format(Locale.ROOT, "%.2f,%.2f,%s,%.0f", sec(t), peak, direction.isAnchored, direction.offset))
@@ -204,6 +213,7 @@ class PdrLocatorReplayTest {
             when (f[0]) {
                 "R" -> FloatArray(9) { f[2 + it].toFloat() }.let {
                     lift.onRotation(it)
+                    gait?.onRotation(it)
                     direction?.onRotation(it, t)
                     gate.onRotation(it, t).takeIf { n -> n > 0 }?.let { n -> log(t, "odbačeno koraka: $n") }
                     gate.takeReleased().takeIf { r -> r.isNotEmpty() }?.let { released ->
@@ -223,6 +233,7 @@ class PdrLocatorReplayTest {
                 "A" -> run {
                     // Redosled kao u [PdrSensorSession]: smer, detektor koraka, lift.
                     direction?.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
+                    gait?.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
                     if (redetect) {
                         val before = steps
                         liveDetector.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
