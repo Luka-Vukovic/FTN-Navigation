@@ -33,6 +33,12 @@ import kotlin.math.sqrt
  * teren bez promene prelaza. Prag 1,0 sa donjom medijanom bi dao 3 umesto 16, ali na terenu gubi polazak uz stavljanje
  * telefona u džep (NTP 12.10., 17 koraka i silazak II -> I).
  *
+ * Proba 15.10. popodne: ruka ume i ~3 s da pomera telefon uz "korake" medijane 1,0-1,2 pre okreta (stavljanje prošlo celo, 13
+ * koraka), ili okret počne tek posle 3 s čekanja (13 koraka). Zato čeka svaki polazak u ruci ispod 1,3, i to 4 s. Replay: stavljanje
+ * 13 -> 0 i 16 -> 3, sa zastojem 9 -> 0, spor hod 52 -> 39 (brojano 30); teren isti srednji promašaj. Cena: polazak uz stavljanje
+ * telefona u džep gubi korake do smirivanja (proba 20 -> 14, NTP 12.10. ~6 koraka i silazak II -> I). Proban i odbačen: pustiti
+ * zadržano ako hod posle smirivanja nastavi bez pauze (isto što i 14.10. - lažni koraci pri "stavi i odmah kreni", lažni spratovi).
+ *
  * Cena: početak hoda kasni dok se ne potvrdi (1,5 s u ruci, pa tačka sustigne), polazak uz premeštanje telefona gubi korake do
  * smirivanja, a 1-2 koraka u mestu pa pauza se ne broje (teren: ~6 % koraka, većinom takvi).
  */
@@ -58,6 +64,9 @@ class HandlingGate {
     /** Telefon je u mirovanju bio uspravan (u džepu). */
     internal val restInPocket: Boolean get() = abs(restUp[2]) < UPRIGHT_Z
 
+    /** Odluke kapije (za replay). */
+    internal var trace: ((Long, String) -> Unit)? = null
+
     /** Odbačeni koraci od početka (za prikaz i snimak). */
     var dropped = 0
         private set
@@ -79,13 +88,14 @@ class HandlingGate {
             rest(timestampNs)
         }
         if (walking) {
-            if (timestampNs - lastStepNs >= PAUSE_NS) {
+            if (paused(timestampNs)) {
                 walking = false
                 rest(timestampNs)
             }
             return 0
         }
         if (!handling && angle(upFast, restUp) > HANDLING_DEG) {
+            trace?.invoke(timestampNs, "premeštanje, zadržano ${held.size}")
             handling = true
             upSlow.copyInto(settleRef)
             settleRefNs = timestampNs
@@ -93,6 +103,7 @@ class HandlingGate {
         var drop = 0
         if (handling && timestampNs - settleRefNs >= SETTLE_CHECK_NS) {
             if (angle(upSlow, settleRef) < SETTLE_DEG) {
+                trace?.invoke(timestampNs, "smiren, odbačeno ${held.size}")
                 drop = held.size
                 rest(timestampNs)
                 afterHandling = true
@@ -102,14 +113,16 @@ class HandlingGate {
             }
         }
         // Slab polazak u ruci se odluči kasnije: ako se telefon do tada nije okrenuo, to je hod (kao da je potvrđen odmah).
-        val paused = timestampNs - lastStepNs >= PAUSE_NS
+        val paused = paused(timestampNs)
         val softDone = held.isNotEmpty() && ((paused && !afterHandling) || timestampNs - held.first().timeNs >= softWaitNs())
         if (softDone && softHandWalk()) {
+            trace?.invoke(timestampNs, "slab hod u ruci pušten, ${held.size}")
             late += held
             walking = !paused
             afterHandling = false
             if (walking) held.clear() else rest(timestampNs)
         } else if (held.isNotEmpty() && paused) {
+            trace?.invoke(timestampNs, "pauza, odbačeno ${held.size}")
             drop = held.size
             rest(timestampNs)
         }
@@ -124,6 +137,8 @@ class HandlingGate {
 
     // Telefon je upravo premeštan i smiren (zadržani koraci odbačeni): slab polazak tada čeka duže - vađenje ume da se nastavi.
     private var afterHandling = false
+
+    private fun paused(timestampNs: Long) = timestampNs - lastStepNs >= PAUSE_NS
 
     private fun softWaitNs() = if (afterHandling) POCKET_SOFT_CONFIRM_NS else HAND_SOFT_CONFIRM_NS
 
@@ -142,6 +157,7 @@ class HandlingGate {
         // U džepu hod ima jak udar noge uz telefon; vađenje (ruka u džepu) samo slabe "korake" - dok se telefon ne okrene.
         if (inPocket && !pocketWalk() && step.timeNs - held.first().timeNs < POCKET_SOFT_CONFIRM_NS) return emptyList()
         if (!inPocket && medianPeak() < HAND_WALK_MEDIAN_PEAK && step.timeNs - held.first().timeNs < softWaitNs()) return emptyList()
+        trace?.invoke(step.timeNs, "hod potvrđen, ${held.size} (${if (inPocket) "džep" else "ruka"})")
         walking = true
         afterHandling = false
         return held.toList().also { held.clear() }
@@ -181,8 +197,8 @@ class HandlingGate {
         const val POCKET_STRONG_PEAK = 3f
         const val POCKET_WALK_MEDIAN_PEAK = 1.5f
         const val POCKET_SOFT_CONFIRM_NS = 8_000_000_000L
-        const val HAND_WALK_MEDIAN_PEAK = 0.9f
-        const val HAND_SOFT_CONFIRM_NS = 3_000_000_000L
+        const val HAND_WALK_MEDIAN_PEAK = 1.3f
+        const val HAND_SOFT_CONFIRM_NS = 4_000_000_000L
         private const val UPRIGHT_Z = 0.5
         const val HANDLING_DEG = 30.0
         private const val SETTLE_DEG = 12.0

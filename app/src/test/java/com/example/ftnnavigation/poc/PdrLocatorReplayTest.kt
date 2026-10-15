@@ -166,6 +166,7 @@ class PdrLocatorReplayTest {
         val stepRows = StringBuilder("t,vrh,sidro,odstupanje\n")
         // Kao na telefonu: koraci prolaze kroz [HandlingGate] (premeštanje telefona u mestu nije hod).
         val gate = HandlingGate()
+        gate.trace = { t, m -> log(t, "kapija: $m") }
         var confirm: Confirm? = null
         fun apply(s: HandlingGate.Step) {
             val lengthM = if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak)

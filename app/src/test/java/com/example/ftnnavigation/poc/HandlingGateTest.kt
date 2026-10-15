@@ -23,17 +23,20 @@ class HandlingGateTest {
      * primenjenih koraka (s).
      */
     private fun run(
-        gate: HandlingGate, seconds: Double, steps: List<Double>, peak: Float = 1.5f, tilt: (Double) -> Double,
+        gate: HandlingGate, seconds: Double, steps: List<Double>, peak: Float = 1.5f, peaks: List<Float>? = null,
+        tilt: (Double) -> Double,
     ): List<Double> {
         val applied = mutableListOf<Double>()
-        val pending = steps.sorted().toMutableList()
+        val pending = steps.indices.sortedBy { steps[it] }.toMutableList()
         var t = 0L
         while (t <= (seconds * 1e9).toLong()) {
             gate.onRotation(matrix(tilt(t / 1e9)), t)
             gate.takeReleased().forEach { applied += Math.round(it.timeNs / 1e6) / 1000.0 }
-            while (pending.isNotEmpty() && pending.first() * 1e9 <= t) {
-                val ns = (pending.removeAt(0) * 1e9).toLong()
-                gate.onStep(HandlingGate.Step(ns, WalkingDirection.WalkStep(0f), peak)).forEach { applied += Math.round(it.timeNs / 1e6) / 1000.0 }
+            while (pending.isNotEmpty() && steps[pending.first()] * 1e9 <= t) {
+                val i = pending.removeAt(0)
+                val ns = (steps[i] * 1e9).toLong()
+                val step = HandlingGate.Step(ns, WalkingDirection.WalkStep(0f), peaks?.get(i) ?: peak)
+                gate.onStep(step).forEach { applied += Math.round(it.timeNs / 1e6) / 1000.0 }
             }
             t += rotationNs
         }
@@ -104,6 +107,33 @@ class HandlingGateTest {
         val applied = run(gate, 16.0, handling, peak = 0.8f) { t -> 10.0 + 80.0 * ((t - 3.5) / 2.0).coerceIn(0.0, 1.0) }
         assertTrue("applied=$applied", applied.isEmpty())
         assertEquals(22, gate.dropped)
+    }
+
+    @Test
+    fun puttingInPocketFromHand_mediumStepsBeforeTurn_dropped() {
+        // Proba 15.10.2026 popodne (250-257 s): ruka ~3 s pomera telefon (vrhovi 0,6-1,3 - medijana 1,1, iznad ranijeg praga
+        // 0,9), pa ga okreće u džep - ranije potvrđeno kao hod posle 1,5 s i prošlo celo stavljanje (13 koraka).
+        val gate = HandlingGate()
+        val handling = listOf(2.17, 2.82, 3.89, 4.50, 4.89, 5.37, 5.71, 5.97, 6.51, 6.83, 7.20, 8.08, 8.61)
+        val peaks = listOf(0.63f, 0.87f, 1.08f, 1.24f, 1.30f, 1.13f, 0.73f, 2.54f, 1.43f, 0.72f, 1.13f, 1.30f, 0.82f)
+        // Okret od mirovanja na snimku: 17° (5,37 s), 36° (5,71), 61° (5,97), 106° (8,08).
+        val applied = run(gate, 14.0, handling, peaks = peaks) { t -> 30.0 + 100.0 * ((t - 5.0) / 1.6).coerceIn(0.0, 1.0) }
+        assertTrue("applied=$applied", applied.isEmpty())
+        assertEquals(13, gate.dropped)
+    }
+
+    @Test
+    fun slowWeakStartInHand_turnAfterThreeSeconds_dropped_walkKept() {
+        // Proba 15.10.2026 popodne (680-700 s): ruka pomera telefon ~2,6 s (vrhovi 0,7-1,2), okret ka džepu počne tek posle
+        // 3 s čekanja - ranije pušteno kao slab hod u ruci, pa i celo stavljanje (13 koraka); posle stoji 3 s i polako hoda.
+        val handling = listOf(2.44, 3.27, 3.78, 4.38, 5.31, 5.57, 5.85, 6.12, 6.72, 7.01, 7.76, 8.28, 8.70)
+        val peaks = listOf(0.66f, 0.91f, 0.98f, 1.16f, 1.04f, 0.91f, 1.80f, 0.80f, 0.83f, 0.68f, 0.66f, 3.03f, 1.03f)
+        val walk = steps(11.75, 1.0, 12)
+        // Okret na snimku prelazi 30° ~2,8 s posle prvog "koraka" (5,2 s), 80° posle još 0,8 s.
+        val applied = run(HandlingGate(), 26.0, handling + walk, peaks = peaks + List(walk.size) { 3f }) { t ->
+            30.0 + 70.0 * ((t - 4.9) / 1.2).coerceIn(0.0, 1.0)
+        }
+        assertEquals(walk, applied)
     }
 
     @Test
