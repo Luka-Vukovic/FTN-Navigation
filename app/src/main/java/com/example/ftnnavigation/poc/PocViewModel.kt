@@ -694,6 +694,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val place = if (building != null) PdrPlace(building.buildingId, floorOf(building)) else PdrPlace.CAMPUS
         val before = locator.place
         val check = locator.setPosition(place, point)
+        // Smer hoda odmah zna da je tačka uz stepenište - ne tek posle prvog primenjenog koraka ([HandlingGate] ih zadržava).
+        walkingDirection.nearStairs = locator.nearStairs
+        walkingDirection.onStairs = locator.onStairs
         // Ispravka sprata posle stepeništa je mogla da nauči smer okreta, a merenje smera zajedničku ispravku.
         AppSettings.setStairTurns(getApplication(), locator.learnedStairTurns)
         AppSettings.setHeadingErrors(getApplication(), locator.learnedHeadingErrors)

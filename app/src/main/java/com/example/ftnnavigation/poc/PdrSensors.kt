@@ -56,8 +56,12 @@ class PdrSensorSession(
                     recorder?.rotation(event.timestamp, rotationMatrix)
                     direction.onRotation(rotationMatrix, event.timestamp)
                     lift?.onRotation(rotationMatrix)
-                    if (trackSteps) gate.onRotation(rotationMatrix, event.timestamp).takeIf { it > 0 }?.let {
-                        recorder?.droppedSteps(event.timestamp, it)
+                    if (trackSteps) {
+                        gate.onRotation(rotationMatrix, event.timestamp).takeIf { it > 0 }?.let {
+                            recorder?.droppedSteps(event.timestamp, it)
+                        }
+                        // Slab polazak u ruci se pušta kasnije (posle čekanja ili na pauzi).
+                        for (s in gate.takeReleased()) onStep(s.walk, s.peak, s.timeNs)
                     }
                     // Senzor javlja ~50 puta u sekundi - prikaz se osvežava tek na promenu od 1°.
                     val heading = direction.heading() ?: return

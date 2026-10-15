@@ -24,6 +24,15 @@ import kotlin.math.sqrt
  * potvrde. Zato se iz džepa hod potvrđuje tek uz jak udar noge ([POCKET_STRONG_PEAK]) ili medijanu vrhova od bar
  * [POCKET_WALK_MEDIAN_PEAK] (hod iz lifta u džepu 09.10.: vrhovi 1,1-2,6), a tih hod posle [POCKET_SOFT_CONFIRM_NS].
  *
+ * Iz ruke (15.10.2026): pre stavljanja u džep ruka ume 1,5-2 s da pomera telefon uz slabe "korake" (vrh 0,6-1,2) pre nego što
+ * se okrene - potvrđeno kao hod, pa je prošlo celo stavljanje (do 22 koraka). Zato slab polazak u ruci (medijana vrhova ispod
+ * [HAND_WALK_MEDIAN_PEAK]) čeka [HAND_SOFT_CONFIRM_NS] da se vidi da li se telefon okreće; ako se ne okrene, koraci se puste
+ * (i na pauzi - kratak pravi hod se ne gubi, [takeReleased]). Posle odbačenog premeštanja slab polazak čeka
+ * [POCKET_SOFT_CONFIRM_NS] i pauza ga odbacuje (telefon je smiren usred vađenja, a vađenje se nastavlja).
+ * Proba 15.10. (replay): stavljanje u džep 3x 38 -> 16 koraka, sa zastojem 16 -> 9, hod u džepu 35/34 -> 29/29 (brojano 30);
+ * teren bez promene prelaza. Prag 1,0 sa donjom medijanom bi dao 3 umesto 16, ali na terenu gubi polazak uz stavljanje
+ * telefona u džep (NTP 12.10., 17 koraka i silazak II -> I).
+ *
  * Cena: početak hoda kasni dok se ne potvrdi (1,5 s u ruci, pa tačka sustigne), polazak uz premeštanje telefona gubi korake do
  * smirivanja, a 1-2 koraka u mestu pa pauza se ne broje (teren: ~6 % koraka, većinom takvi).
  */
@@ -42,6 +51,12 @@ class HandlingGate {
     private var handling = false
     private val settleRef = DoubleArray(3)
     private var settleRefNs = 0L
+
+    /** Okret telefona od poslednjeg mirovanja (za analizu u replay-u). */
+    internal val restAngleDeg: Double get() = angle(upFast, restUp)
+
+    /** Telefon je u mirovanju bio uspravan (u džepu). */
+    internal val restInPocket: Boolean get() = abs(restUp[2]) < UPRIGHT_Z
 
     /** Odbačeni koraci od početka (za prikaz i snimak). */
     var dropped = 0
@@ -80,18 +95,40 @@ class HandlingGate {
             if (angle(upSlow, settleRef) < SETTLE_DEG) {
                 drop = held.size
                 rest(timestampNs)
+                afterHandling = true
             } else {
                 upSlow.copyInto(settleRef)
                 settleRefNs = timestampNs
             }
         }
-        if (held.isNotEmpty() && timestampNs - lastStepNs >= PAUSE_NS) {
+        // Slab polazak u ruci se odluči kasnije: ako se telefon do tada nije okrenuo, to je hod (kao da je potvrđen odmah).
+        val paused = timestampNs - lastStepNs >= PAUSE_NS
+        val softDone = held.isNotEmpty() && ((paused && !afterHandling) || timestampNs - held.first().timeNs >= softWaitNs())
+        if (softDone && softHandWalk()) {
+            late += held
+            walking = !paused
+            afterHandling = false
+            if (walking) held.clear() else rest(timestampNs)
+        } else if (held.isNotEmpty() && paused) {
             drop = held.size
             rest(timestampNs)
         }
         dropped += drop
         return drop
     }
+
+    /** Zadržani koraci koje je [onRotation] pustio (slab polazak u ruci, odlučen kasnije); posle poziva lista je prazna. */
+    fun takeReleased(): List<Step> = late.toList().also { late.clear() }
+
+    private val late = ArrayList<Step>()
+
+    // Telefon je upravo premeštan i smiren (zadržani koraci odbačeni): slab polazak tada čeka duže - vađenje ume da se nastavi.
+    private var afterHandling = false
+
+    private fun softWaitNs() = if (afterHandling) POCKET_SOFT_CONFIRM_NS else HAND_SOFT_CONFIRM_NS
+
+    private fun softHandWalk(): Boolean =
+        !handling && abs(restUp[2]) >= UPRIGHT_Z && held.size >= CONFIRM_STEPS && held.last().timeNs - held.first().timeNs >= CONFIRM_NS
 
     /** Korak: vraća korake koje sada treba primeniti (ovaj, zadržane, ili nijedan). */
     fun onStep(step: Step): List<Step> {
@@ -104,20 +141,27 @@ class HandlingGate {
         if (handling || held.size < CONFIRM_STEPS || step.timeNs - held.first().timeNs < confirmNs) return emptyList()
         // U džepu hod ima jak udar noge uz telefon; vađenje (ruka u džepu) samo slabe "korake" - dok se telefon ne okrene.
         if (inPocket && !pocketWalk() && step.timeNs - held.first().timeNs < POCKET_SOFT_CONFIRM_NS) return emptyList()
+        if (!inPocket && medianPeak() < HAND_WALK_MEDIAN_PEAK && step.timeNs - held.first().timeNs < softWaitNs()) return emptyList()
         walking = true
+        afterHandling = false
         return held.toList().also { held.clear() }
     }
 
     private fun pocketWalk(): Boolean {
         if (held.any { it.peak >= POCKET_STRONG_PEAK }) return true
+        return medianPeak() >= POCKET_WALK_MEDIAN_PEAK
+    }
+
+    private fun medianPeak(): Float {
         val peaks = held.map { it.peak }.sorted()
-        return peaks[peaks.size / 2] >= POCKET_WALK_MEDIAN_PEAK
+        return peaks[peaks.size / 2]
     }
 
     /** Mirovanje: trenutna orijentacija je polazna, ništa se ne premešta. */
     private fun rest(timestampNs: Long) {
         held.clear()
         handling = false
+        afterHandling = false
         upFast.copyInto(restUp)
         settleRefNs = timestampNs
     }
@@ -137,6 +181,8 @@ class HandlingGate {
         const val POCKET_STRONG_PEAK = 3f
         const val POCKET_WALK_MEDIAN_PEAK = 1.5f
         const val POCKET_SOFT_CONFIRM_NS = 8_000_000_000L
+        const val HAND_WALK_MEDIAN_PEAK = 0.9f
+        const val HAND_SOFT_CONFIRM_NS = 3_000_000_000L
         private const val UPRIGHT_Z = 0.5
         const val HANDLING_DEG = 30.0
         private const val SETTLE_DEG = 12.0

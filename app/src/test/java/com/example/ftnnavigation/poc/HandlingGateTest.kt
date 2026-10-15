@@ -30,6 +30,7 @@ class HandlingGateTest {
         var t = 0L
         while (t <= (seconds * 1e9).toLong()) {
             gate.onRotation(matrix(tilt(t / 1e9)), t)
+            gate.takeReleased().forEach { applied += Math.round(it.timeNs / 1e6) / 1000.0 }
             while (pending.isNotEmpty() && pending.first() * 1e9 <= t) {
                 val ns = (pending.removeAt(0) * 1e9).toLong()
                 gate.onStep(HandlingGate.Step(ns, WalkingDirection.WalkStep(0f), peak)).forEach { applied += Math.round(it.timeNs / 1e6) / 1000.0 }
@@ -92,6 +93,44 @@ class HandlingGateTest {
         val walk = steps(1.0, 0.55, 24)
         val applied = run(HandlingGate(), 16.0, walk, peak = 0.8f) { t -> 85.0 + 10.0 * sin(2 * Math.PI * t / 1.1) }
         assertEquals(walk, applied)
+    }
+
+    @Test
+    fun puttingInPocketFromHand_weakStepsBeforeTurn_dropped() {
+        // Proba 15.10.2026 (111-122 s): ruka ~2 s pomera telefon uz slabe "korake" (vrh 0,6-1,2, na ~0,45 s) pre nego što se
+        // okrene ka džepu, pa još ~5 s nameštanja u džepu - ranije potvrđeno kao hod posle 1,5 s i prošlo celo (22 koraka).
+        val gate = HandlingGate()
+        val handling = steps(2.0, 0.45, 22)
+        val applied = run(gate, 16.0, handling, peak = 0.8f) { t -> 10.0 + 80.0 * ((t - 3.5) / 2.0).coerceIn(0.0, 1.0) }
+        assertTrue("applied=$applied", applied.isEmpty())
+        assertEquals(22, gate.dropped)
+    }
+
+    @Test
+    fun weakWalkInHand_appliedAfterWait() {
+        // Spor, tih hod u ruci (hod po stanu 15.10.: vrhovi 0,6-1,2) - telefon se ne okreće, pušta se posle 3 s, svi koraci.
+        val walk = steps(1.0, 0.85, 14)
+        val applied = run(HandlingGate(), 16.0, walk, peak = 0.7f) { 20.0 }
+        assertEquals(walk, applied)
+    }
+
+    @Test
+    fun shortWeakWalkInHand_thenStop_applied() {
+        // 4 tiha koraka pa stoji: telefon se nije okrenuo - na pauzi se puste (kao ranije posle 1,5 s).
+        val walk = steps(1.0, 0.6, 4)
+        val applied = run(HandlingGate(), 8.0, walk, peak = 0.7f) { 20.0 }
+        assertEquals(walk, applied)
+    }
+
+    @Test
+    fun weakStepsRightAfterDroppedHandling_dropped() {
+        // Proba 15.10.2026 (411-420 s): vađenje iz džepa, telefon se smiri usred pokreta (6 odbačeno), pa još ~4 s slabih
+        // "koraka" bez okreta i pauza - ranije pušteno kao hod u ruci.
+        val gate = HandlingGate()
+        val handling = steps(2.0, 0.5, 6) + steps(5.6, 0.7, 6)
+        val applied = run(gate, 14.0, handling, peak = 0.7f) { t -> 90.0 - 70.0 * ((t - 3.5) / 1.2).coerceIn(0.0, 1.0) }
+        assertTrue("applied=$applied", applied.isEmpty())
+        assertEquals(12, gate.dropped)
     }
 
     @Test

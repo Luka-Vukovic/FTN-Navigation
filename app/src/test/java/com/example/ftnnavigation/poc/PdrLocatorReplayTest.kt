@@ -61,7 +61,24 @@ class PdrLocatorReplayTest {
             println(events)
         }
         File(outDir, "promasaji.csv").writeText(misses.toString())
+        File(outDir, "potvrde.csv").writeText(confirms.toString())
     }
+
+    /**
+     * Red `potvrde.csv`: [HandlingGate] je pustio zadržane korake (hod potvrđen iz mirovanja) - koliko ih je, za koliko s,
+     * vrhovi, da li je mirovanje bilo u džepu, najveći okret od mirovanja do 1 / 2 / 4 s posle i koraka do sledeće pauze.
+     */
+    private class Confirm(val file: String, val t: Double, val held: Int, val spanS: Double, val peaks: List<Float>, val pocket: Boolean) {
+        var turn1 = 0.0
+        var turn2 = 0.0
+        var turn4 = 0.0
+        var after = 0
+        var lastT = t
+        fun line() = String.format(Locale.ROOT, "%s,%.2f,%d,%.2f,%s,%s,%.0f,%.0f,%.0f,%d,%.1f", file.removePrefix("hod-"), t, held, spanS,
+            peaks.joinToString(" ") { String.format(Locale.ROOT, "%.2f", it) }, pocket, turn1, turn2, turn4, after, lastT - t)
+    }
+
+    private val confirms = StringBuilder("snimak,t,zadrzano,raspon,vrhovi,dzep,okret1,okret2,okret4,posle,trajanje\n")
 
     /**
      * Red `promasaji.csv` za "Ovde sam" ([marked] na [place]): sidro (poslednji START / RUCNO / prelaz - [anchorKind]),
@@ -149,6 +166,7 @@ class PdrLocatorReplayTest {
         val stepRows = StringBuilder("t,vrh,sidro,odstupanje\n")
         // Kao na telefonu: koraci prolaze kroz [HandlingGate] (premeštanje telefona u mestu nije hod).
         val gate = HandlingGate()
+        var confirm: Confirm? = null
         fun apply(s: HandlingGate.Step) {
             val lengthM = if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak)
             val reason = locator.step(s.walk.headingDeg, lengthM, s.walk.redoSteps, s.timeNs)
@@ -167,7 +185,14 @@ class PdrLocatorReplayTest {
                 if (step.redoSteps != recorded.redoSteps) log(t, "smer: ponovi ${step.redoSteps} (telefon ${recorded.redoSteps})")
                 maxDiff = maxOf(maxDiff, abs(angleDiffDeg(step.headingDeg, recorded.headingDeg)))
             }
-            gate.onStep(HandlingGate.Step(t, step ?: recorded ?: return, peak)).forEach(::apply)
+            val pocket = gate.restInPocket
+            val released = gate.onStep(HandlingGate.Step(t, step ?: recorded ?: return, peak))
+            if (released.size > 1) {
+                confirm?.let { confirms.appendLine(it.line()) }
+                confirm = Confirm(file.nameWithoutExtension, sec(t), released.size, sec(t) - sec(released.first().timeNs),
+                    released.map { it.peak }, pocket)
+            } else if (released.isNotEmpty()) confirm?.let { it.after++; it.lastT = sec(t) }
+            released.forEach(::apply)
         }
         fun newDetector() = AccelStepDetector { timeNs, peak -> walk(timeNs, null, peak) }
         var liveDetector = newDetector()
@@ -180,6 +205,18 @@ class PdrLocatorReplayTest {
                     lift.onRotation(it)
                     direction?.onRotation(it, t)
                     gate.onRotation(it, t).takeIf { n -> n > 0 }?.let { n -> log(t, "odbačeno koraka: $n") }
+                    gate.takeReleased().takeIf { r -> r.isNotEmpty() }?.let { released ->
+                        confirm?.let { c -> confirms.appendLine(c.line()) }
+                        confirm = Confirm(file.nameWithoutExtension, sec(t), released.size, sec(released.last().timeNs) - sec(released.first().timeNs),
+                            released.map { s -> s.peak }, false)
+                        released.forEach(::apply)
+                    }
+                    confirm?.let { c ->
+                        val dt = sec(t) - c.t
+                        if (dt <= 1.0) c.turn1 = maxOf(c.turn1, gate.restAngleDeg)
+                        if (dt <= 2.0) c.turn2 = maxOf(c.turn2, gate.restAngleDeg)
+                        if (dt <= 4.0) c.turn4 = maxOf(c.turn4, gate.restAngleDeg)
+                    }
                 }
                 "C" -> if (redetect) liveDetector = newDetector()
                 "A" -> run {
@@ -248,6 +285,9 @@ class PdrLocatorReplayTest {
                         } else {
                             log(t, "START ${place.buildingId} ${place.floor}")
                         }
+                        // Kao [PocViewModel.setPosition]: smer hoda odmah zna da je tačka uz stepenište.
+                        direction?.nearStairs = locator.nearStairs
+                        direction?.onStairs = locator.onStairs
                         steps = 0
                         anchorKind = "START"
                         row(t, "L")
@@ -259,6 +299,8 @@ class PdrLocatorReplayTest {
                         val before = locator.position()
                         val missLine = missRow(file, sec(t), steps, anchorKind, locator, place, Offset(f[5].toFloat(), f[6].toFloat()))
                         val check = locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()))
+                        direction?.nearStairs = locator.nearStairs
+                        direction?.onStairs = locator.onStairs
                         // Označeno mesto zalepljeno za graf (ono što aplikacija posle prikazuje).
                         val snapped = (locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw)?.let { locator.localMeters(place, it) }
                         misses.appendLine(missLine + String.format(Locale.ROOT, ",%.2f,%.2f", snapped?.x ?: Double.NaN, snapped?.y ?: Double.NaN))
@@ -294,6 +336,7 @@ class PdrLocatorReplayTest {
                 }
             }
         }
+        confirm?.let { confirms.appendLine(it.line()) }
         if (direction != null) File("build/pdr-replay", file.nameWithoutExtension + "-koraci.csv").writeText(stepRows.toString())
         if (redetect) out.appendLine("Detektor: $redetected koraka (telefon $recordedSteps)")
         else if (peaks.isNotEmpty()) out.appendLine("Detektor ponovo pušten: ${peaks.size} koraka više nego S redova (vrhovi možda pomereni)")
