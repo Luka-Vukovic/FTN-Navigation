@@ -24,13 +24,14 @@ class HandlingGateTest {
      */
     private fun run(
         gate: HandlingGate, seconds: Double, steps: List<Double>, peak: Float = 1.5f, peaks: List<Float>? = null,
-        tilt: (Double) -> Double,
+        up: ((Double) -> DoubleArray)? = null, tilt: (Double) -> Double = { 0.0 },
     ): List<Double> {
         val applied = mutableListOf<Double>()
         val pending = steps.indices.sortedBy { steps[it] }.toMutableList()
         var t = 0L
         while (t <= (seconds * 1e9).toLong()) {
-            gate.onRotation(matrix(tilt(t / 1e9)), t)
+            val m = up?.let { f -> FloatArray(9).also { m -> f(t / 1e9).forEachIndexed { i, v -> m[6 + i] = v.toFloat() } } }
+            gate.onRotation(m ?: matrix(tilt(t / 1e9)), t)
             gate.takeReleased().forEach { applied += Math.round(it.timeNs / 1e6) / 1000.0 }
             while (pending.isNotEmpty() && steps[pending.first()] * 1e9 <= t) {
                 val i = pending.removeAt(0)
@@ -186,5 +187,57 @@ class HandlingGateTest {
         val walk = steps(6.0, 0.55, 16)
         val applied = run(HandlingGate(), 16.0, handling + walk) { t -> 30.0 + 60.0 * ((t - 2.0) / 2.0).coerceIn(0.0, 1.0) }
         assertEquals(walk, applied)
+    }
+
+    /** Nagib po tačkama (s, stepeni), linearno između njih. */
+    private fun tiltPath(vararg points: Pair<Double, Double>): (Double) -> Double = { t ->
+        val i = points.indexOfFirst { it.first > t }
+        when (i) {
+            -1 -> points.last().second
+            0 -> points.first().second
+            else -> {
+                val (t0, a0) = points[i - 1]
+                val (t1, a1) = points[i]
+                a0 + (a1 - a0) * (t - t0) / (t1 - t0)
+            }
+        }
+    }
+
+    @Test
+    fun weakWalkInHand_phoneLiftedToFace_stepsKept() {
+        // Proba 16.10. (hand-look, 103-113 s): tih polazak, posle 4 koraka telefon podignut ka licu (skoro uspravan), pa
+        // postepeno spušten - hod bez prekida. Bilo: 10 od 13 koraka odbačeno kao premeštanje.
+        val walk = listOf(3.15, 3.70, 4.49, 4.87, 5.23, 6.02, 6.93, 7.85, 8.77, 9.50, 10.44, 11.34, 12.19, 13.01)
+        val peaks = listOf(0.78f, 0.81f, 0.93f, 0.73f, 2.49f, 1.64f, 1.67f, 0.92f, 1.38f, 1.99f, 1.65f, 1.43f, 0.92f, 1.14f)
+        val applied = run(
+            HandlingGate(), 16.0, walk, peaks = peaks,
+            tilt = tiltPath(0.0 to 23.0, 4.9 to 25.0, 6.0 to 82.0, 6.9 to 70.0, 7.85 to 57.0, 8.8 to 46.0, 9.5 to 37.0, 11.3 to 30.0, 13.0 to 24.0),
+        )
+        assertEquals(walk, applied)
+    }
+
+    @Test
+    fun putInPocketAndWalkAway_looseSwing_walkKept() {
+        // Proba 16.10. (away, 855-866 s): stavi u džep i odmah kreni; u labavom džepu se telefon ljulja ~35°, pa je posle
+        // svakog smirivanja to bilo novo premeštanje i hod je odbacivan (14 od 20 koraka).
+        val insertion = listOf(5.86, 6.46, 6.93)
+        val walk = listOf(7.69, 8.55, 9.17, 9.61, 10.01, 10.96, 11.74, 12.33, 13.21, 14.18, 15.04, 15.84, 16.67, 17.29, 18.36)
+        val peaks = listOf(0.89f, 1.29f, 1.05f, 5.9f, 3.49f, 2.68f, 0.66f, 3.23f, 13.77f, 2.37f, 1.63f, 3.41f, 9.47f, 2.0f, 0.91f, 2.73f, 0.95f, 3.32f)
+        // "Gore" u koordinatama telefona sa snimka: u ruci, pa iz ruke na bok i u džep, pa ljuljanje između dva položaja.
+        val hand = doubleArrayOf(0.03, 0.33, 0.94)
+        val side = doubleArrayOf(0.85, 0.45, 0.24)
+        val forward = doubleArrayOf(0.45, 0.83, 0.30)
+        val back = doubleArrayOf(0.26, 0.95, -0.20)
+        fun mix(a: DoubleArray, b: DoubleArray, k: Double) = DoubleArray(3) { a[it] + (b[it] - a[it]) * k.coerceIn(0.0, 1.0) }
+        val applied = run(HandlingGate(), 20.0, insertion + walk, peaks = peaks, up = { t ->
+            when {
+                t < 5.4 -> hand
+                t < 6.4 -> mix(hand, side, t - 5.4)
+                t < 7.4 -> mix(side, forward, t - 6.4)
+                else -> mix(forward, back, 0.5 - 0.5 * cos(2 * Math.PI * (t - 7.4) / 1.6))
+            }
+        })
+        assertTrue("applied=$applied", applied.containsAll(walk))
+        assertTrue("applied=$applied", applied.none { it < 6.9 })
     }
 }
