@@ -262,6 +262,19 @@ class NtpGraphTest {
         }
     }
 
+    /**
+     * Teren 16.10.2026 (i 12./13.10.): S1 je dole otvoren ka hodniku kod L1 - sa dna kraka naniže (S1-D) koso pred lift, ne nazad
+     * oko M450 ("opet se zaglavio na stepenicama, možda treba prilagoditi graf").
+     */
+    @Test
+    fun s1FootOpensIntoLiftCorridor() {
+        for (floor in 1..5) {
+            assertNotNull("sprat $floor", graph.edge("NTP-$floor-S1-D", "NTP-$floor-U513"))
+            val route = checkNotNull(graph.route("NTP-$floor-S1-D", "NTP-$floor-L1")).nodes.map { it.id }
+            assertFalse(route.toString(), "NTP-$floor-M450" in route)
+        }
+    }
+
     /** Evakuacioni putevi se ne koriste (korisnik, 02.10.2026): terasa V sprata ne spaja hodnik i desno jezgro. */
     @Test
     fun topFloorTerrace_notUsed() {

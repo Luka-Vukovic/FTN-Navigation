@@ -57,8 +57,15 @@ S1_PATH_L = [(250, 174), (250, 209), (222, 209), (222, 174)]
 S1 = ("S1", None, S1_PATH_R[0])
 S1_FLIGHTS_M1 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, draw_down=False),
                  Flights(S1_MID, S1_LEFT, S1_LANDING, S1_PATH_L, draw_down=False)]
-# Čvor S1-D (prizemlje) je gde se hodnik spaja sa oba bočna kraka - hodnik vodi pravo na krakove (replay 04.10.: AMF -> Kula).
-S1_TOP = (250, 172)
+# Čvor S1-D (prizemlje) je gde se hodnik račva ka oba bočna kraka: sredinom hodnika do račvanja, pa uz levi i desni zid do
+# vrha kraka (sredina je ograda nad praznim prostorom). Korisnik nacrtao, teren 16.10.2026 ("treba ispraviti graf
+# kretanja"). Do tada je S1-D bio na sredini kraja hodnika, uz ogradu, a krakovi koso od njega (replay 04.10.: AMF -> Kula).
+# Od račvanja koso do trake (~38° od hodnika): korak koji se blago otkloni ka zidu ide punom dužinom duž te ivice
+# (MapMatcher, [FULL_STEP_DEG] 35°); vodoravna spojnica (prva verzija, kao na crtežu) je zadržavala tačku na račvanju.
+S1_TOP = (250, 105)
+S1_LANES = {"DESNO": (277, 140), "LEVO": (222, 140)}
+# Vrata Čitaonice uz desni krak (korisnik nacrtao, teren 16.10.2026) - uz ona sa FtnGO-a na sredini zida.
+READING_ROOM_STAIR_DOOR = (287, 142)
 # Prizemlje (teren 05.10.2026, korisnik + "amf stepenice kod citaonice.png"): sa kraja hodnika levi i desni krak naniže uz
 # zidove, između njih ograda nad praznim prostorom (dole stakleni trem) - srednji krak je ispod galerije, u prizemlju se ne crta.
 S1_VOID = S1_MID
@@ -67,9 +74,11 @@ S1_FLIGHTS_0 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, down_node=S1_TO
 # Trem iz Kule: sa podesta S1 (na -1 uz srednji krak, u prizemlju niz bočni krak).
 # Krakovi do podesta su HOD ivice sa stepenicima (STEPS) - ruta "bez stepenica" ne ide tuda.
 KULA_VIA_M1 = ("S1", [("PODEST-S1", (250, 207), STEPS)])
-KULA_VIA_0 = ("S1-D", [("S1-D-KRAK", (277, 176)), ("PODEST-S1-D", (277, 207), STEPS), ("PODEST-S1", (250, 207))])
+KULA_VIA_0 = ("S1-D", [("S1-D-DESNO", S1_LANES["DESNO"]), ("S1-D-KRAK", (277, 176)), ("PODEST-S1-D", (277, 207), STEPS),
+                       ("PODEST-S1", (250, 207))])
 # I levi bočni krak (teren 12.10.2026: "graf prepoznaje samo jednu stranu stepenica, bliže čitaonici" - do tada samo desni).
-KULA_VIA_0_L = ("S1-D", [("S1-D-KRAK-L", (222, 176)), ("PODEST-S1-D-L", (222, 207), STEPS), ("PODEST-S1", (250, 207))])
+KULA_VIA_0_L = ("S1-D", [("S1-D-LEVO", S1_LANES["LEVO"]), ("S1-D-KRAK-L", (222, 176)), ("PODEST-S1-D-L", (222, 207), STEPS),
+                         ("PODEST-S1", (250, 207))])
 PASSAGE_KULA = (250, 214)
 
 # S2 (uz zapadni zid, između AR4 i AR5): pravo stepenište - dva kraka u nizu sa podestom između. Iz prizemlja se ulazi
@@ -130,7 +139,8 @@ def floor_m1():
 def floor_0():
     return {
         "title": "Prizemlje",
-        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, 170)], [(555, 188), (690, 188)]],  # do vrha krakova S1
+        # Sredinom hodnika do račvanja ka krakovima S1 (S1-D, 0,4 m dalje).
+        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, S1_TOP[1] - 4)], [(555, 188), (690, 188)]],
         "corridors": [rect_poly(170, -28, 832, 7), rect_poly(212, 7, 287, 172),  # hodnik do ograde iznad S1
                       rect_poly(30, -32, 170, 5),  # prolaz ka F-bloku
                       rect_poly(553, 168, 693, 207),  # hodnik iza amfiteatara, iz prolaza iz NB-a
@@ -175,7 +185,12 @@ PLANS = {-1: floor_m1(), 0: floor_0(), 1: floor_1()}
 
 
 def build():
-    return build_graph(BUILDING, PLANS, stairs={"S1": [-1, 0], "S2": [-1, 0], "S3": [0, 1]}, lifts={})
+    g = build_graph(BUILDING, PLANS, stairs={"S1": [-1, 0], "S2": [-1, 0], "S3": [0, 1]}, lifts={})
+    # Druga vrata Čitaonice su na desnoj traci ka kraku S1 (nije deo mreže hodnika, pa ih common.py ne kači sam).
+    door = g.node(0, "V{}_{}".format(*READING_ROOM_STAIR_DOOR), *READING_ROOM_STAIR_DOOR, kind="VRATA")
+    g.edge(g.nid(0, "Čitaonica"), door)
+    g.edge(door, g.nid(0, "S1-D-DESNO"))
+    return g
 
 
 def main():

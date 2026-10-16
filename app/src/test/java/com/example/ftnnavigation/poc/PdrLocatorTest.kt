@@ -357,6 +357,18 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("AMF", 0), locator.place)
     }
 
+    /**
+     * Isti trem, a odredište je na -1: tamo se i stiže (teren 16.10.2026: dva puta iz trema pravo niz srednji krak na -1, a tačka
+     * je otišla u prizemlje; po koracima na podestu se gore i dole ne razlikuju).
+     */
+    @Test
+    fun kulaToAmf_throughPorch_toDestinationLevel() {
+        val locator = locatorAt(inner("KULA-0-PROLAZ-AMF").id)
+        locator.destination = PdrPlace("AMF", -1)
+        locator.passThrough("KULA-0-PROLAZ-AMF", "AMF-m1-PROLAZ-KULA")
+        assertEquals(PdrPlace("AMF", -1), locator.place)
+    }
+
     @Test
     fun amfToF_throughBridge() {
         val locator = locatorAt(inner("AMF-0-PROLAZ-F").id)
@@ -1227,6 +1239,40 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("AMF", -1), locator.place)
     }
 
+    /**
+     * Teren 16.10.2026 (a-m1): prizemljem do S1, levom trakom niz levi bočni krak, okret na podestu ulevo i srednjim krakom na -1
+     * (azimuti sa snimka, uz ispravku smera tog trenutka -11°). Tačka je išla desnim krakom, a okret na podestu je posle 8 koraka
+     * srednjim krakom proglašen povratkom gore: hodnik prizemlja ide istim pravcem kao bočni krak, pa je "prvi let" sa hodom
+     * kroz hodnik bio duži od 24 koraka i promena sprata nije priznata ("aplikacija misli da idem opet na prizemlje").
+     */
+    @Test
+    fun amfS1_fromGroundCorridor_downSideFlight_turnOnLanding_middleFlightToBasement() {
+        val locator = locatorAt("AMF-0-H250_-10")
+        // (magnetski azimut, dužina koraka po vrhu) sa snimka.
+        val steps = listOf(
+            39f to 0.75f, 44f to 0.75f, 95f to 0.75f, 91f to 0.70f, 90f to 0.75f, 87f to 0.75f, 85f to 0.75f, 86f to 0.75f,
+            86f to 0.75f, 86f to 0.75f, 82f to 0.75f, 75f to 0.75f, 76f to 0.75f, 76f to 0.75f, 75f to 0.75f, 71f to 0.75f,
+            67f to 0.75f, 64f to 0.75f, 59f to 0.32f, 52f to 0.75f, 46f to 0.75f, 42f to 0.35f, 42f to 0.20f, 45f to 0.25f,
+            56f to 0.75f, 57f to 0.75f, 54f to 0.75f, 55f to 0.75f, 60f to 0.75f, 63f to 0.75f, 62f to 0.75f, 58f to 0.75f,
+            54f to 0.75f, 53f to 0.75f, 54f to 0.75f, 55f to 0.75f, 56f to 0.75f, 55f to 0.75f, 52f to 0.75f, 47f to 0.75f,
+            42f to 0.75f, 32f to 0.75f, 24f to 0.75f, 5f to 0.32f, 340f to 0.75f, 301f to 0.44f, 270f to 0.36f, 248f to 0.75f,
+            236f to 0.75f, 233f to 0.75f, 233f to 0.75f, 234f to 0.75f, 236f to 0.75f, 238f to 0.75f, 238f to 0.75f, 240f to 0.75f,
+            241f to 0.75f, 241f to 0.24f, 240f to 0.23f, 241f to 0.75f, 240f to 0.75f, 237f to 0.34f, 234f to 0.75f, 236f to 0.75f,
+        )
+        // Znak stepenica ([StairGait]) tih koraka - silazak čeka na vrhu kraka dok koraci ne liče na stepenice.
+        val gait = listOf(
+            -1.33f, -0.57f, -0.04f, -0.59f, -0.41f, -0.38f, -0.11f, -0.11f, 0.11f, 0.25f, -0.01f, 0.43f, 0.52f, 0.26f, 0.23f, 0.78f,
+            0.28f, 0.06f, 0.62f, 0.41f, 0.81f, 0.06f, 0.07f, -0.17f, -0.62f, 0.40f, 0.23f, 0.44f, 0.29f, -0.10f, 0.60f, 1.25f, 0.75f,
+            1.19f, 0.66f, 0.80f, 0.90f, 1.15f, 0.67f, 1.02f, 1.05f, 0.23f, 0.87f, -0.32f, -0.73f, -0.76f, -0.60f, -1.09f, 0.48f, 0.82f,
+            0.48f, 0.45f, 0.29f, 0.83f, -0.25f, 0.83f, 0.47f, 0.66f, 0.37f, 0.05f, 0.76f, 0.41f, 0.44f, 0.07f,
+        )
+        val reasons = steps.zip(gait).mapIndexedNotNull { i, (step, score) ->
+            locator.step(step.first - 11f, step.second, timeNs = i * 600_000_000L, stairScore = score)
+        }
+        assertEquals("$reasons", listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("AMF", -1), locator.place)
+    }
+
     /** S1: iz suterena srednjim krakom i pravo dalje - takođe u trem ka Kuli. */
     @Test
     fun amfS1_fromBasement_upMiddleFlight_intoKulaPorch() {
@@ -1390,6 +1436,27 @@ class PdrLocatorTest {
         assertEquals(listOf(PlaceReason.STEPENICE), reasons)
         assertEquals(PdrPlace("NTP", 2), locator.place)
         assertNotNull("na grafu sprata, ne na stepeništu", locator.match)
+    }
+
+    /**
+     * Teren 16.10.2026 (n-turnoff, azimuti sa snimka, ispravka smera tog trenutka -16,3°): S1 III -> II, pa sa dna kraka pravo
+     * nadole u hodnik i ka L1. S1-D je imao izlaz samo nazad ka M450, pa je tačka stajala na stepeništu ("opet se zaglavio na
+     * stepenicama, možda treba prilagoditi graf") - stepenište je dole otvoreno - sa S1-D koso pred L1 (U513).
+     */
+    @Test
+    fun ntpS1_downOneFloor_thenStraightIntoLiftCorridor_reachesLift() {
+        val azimuths = listOf(
+            348.2, 357.3, 8.6, 359.3, 345.9, 335.4, 330.7, 329.9, 327.3, 327.0, 329.1, 330.3, 333.6, 334.4, 334.8, 333.5, 329.1,
+            317.9, 310.7, 303.2, 282.6, 264.0, 239.5, 214.3, 191.3, 168.3, 157.7, 155.4, 155.4, 157.4, 159.5, 160.1, 158.4,
+            156.3, 156.2, 155.0, 156.1, 157.6, 156.6, 151.7, 139.7, 110.5, 83.9, 59.7, 53.1, 50.0, 49.5, 48.4, 41.9, 29.0, 8.1,
+        )
+        val locator = locatorAt("NTP-3-M450")
+        locator.restoreBias(-16.3f)
+        val reasons = azimuths.mapNotNull { locator.step(it.toFloat(), 0.75f) }
+        assertEquals(listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("NTP", 2), locator.place)
+        val lift = graph.position(node("NTP-2-U513"))
+        assertTrue("tačka ${locator.position()} ${locator.match?.point} daleko od L1 $lift", distance(locator.position(), lift) < 3.0)
     }
 
     /**

@@ -131,6 +131,31 @@ class AmfKulaGraphTest {
         assertFalse(route.nodes.any { it.type == NodeType.STAZA })
     }
 
+    /** Teren 16.10.2026 (korisnik nacrtao): hol Kule je otvoren - od prolaza iz NB-a pravo preko hola do trema, ne oko lifta. */
+    @Test
+    fun kulaHall_fromNbPassageStraightToPorch() {
+        val route = checkNotNull(graph.route("KULA-0-PROLAZ-NB", "KULA-0-PROLAZ-AMF")).nodes.map { it.id }
+        assertEquals(listOf("KULA-0-PROLAZ-NB", "KULA-0-H320_413", "KULA-0-H236_413", "KULA-0-PROLAZ-AMF"), route)
+    }
+
+    /**
+     * Teren 16.10.2026 (korisnik nacrtao): hodnik prizemlja AMF-a se pred S1 račva - uz levi i desni zid do vrha bočnih krakova
+     * (sredina je ograda nad praznim prostorom); uz desnu traku su i vrata Čitaonice.
+     */
+    @Test
+    fun amfS1_corridorForksAlongWallsToSideFlights() {
+        val fork = graph.node("AMF-0-S1-D")!!
+        val lanes = graph.neighbors(fork.id).map { it.first.id }.toSet()
+        assertTrue(lanes.toString(), lanes.containsAll(listOf("AMF-0-S1-D-DESNO", "AMF-0-S1-D-LEVO")))
+        for ((lane, top) in listOf("AMF-0-S1-D-DESNO" to "AMF-0-S1-D-KRAK", "AMF-0-S1-D-LEVO" to "AMF-0-S1-D-KRAK-L")) {
+            assertNotNull("$lane - $top", graph.edge(lane, top))
+            // Traka je uz zid, na strani svog kraka.
+            assertEquals(graph.node(top)!!.x, graph.node(lane)!!.x, 1e-4f)
+        }
+        val reading = graph.route("AMF-0-S1-D-DESNO", room("Čitaonica").id)!!.nodes.map { it.id }
+        assertEquals(listOf("AMF-0-S1-D-DESNO", "AMF-0-V287_142", room("Čitaonica").id), reading)
+    }
+
     /** Teren 01.10.2026: trem iz Kule stiže na međunivo - odatle dole na -1 ili gore u prizemlje Amfiteatara. */
     @Test
     fun kulaPorch_reachesMezzanineToBothLevels() {

@@ -68,14 +68,16 @@ def typical(f):
 def floor_0():
     return {
         "title": "Prizemlje",
-        # Levo od lifta je soba, pa hodnik nije prsten.
-        "paths": [[(210, 437), (274, 437), (274, 495), (205, 495)]],
+        # Levo od lifta je soba, pa hodnik nije prsten. Hol je otvoren: od prolaza iz NB-a pravo preko hola do trema ka
+        # Amfiteatrima (korisnik nacrtao, teren 16.10.2026) - do tada samo koso do ugla oko lifta, pa duž hodnika do trema.
+        "paths": [[(210, 437), (274, 437), (274, 495), (205, 495)],
+                  [(236, 437), (236, 413), (320, 413), (274, 437)]],
         "corridors": [rect_poly(225, 375, 333, 465), rect_poly(224, 465, 285, 511), rect_poly(205, 490, 224, 511),
                       rect_poly(228, 511, 258, 554),
                       rect_poly(205, 300, 280, 375),  # trem ka Amfiteatrima
                       rect_poly(335, 397, 420, 430)],  # prolaz ka NB-u
         "rooms": [
-            R(155, 210, 375, 430, k("001A")), R(210, 225, 375, 430),
+            R(155, 210, 375, 430, k("001A"), door=(182.5, 430)), R(210, 225, 375, 430),
             *col(155, 205, [(432, 472, None), (472, 511, k("003"))]),
             R(205, 224, 447, 490),
             R(155, 228, 511, 554, k("004")), R(258, 335, 511, 554, k("005")),

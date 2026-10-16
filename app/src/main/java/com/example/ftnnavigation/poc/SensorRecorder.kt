@@ -30,6 +30,8 @@ import java.time.format.DateTimeFormatter
  *   `A`); promena sprata posle nje je `L` red LIFT, a nesiguran broj spratova `Q` PITANJE.
  * - `K,t,dužina_m` - dužina koraka iz Podešavanja (na Start i pri promeni; snimci pre 08.10.2026 je nemaju - tada 0,8 m).
  *   t kao u `L` redu.
+ * - `W,t,radnja,senzor,tišina_s` - senzor orijentacije ćuti dok akcelerometar radi ([PdrSensorSession], od 16.10.2026):
+ *   radnja PONOVO (ponovna prijava) ili ZAMENA (drugi senzor sa liste); t = uzorak akcelerometra.
  *
  * Fajlovi: `files/pdr/` aplikacije (`adb exec-out run-as <paket> cat files/pdr/<fajl>`).
  */
@@ -75,6 +77,10 @@ class SensorRecorder private constructor(val file: File) {
     fun droppedSteps(timestampNs: Long, count: Int) = write("D,$timestampNs,$count")
 
     fun stepLength(timestampNs: Long, meters: Float) = write("K,$timestampNs,$meters")
+
+    /** Senzor orijentacije je ćutao [silentNs]; [action] PONOVO / ZAMENA, [sensor] - ime senzora na koji je prijavljen. */
+    fun rotationWatchdog(timestampNs: Long, action: String, sensor: String, silentNs: Long) =
+        write("W,$timestampNs,$action,${sensor.replace(',', ' ')},${silentNs / 1e9}")
 
     /** Prepoznata vožnja liftom. */
     fun liftRide(timestampNs: Long, ride: LiftRide) = write("V,$timestampNs,${ride.startNs},${ride.endNs},${ride.heightM}")

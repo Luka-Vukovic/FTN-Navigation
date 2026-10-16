@@ -349,6 +349,10 @@ LIFTS = {"L1": (513, 676), "L2": (302, 1505), "L3": (1492, 1516)}
 # I-V sprat: iz L1 se izlazi pravo gore u gornji hodnik (teren 12.10.2026, posle vožnje P -> III: ~1,5 m gore, pa levo ka
 # glavnom hodniku). Do tada je L1 bio vezan koso za U640 (4,4 m udesno), pa je izlazak iz lifta išao zaobilazno.
 LIFT_EXIT = (513, 595)
+# I-V sprat: stepenište S1 je dole otvoreno ka gornjem hodniku - sa dna kraka naniže (S1-D) se koso stiže pred lift L1 (U513)
+# (teren 12., 13. i 16.10.2026: posle silaska III -> II ka L1 tačka je ostajala na S1-D, jer je jedini izlaz bio nazad ka M450;
+# korisnik: "opet se zaglavio na stepenicama, možda treba prilagoditi graf"). Prva verzija (pravo nadole u hodnik, pa ka liftu)
+# nije pomogla: koraci idu koso ka liftu, a map-matching ne skreće na ivicu drugog pravca.
 STAIRS = ["S1", "S2", "S3"]
 
 # Stepeništa sa dva kraka (evakuacioni planovi svih spratova, ispravljene fotografije; teren 05.10.2026): sa podesta
@@ -462,6 +466,7 @@ def typical_floor(g, f):
         g.chain(f, ["C1795", "K1795", "B1819"])
     g.chain(f, ["M1608", *[f"B{x}" for x in OFFICES[1:]]])
     stair_nodes(g, f, {"S1": "M450", "S2": "M1470", "S3": FIRST_CORE if f == 1 else "C1600"})
+    g.edge(f"NTP-{f}-S1-D", f"NTP-{f}-U513")
     g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), f"NTP-{f}-U513")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), f"NTP-{f}-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), f"NTP-{f}-{FIRST_CORE if f == 1 else 'C1494'}")
@@ -530,6 +535,7 @@ def top_floor(g):
     g.chain(f, ["T1350", "T1494", "T1600"])
     g.chain(f, ["R856", "R945", "R1035", "R1130", "R1230", "C1115"])
     stair_nodes(g, f, {"S1": "M450", "S2": "M1470", "S3": "T1600"})
+    g.edge("NTP-5-S1-D", "NTP-5-U513")
     g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-5-U513")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), "NTP-5-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), "NTP-5-T1494")
