@@ -144,6 +144,9 @@ data class ShownPlan(val date: LocalDate, val legs: List<PlanLeg>, val index: In
 /** GPS lokacija lošija od ovoga se ne koristi za rutu (u zgradi luta desetinama metara). */
 private const val MAX_ROUTE_ACCURACY_M = 50f
 
+/** Korisnik hoda dok je poslednji korak bio pre manje od ovoga - pokazivač tada ide pravcem hodnika ([PdrLocator.corridorHeadingOnPlan]). */
+private const val POINTER_WALKING_NS = 1_500_000_000L
+
 /** Start praćenja sa GPS lokacije (bez označavanja) samo uz ovoliku tačnost. */
 private const val MAX_START_ACCURACY_M = 20f
 
@@ -567,8 +570,13 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Smer za prikaz (azimut iz [walkingDirection]), sa ispravkom iz rekalibracije, u odnosu na "gore" plana. */
     fun onHeading(azimuth: Float) {
         lastAzimuthDeg = azimuth
+        val locator = locator
+        val onPlan = locator?.headingOnPlan(azimuth) ?: normalizeDeg(azimuth)
+        // Dok korisnik hoda hodnikom (tačka zalepljena za hodnik), pokazivač ide pravcem hodnika - ne klati se sa telefonom.
+        val walking = state.isTracking && state.snapToGraph &&
+            SystemClock.elapsedRealtimeNanos() - lastStepAppliedNs < POINTER_WALKING_NS
         state = state.copy(
-            headingDeg = locator?.headingOnPlan(azimuth) ?: normalizeDeg(azimuth),
+            headingDeg = (if (walking) locator?.corridorHeadingOnPlan(onPlan) else null) ?: onPlan,
             phoneOffsetDeg = walkingDirection.offset.toFloat().takeIf { walkingDirection.isAnchored },
         )
     }
@@ -581,8 +589,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val locator = locator ?: return
         if (locator.raw == null) return
         val before = locator.place
-        // Kad se smer na stepeništu ne zna, pretpostavlja se ka spratu odredišta.
-        locator.destination = target?.node?.let { PdrPlace(it.buildingId, it.floor) }
+        updateDestination(locator)
         val lengthM = stepLengthM * AccelStepDetector.stepLengthFactor(peak)
         // Vreme koraka (senzor, isti sat kao elapsedRealtimeNanos) - zadržani koraci ([HandlingGate]) stižu kasnije.
         val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs, stairGait.score(timeNs))
@@ -592,6 +599,30 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         state =state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
         updatePosition(before, reason)
         if (reason == PlaceReason.STEPENICE) onStairChange(locator)
+        // Pokazivač u pravcu hodnika ([onHeading]) prati ivicu na kojoj je tačka posle koraka.
+        lastStepAppliedNs = SystemClock.elapsedRealtimeNanos()
+        lastAzimuthDeg?.let(::onHeading)
+    }
+
+    // Kad je poslednji korak primenjen (sat elapsedRealtimeNanos) - pokazivač ide pravcem hodnika dok se hoda.
+    private var lastStepAppliedNs = Long.MIN_VALUE / 2
+
+    // Odredište upisano u snimak (red T) - beleži se samo promena; Start upisuje iznova (false).
+    private var recordedDestination: PdrPlace? = null
+    private var destinationRecorded = false
+
+    /**
+     * Kad se smer na stepeništu ne zna, pretpostavlja se ka spratu odredišta; i iz trema/prolaza sa međupodesta ide se na
+     * nivo odredišta. Promena ide u snimak (teren 17.10.2026: tačka iz trema Kula -> AMF nije otišla na nivo izabrane
+     * Biblioteke, a replay sa tim odredištem jeste - iz snimka se nije videlo šta je telefon tada imao).
+     */
+    private fun updateDestination(locator: PdrLocator) {
+        val place = target?.node?.let { PdrPlace(it.buildingId, it.floor) }
+        locator.destination = place
+        if (destinationRecorded && place == recordedDestination) return
+        recorder?.destination(SystemClock.elapsedRealtimeNanos(), place)
+        recordedDestination = place
+        destinationRecorded = true
     }
 
     /**
@@ -661,7 +692,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             headingErrorDeg = locator.headingErrorDeg,
         )
         if (reason == null) return
-        recorder?.place(SystemClock.elapsedRealtimeNanos(), reason, place, locator.raw, locator.headingBiasDeg)
+        recorder?.place(SystemClock.elapsedRealtimeNanos(), reason, place, locator.raw, locator.headingBiasDeg, locator.learnedCorridorBiasDeg)
         if (place != before && isShowing(before)) show(place)
         lastAzimuthDeg?.let(::onHeading)
     }
@@ -778,8 +809,12 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         if (BuildConfig.DEBUG) recorder = SensorRecorder.start(app.filesDir)
         // Gde je tačka (na grafu, ako je zalepljena) - replay odatle kreće.
         val shown = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw
-        recorder?.place(SystemClock.elapsedRealtimeNanos(), PlaceReason.START, locator.place, shown, locator.headingBiasDeg)
+        recorder?.place(SystemClock.elapsedRealtimeNanos(), PlaceReason.START, locator.place, shown, locator.headingBiasDeg, locator.learnedCorridorBiasDeg)
         recorder?.stepLength(SystemClock.elapsedRealtimeNanos(), stepLengthM)
+        destinationRecorded = false
+        updateDestination(locator)
+        // Odluke lokatora u snimak (17.10.2026: lažan ulazak kod garaže NTP-a replay nije ponovio - ne zna se koje pravilo je okinulo).
+        locator.trace = recorder?.let { r -> { text -> r.locatorTrace(SystemClock.elapsedRealtimeNanos(), text) } }
         session = PdrSensorSession(
             app.getSystemService(SensorManager::class.java),
             walkingDirection,
@@ -805,6 +840,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         PdrTrackingService.stop(getApplication())
         recorder?.close()
         recorder = null
+        locator?.trace = null
         // Smer na Mapi bez praćenja je pravac telefona: odstupanje naučeno u praćenju (npr. +180° - telefon je bio naopako u
         // džepu) ili smer zadržan dok se premešten telefon smiruje bi ostali do zatvaranja aplikacije (teren 09.10.2026:
         // "nekad kad napolju otvorim aplikaciju pokazuje skroz suprotan smer, ispravi se kad je zatvorim i ponovo otvorim").

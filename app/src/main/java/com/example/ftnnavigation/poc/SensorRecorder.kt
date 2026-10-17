@@ -19,8 +19,10 @@ import java.time.format.DateTimeFormatter
  * - `P,t` / `C,t` - Mapa u pauzi (senzori odjavljeni) / ponovo aktivna,
  * - `G,t,x,y,tačnost_m` - GPS lokacija u metrima kampusa (t = `Location.elapsedRealtimeNanos`, isti
  *   sat); pun GPS snimak je u [GpsRecorder],
- * - `L,t,razlog,zgrada,sprat,x,y,ispravka_smera` - pozicija preskočila ([PlaceReason]: ručno, ulaz, prolaz,
- *   GPS); x/y relativno na plan (kampus: cela mapa), t = `SystemClock.elapsedRealtimeNanos`,
+ * - `L,t,razlog,zgrada,sprat,x,y,ispravka_smera,iz_hodnika` - pozicija preskočila ([PlaceReason]: ručno, ulaz, prolaz,
+ *   GPS); x/y relativno na plan (kampus: cela mapa), t = `SystemClock.elapsedRealtimeNanos`; iz_hodnika = naučeni deo
+ *   ispravke iz hoda hodnikom (od 17.10.2026, i kad se napolju ne primenjuje),
+ * - `T,t,zgrada,sprat` - odredište (sprat sale; prazno - bez odredišta), na Start i pri promeni (od 17.10.2026),
  * - `H,t,zgrada,sprat,ishod,greška,uz_ispravku,pdr_m,stvarno_m,pouzdano,primenjeno` - poređenje puta pri
  *   označavanju ([HeadingCheck]; ishod MERENO / KRATKO / PREKINUTO, prazna polja kad nema vrednosti). Greška =
  *   PDR smer − stvarni bez ispravke (°), uz_ispravku = sa ispravkom koja je važila na putu; isti t kao `L` red.
@@ -30,8 +32,10 @@ import java.time.format.DateTimeFormatter
  *   `A`); promena sprata posle nje je `L` red LIFT, a nesiguran broj spratova `Q` PITANJE.
  * - `K,t,dužina_m` - dužina koraka iz Podešavanja (na Start i pri promeni; snimci pre 08.10.2026 je nemaju - tada 0,8 m).
  *   t kao u `L` redu.
- * - `W,t,radnja,senzor,tišina_s` - senzor orijentacije ćuti dok akcelerometar radi ([PdrSensorSession], od 16.10.2026):
- *   radnja PONOVO (ponovna prijava) ili ZAMENA (drugi senzor sa liste); t = uzorak akcelerometra.
+ * - `W,t,radnja,senzor,tišina_s[,odstupanje]` - senzor orijentacije ćuti dok akcelerometar radi ([PdrSensorSession], od
+ *   16.10.2026): radnja PONOVO (ponovna prijava) ili ZAMENA (drugi senzor sa liste); t = uzorak akcelerometra. Od 17.10.2026
+ *   ZIROSKOP (R redovi odsad iz [GyroOrientation]) i NAZAD (senzor se vratio, odstupanje = smer iz žiroskopa − senzora, °).
+ * - `X,t,tekst` - odluka lokatora ([PdrLocator.trace], od 17.10.2026; zarezi zamenjeni sa `;`). t kao u `L` redu.
  *
  * Fajlovi: `files/pdr/` aplikacije (`adb exec-out run-as <paket> cat files/pdr/<fajl>`).
  */
@@ -53,8 +57,11 @@ class SensorRecorder private constructor(val file: File) {
     fun gps(fix: GpsFix) = write("G,${fix.elapsedNs},${fix.point.x},${fix.point.y},${fix.accuracyM}")
 
     /** Pozicija preskočila ([PdrLocator]): označena ručno, ulaz/prolaz, GPS. */
-    fun place(timestampNs: Long, reason: PlaceReason, place: PdrPlace, point: Offset?, headingBiasDeg: Float) =
-        write("L,$timestampNs,$reason,${place.buildingId},${place.floor},${point?.x},${point?.y},$headingBiasDeg")
+    /** Odredište za locator ([PdrLocator.destination]) se promenilo. */
+    fun destination(timestampNs: Long, place: PdrPlace?) = write("T,$timestampNs,${place?.buildingId ?: ""},${place?.floor ?: ""}")
+
+    fun place(timestampNs: Long, reason: PlaceReason, place: PdrPlace, point: Offset?, headingBiasDeg: Float, corridorBiasDeg: Float) =
+        write("L,$timestampNs,$reason,${place.buildingId},${place.floor},${point?.x},${point?.y},$headingBiasDeg,$corridorBiasDeg")
 
     /** Poređenje PDR puta sa stvarnim pri označavanju (merilo greške smera). */
     fun headingCheck(timestampNs: Long, place: PdrPlace, check: HeadingCheck) {
@@ -78,9 +85,16 @@ class SensorRecorder private constructor(val file: File) {
 
     fun stepLength(timestampNs: Long, meters: Float) = write("K,$timestampNs,$meters")
 
-    /** Senzor orijentacije je ćutao [silentNs]; [action] PONOVO / ZAMENA, [sensor] - ime senzora na koji je prijavljen. */
-    fun rotationWatchdog(timestampNs: Long, action: String, sensor: String, silentNs: Long) =
-        write("W,$timestampNs,$action,${sensor.replace(',', ' ')},${silentNs / 1e9}")
+    /**
+     * Senzor orijentacije je ćutao [silentNs]; [action] PONOVO / ZAMENA ([sensor] - ime senzora na koji je prijavljen),
+     * ZIROSKOP (orijentacija odsad iz žiroskopa) ili NAZAD (senzor se vratio; [silentNs] = koliko je trajalo, [driftDeg] =
+     * smer iz žiroskopa − smer senzora).
+     */
+    fun rotationWatchdog(timestampNs: Long, action: String, sensor: String, silentNs: Long, driftDeg: Float? = null) =
+        write("W,$timestampNs,$action,${sensor.replace(',', ' ')},${silentNs / 1e9}${driftDeg?.let { ",$it" } ?: ""}")
+
+    /** Odluka lokatora ([PdrLocator.trace]) - koje pravilo je okinulo (ulaz, stepenište, prolaz). */
+    fun locatorTrace(timestampNs: Long, text: String) = write("X,$timestampNs,${text.replace(',', ';')}")
 
     /** Prepoznata vožnja liftom. */
     fun liftRide(timestampNs: Long, ride: LiftRide) = write("V,$timestampNs,${ride.startNs},${ride.endNs},${ride.heightM}")

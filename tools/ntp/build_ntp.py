@@ -141,6 +141,19 @@ TYPICAL = {
 # (desno, ulaz sa kraja srednjeg hodnika, koji se završava vratima na x 1785). Soba 17 je samo donji deo
 # (1825-2083 x 1400-1590), ulazi se iz T3 odozgo. Donji hodnik se završava dvokrilnim vratima (x 1765).
 # Polovine 14 i 15 (115-118) su ovde nacrtane.
+# Teren 17.10.2026 (korisnik: "izmišljeni hodnik na I spratu ... između S2 stepenica i 114 - uporedi sa planom"): na I spratu
+# srednji hodnik zapadno od desnog hodnika ne postoji (na II-IV postoji). Sa fotografije (w1.png): iznad S2 soba sa vratima na
+# glavni hodnik; dve sobe pune dubine (1280-1556; pregrade x 865, 1015) sa vratima ka donjem hodniku (x 830 i 900); iznad
+# toaleta soba sa vratima na desni hodnik; blok toaleta sa ulazom odozdo (x 1130). Koja je 139, a koja 140 - redom kao ranije
+# (sleva), PRETPOSTAVKA.
+FIRST_MID_ROOMS = [
+    [(451, 1280), (699, 1280), (699, 1397), (451, 1397)],  # iznad S2, vrata na glavni hodnik
+    [(699, 1280), (865, 1280), (865, 1556), (699, 1556)],  # 18 (139)
+    [(865, 1280), (1015, 1280), (1015, 1556), (865, 1556)],  # 19 (140)
+    [(1015, 1280), (1301, 1280), (1301, 1400), (1015, 1400)],  # iznad toaleta, vrata na desni hodnik
+    [(1015, 1400), (1301, 1400), (1301, 1556), (1015, 1556)],  # toaleti
+]
+FIRST_MID_DOORS = {18: ((782, 1418), (830, 1556), "B872"), 19: ((940, 1418), (900, 1556), "B872")}
 # Oznake (korisnik, 04.10.2026 uveče, na snimku ekrana plana): 119 = hol istočno od desnog hodnika (do 04.10. deo srednjeg
 # hodnika; iz njega se ulazi u 120 = T1, 121 = T2 i 122 = T3), 123 = soba 17 (iz T3), 124 = prostor iza dvokrilnih vrata
 # na kraju donjeg hodnika (do 04.10. nastavak hodnika; kroz njega se ulazi u 125 i 126). Na fotografiji se jezgro sa S3 i
@@ -152,7 +165,7 @@ FIRST = {
         [(451, 547), (708, 547), (708, 591), (933, 591), (933, 680), (767, 680), (767, 827), (664, 827), (664, 640),
          (451, 640)],  # gornji hodnik, sužen posle šahta, sa otvorenim prostorom 6
         [(933, 591), (1073, 591), (1073, 680), (933, 680)],  # predvorje iza dvokrilnih vrata
-        [(451, 1280), (1402, 1280), (1402, 1389), (451, 1389)],  # srednji hodnik (do desnog hodnika)
+        [(1301, 1280), (1402, 1280), (1402, 1389), (1301, 1389)],  # srednji hodnik: samo spoj desnog hodnika i hola 119
         [(1301, 800), (1402, 800), (1402, 1280), (1301, 1280)],  # desni hodnik
         [(1305, 1389), (1397, 1389), (1397, 1556), (1305, 1556)],
         [(451, 1556), (1765, 1556), (1765, 1660), (451, 1660)],  # donji hodnik
@@ -170,7 +183,8 @@ FIRST = {
         [(1402, 1280), (1785, 1280), (1785, 1389), (1402, 1389)],  # hol 119
         [(1765, 1400), (1825, 1400), (1825, 1590), (1765, 1590)],  # prolaz iz T3 nadole (nije u grafu)
         [(1765, 1590), (2083, 1590), (2081, 1660), (1765, 1660)],  # 124
-        *TYPICAL["rooms"][18:],  # donji srednji red, toaleti, kancelarije, toalet uz liftove, soba iznad 14
+        *FIRST_MID_ROOMS,  # umesto srednjeg hodnika i donjeg srednjeg reda (teren 17.10.2026)
+        *TYPICAL["rooms"][21:],  # kancelarije, toalet uz liftove, soba iznad 14
     ],
     "stairs": TYPICAL["stairs"],
     "shafts": TYPICAL["shafts"],
@@ -458,9 +472,10 @@ def typical_floor(g, f):
     g.chain(f, ["R830", "R930", "R1160", "C1350", "K1350", "B1343"])
     if f == 1:
         # I sprat: hol 119 se završava vratima T3 (x 1785), a sa kraja srednjeg hodnika nema prolaza u donji (sobe 122, 124).
-        for key in ("C1795", "K1795"):
+        # Srednjeg hodnika zapadno od desnog nema (teren 17.10.2026, FIRST_MID_ROOMS).
+        for key in ("C1795", "K1795", "C560", "C815", "C870", "C983", "C1170"):
             del g.nodes[f"NTP-{f}-{key}"]
-        g.chain(f, ["M1334", "C560", "C815", "C870", "C983", "C1170", "C1350", "C1494", "C1600"])
+        g.chain(f, ["C1350", "C1494", "C1600"])
     else:
         g.chain(f, ["M1334", "C560", "C815", "C870", "C983", "C1170", "C1350", "C1494", "C1600", "C1795"])
         g.chain(f, ["C1795", "K1795", "B1819"])
@@ -492,6 +507,8 @@ def typical_floor(g, f):
             spec = ABOVE_RIGHT
         elif room == "corner":
             spec = CORNER_419
+        elif f == 1 and room in FIRST_MID_DOORS:
+            spec = FIRST_MID_DOORS[room]
         elif f == 3 and room == 11:  # spojena sa sobom ispod (typical_plan)
             spec = ((559, 1140), *TYPICAL_DOORS[11][1:])
         else:
@@ -601,7 +618,7 @@ def ground_floor(g):
 # Prizemlje: WC levo od kancelarije NTP-005. Vrata - sredina zida ka hodniku (kao sale), osim gde piše drugačije.
 TOILET_BLOCK_ROOM = 20
 TOILET_BLOCK = ((1170, 1472), (1170, 1389), "C1170")
-TOILET_BLOCK_FIRST = ((1170, 1472), (1170, 1556), "B1226")
+TOILET_BLOCK_FIRST = ((1158, 1478), (1130, 1556), "B1107")  # ulaz odozdo (fotografija, teren 17.10.2026)
 TOILET_BY_LIFTS = ((500, 765), (600, 700), "U640")
 TOILETS_GROUND = [((15, 1479), (15, 1407), "W0")]
 

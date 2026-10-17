@@ -54,6 +54,8 @@ class PdrLocatorReplayTest {
         val outDir = File("build/pdr-replay").apply { mkdirs() }
         // Snimci iste sesije (bez Reset-a) dele locator - naučena zakrenutost smera prelazi u sledeći snimak.
         val locator = PdrLocator(graph, campus, declination, stairPaths)
+        // PDR_DEST=AMF:-1 - odredište (zgrada:sprat) za ceo replay, kao izabrano na telefonu.
+        System.getenv("PDR_DEST")?.split(':')?.takeIf { it.size == 2 }?.let { locator.destination = PdrPlace(it[0], it[1].toInt()) }
         for (file in files) {
             val (events, track) = replay(file, locator)
             File(outDir, file.nameWithoutExtension + "-mesto.txt").writeText(events)
@@ -264,6 +266,12 @@ class PdrLocatorReplayTest {
                     log(t, "telefon: pitanje za lift ${f[3]}")
                 }
                 "K" -> stepM = f[2].toFloat()
+                "X" -> log(t, "telefon-locator: ${f.drop(2).joinToString(",")}")
+                "W" -> if (f[2] == "ZIROSKOP" || f[2] == "NAZAD") log(t, "telefon: smer ${f[2]} ${f.drop(4).joinToString(" ")}")
+                "T" -> {
+                    locator.destination = f.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let { PdrPlace(it, f[3].toInt()) }
+                    log(t, "telefon: odredište ${locator.destination?.let { "${it.buildingId} ${it.floor}" } ?: "-"}")
+                }
                 "S" -> if (redetect) {
                     recordedSteps++
                 } else {
@@ -288,7 +296,10 @@ class PdrLocatorReplayTest {
                     if (reason == PlaceReason.START) {
                         // Zakrenutost kakvu je telefon tada primenjivao (naučena u replay-u može malo da odstupa).
                         // Snimci do 09.10.2026 uveče: ispravka je bila po zgradi - ovde postaje zajednička.
-                        if (bias != 0f) locator.restoreBias(bias)
+                        // Od 17.10.2026 i deo iz hodnika (9. kolona); stariji snimci - ceo kao zajednička, iz hodnika 0.
+                        val corridor = f.getOrNull(8)?.toFloatOrNull() ?: 0f
+                        // PDR_LEARN_BIAS=1: ispravku replay uči sam (kroz ceo folder), ne uzima je od telefona - za poređenje učenja.
+                        if ((bias != 0f || corridor != 0f) && System.getenv("PDR_LEARN_BIAS") != "1") locator.restoreBias(bias, corridor, outside = place.isCampus)
                         // Pozicija na Start (od 05.10.2026): replay kreće odatle ako je drugde (Ovde sam pre Start-a).
                         val at = Offset(f[5].toFloat(), f[6].toFloat())
                         val now = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw

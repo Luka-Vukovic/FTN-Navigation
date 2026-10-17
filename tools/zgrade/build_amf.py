@@ -64,8 +64,9 @@ S1_FLIGHTS_M1 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, draw_down=Fals
 # (MapMatcher, [FULL_STEP_DEG] 35°); vodoravna spojnica (prva verzija, kao na crtežu) je zadržavala tačku na račvanju.
 S1_TOP = (250, 105)
 S1_LANES = {"DESNO": (277, 140), "LEVO": (222, 140)}
-# Vrata Čitaonice uz desni krak (korisnik nacrtao, teren 16.10.2026) - uz ona sa FtnGO-a na sredini zida.
-READING_ROOM_STAIR_DOOR = (287, 142)
+# Vrata Čitaonice uz desni krak (korisnik nacrtao, teren 16.10.2026; 17.10.: "malo bliže stepenicama" - y 142 -> 154) - uz
+# ona sa FtnGO-a na sredini zida.
+READING_ROOM_STAIR_DOOR = (287, 154)
 # Prizemlje (teren 05.10.2026, korisnik + "amf stepenice kod citaonice.png"): sa kraja hodnika levi i desni krak naniže uz
 # zidove, između njih ograda nad praznim prostorom (dole stakleni trem) - srednji krak je ispod galerije, u prizemlju se ne crta.
 S1_VOID = S1_MID

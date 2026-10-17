@@ -165,6 +165,13 @@ private const val ENTER_STEPS = 3
 
 private const val ENTER_STEP_ANGLE_DEG = 50.0
 
+/**
+ * Isto, za ulaz kroz koji je tačka upravo izašla: strože. Teren 17.10.2026, NTP: posle izlaska na glavni ulaz FTN-a korisnik
+ * je išao uz zid ka garaži (311-318°), a pravac ulaz -> hodnik u grafu je ~272° (hodnik iza vrata je malo u stranu) - 40-46°,
+ * pa je tačka posle 5 s opet "ušla". Uz zid je i inače blizu 45°, pravo kroz vrata do ~20°.
+ */
+private const val EXITED_ENTER_STEP_ANGLE_DEG = 30.0
+
 /** Tačka na grafu je na kraju hodnika (na čvoru prolaza/ulaza). */
 private const val AT_GATE_M = 0.3
 
@@ -486,6 +493,12 @@ private const val CORRIDOR_MAX_DEG = 30f
 private const val CORRIDOR_FORGET_NS = 20 * 60 * 1_000_000_000L
 
 private val ROOM_NODE_TYPES = setOf(NodeType.PROSTORIJA, NodeType.VRATA)
+
+/** Pokazivač u pravcu hodnika ([PdrLocator.corridorHeadingOnPlan]): smer do ovoliko od pravca ivice... */
+private const val CORRIDOR_POINTER_DEG = 35f
+
+/** ... ivice bar ovolike (kratke ivice su spojnice na raskrsnicama, koso). */
+private const val CORRIDOR_POINTER_MIN_M = 1.5
 
 /**
  * Poređenje PDR puta sa stvarnim pri označavanju ("Ovde sam"), od prethodnog sidra na istom spratu. Ispravka smera
@@ -921,6 +934,28 @@ class PdrLocator(
     fun headingOnPlan(azimuthDeg: Float): Float = normalizeDeg(azimuthDeg + headingBiasDeg - planUp.getValue(place.buildingId))
 
     /**
+     * Pravac hodnika na kome je tačka, u smeru [planHeadingDeg] (smer na planu), ako je smer do [CORRIDOR_POINTER_DEG] od
+     * pravca ivice hodnik - hodnik (bar [CORRIDOR_POINTER_MIN_M]); inače null. Za pokazivač dok se hoda (teren 17.10.2026:
+     * "neprecizan smer pokazivača" - posle ispravke je smer koraka u hodniku u proseku 2-7° pored, a pojedinačno ±16°;
+     * tačka je zalepljena za hodnik, a pokazivač se klatio).
+     */
+    fun corridorHeadingOnPlan(planHeadingDeg: Float): Float? {
+        if (place.isCampus || climb != null || passage != null) return null
+        val point = match?.point ?: return null
+        if (point.from.type != NodeType.HODNIK || point.to.type != NodeType.HODNIK) return null
+        val a = local(point.from.x, point.from.y)
+        val b = local(point.to.x, point.to.y)
+        if (distance(a, b) < CORRIDOR_POINTER_MIN_M) return null
+        val axis = azimuthOf(b.x - a.x, b.y - a.y)
+        val d = abs(angleDiffDeg(planHeadingDeg, axis))
+        return when {
+            d <= CORRIDOR_POINTER_DEG -> normalizeDeg(axis)
+            d >= 180 - CORRIDOR_POINTER_DEG -> normalizeDeg(axis + 180)
+            else -> null
+        }
+    }
+
+    /**
      * Korisnik je označio gde je ([point] na planu [place]) - start ili rekalibracija. Vraća poređenje puta od
      * prethodnog sidra; null ako sidro nije na istom spratu (start, stepenice, prolaz). Pouzdano izmerena greška
      * se pamti kao zakrenutost zgrade (primenjuje se ako je [applyCorrection]). [measure] = false: samo pozicija, bez
@@ -947,11 +982,21 @@ class PdrLocator(
         return check
     }
 
-    /** Ispravka kakvu je telefon imao ([headingBiasDeg]; replay: START red nosi primenjenu ispravku). */
-    internal fun restoreBias(deg: Float) {
+    /**
+     * Ispravka kakvu je telefon imao ([headingBiasDeg]; replay: START red nosi primenjenu ispravku, od 17.10.2026 i deo iz
+     * hodnika [corridorDeg]). Snimci bez njega: ceo [deg] postaje zajednička, a iz hodnika 0 - i telefon je posle
+     * ubijanja procesa (17.10.2026, NTP) krenuo bez nje, a replay ju je nosio iz prethodnog snimka (pa sabirao dvaput).
+     * [outside]: START je bio napolju - tamo se deo iz hodnika ne primenjuje, pa nije u [deg].
+     */
+    internal fun restoreBias(deg: Float, corridorDeg: Float = 0f, outside: Boolean = false) {
         headingErrors.clear()
-        headingErrors.addLast(-deg)
+        headingErrors.addLast(-(deg - if (outside) 0f else corridorDeg))
+        learnedCorridorBias = corridorDeg
+        corridorLearnedNs = lastStepNs.takeIf { corridorDeg != 0f }
     }
+
+    /** Ispravka naučena iz hodnika, i kad se trenutno ne primenjuje (napolju) - za snimak. */
+    internal val learnedCorridorBiasDeg: Float get() = learnedCorridorBias
 
     /** Start napolju sa GPS lokacije. */
     fun startFromGps(fix: GpsFix) {
@@ -2095,12 +2140,12 @@ class PdrLocator(
         }
         // Tačka van obrisa (GPS je vuče uz zid), ali koraci idu kroz vrata ka unutra.
         if (campusSteps.size < ENTER_STEPS) return null
-        val minCos = cos(Math.toRadians(ENTER_STEP_ANGLE_DEG))
         for (entrance in entrances.values.flatten()) {
             if (entrance.outside.id == rejectedEntrance?.id) continue
             val inward = entrance.inward ?: continue
             val toDoor = distance(graph.position(entrance.outside), p)
             if (toDoor > ENTER_STEPS_NEAR_M) continue
+            val minCos = cos(Math.toRadians(if (entrance.outside.id == exitedEntrance?.id) EXITED_ENTER_STEP_ANGLE_DEG else ENTER_STEP_ANGLE_DEG))
             if (campusSteps.any { it.x * inward.x + it.y * inward.y < minCos }) continue
             trace?.invoke(String.format(Locale.ROOT, "ulaz po pravcu koraka: %s, do vrata %.1f m", entrance.outside.id, toDoor))
             if (toDoor <= ENTER_SLACK_M) return enter(entrance)

@@ -153,7 +153,7 @@ class AmfKulaGraphTest {
             assertEquals(graph.node(top)!!.x, graph.node(lane)!!.x, 1e-4f)
         }
         val reading = graph.route("AMF-0-S1-D-DESNO", room("Čitaonica").id)!!.nodes.map { it.id }
-        assertEquals(listOf("AMF-0-S1-D-DESNO", "AMF-0-V287_142", room("Čitaonica").id), reading)
+        assertEquals(listOf("AMF-0-S1-D-DESNO", "AMF-0-V287_154", room("Čitaonica").id), reading)
     }
 
     /** Teren 01.10.2026: trem iz Kule stiže na međunivo - odatle dole na -1 ili gore u prizemlje Amfiteatara. */

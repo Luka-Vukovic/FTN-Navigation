@@ -511,6 +511,22 @@ class PdrLocatorTest {
         assertEquals(0f, locator.corridorBiasDeg, 0.5f)
     }
 
+    /** Pokazivač dok se hoda hodnikom: pravac hodnika u smeru hoda, i kad kompas vuče u stranu (teren 17.10.2026). */
+    @Test
+    fun corridorPointer_alongCorridorInWalkingDirection() {
+        val from = graph.position(node("NB-0-H744_420"))
+        val to = graph.position(node("NB-0-H1015_420"))
+        val azimuth = magneticAzimuth(from, to)
+        val locator = locatorAt("NB-0-H744_420").apply { applyCorrection = false }
+        repeat(6) { locator.step(azimuth + 15f, stepM) }
+        val axis = locator.headingOnPlan(azimuth)
+        // Smer koraka je 15° pored, pokazivač ide hodnikom; nazad - suprotan smer hodnika.
+        assertEquals(0f, angleDiffDeg(locator.corridorHeadingOnPlan(locator.headingOnPlan(azimuth + 15f))!!, axis), 0.5f)
+        assertEquals(0f, angleDiffDeg(locator.corridorHeadingOnPlan(locator.headingOnPlan(azimuth + 190f))!!, axis + 180f), 0.5f)
+        // Popreko na hodnik (npr. okrenut ka vratima) - smer telefona.
+        assertNull(locator.corridorHeadingOnPlan(locator.headingOnPlan(azimuth + 80f)))
+    }
+
     /** Ispravka uključena/isključena usred puta: PDR put je mešavina dva smera - ne meri se. */
     @Test
     fun correctionToggledWhileWalking_notMeasured() {
@@ -690,6 +706,30 @@ class PdrLocatorTest {
         }
         val walkIn = magneticAzimuth(door, PointM(door.x + inward.x, door.y + inward.y))
         assertTrue(PlaceReason.ULAZ in (1..10).mapNotNull { back.step(walkIn, stepM) })
+    }
+
+    /**
+     * Teren 17.10.2026, NTP: posle izlaska na glavni ulaz korisnik ide uz zid ka garaži, ~42° od pravca ulaz -> hodnik (kao na
+     * snimku: koraci 311-318°, ulaz ~272°) - tačka ne sme opet da uđe. Pravo nazad kroz vrata (~15°) ulazi.
+     */
+    @Test
+    fun exitedThroughDoor_walkingAlongWallAtFortyDegrees_noReentry() {
+        val inward = inwardOf("NTP-0-ULAZ")
+        val door = graph.position(node("K-U-NTP-3"))
+        val walkIn = magneticAzimuth(door, PointM(door.x + inward.x, door.y + inward.y))
+        fun exited(): PdrLocator = locatorAt(inner("NTP-0-ULAZ").id).also { l ->
+            val (out, _) = l.passThrough("NTP-0-ULAZ", "K-U-NTP-3")
+            assertEquals(PlaceReason.PROLAZ, out.last())
+            // Okret posle izlaska (kao na snimku: 2 koraka), pa uz zid.
+            l.step(walkIn + 180f, stepM)
+            l.step(walkIn + 100f, stepM)
+        }
+        val alongWall = exited()
+        val reasons = (1..8).mapNotNull { alongWall.step(walkIn + 42f, stepM) }
+        assertTrue("$reasons", PlaceReason.ULAZ !in reasons)
+        assertTrue(alongWall.place.isCampus)
+        val back = exited()
+        assertTrue(PlaceReason.ULAZ in (1..8).mapNotNull { back.step(walkIn + 15f, stepM) })
     }
 
     /**

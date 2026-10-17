@@ -36,6 +36,7 @@ class PdrSensorSession(
     private val gait: StairGait? = null,
 ) {
     private val rotationMatrix = FloatArray(9)
+    private val gyroMatrix = FloatArray(9)
     private var lastHeading = Float.NaN
     private var lastAccelNs = 0L
     private val gate = HandlingGate()
@@ -58,33 +59,64 @@ class PdrSensorSession(
         }
     }
 
+    // Zamena za senzor orijentacije dok ćuti ([GyroOrientation]); polazi od njegove poslednje matrice.
+    private val gyro = GyroOrientation()
+    private var onGyro = false
+    private var gyroSinceNs = 0L
+
+    /** Orijentacija (iz senzora orijentacije ili, dok on ćuti, iz žiroskopa) - smer, kapija, lift, stepenice, snimak. */
+    private fun onOrientation(matrix: FloatArray, timestamp: Long) {
+        recorder?.rotation(timestamp, matrix)
+        direction.onRotation(matrix, timestamp)
+        lift?.onRotation(matrix)
+        gait?.onRotation(matrix)
+        if (trackSteps) {
+            gate.onRotation(matrix, timestamp).takeIf { it > 0 }?.let {
+                recorder?.droppedSteps(timestamp, it)
+            }
+            // Slab polazak u ruci se pušta kasnije (posle čekanja ili na pauzi).
+            for (s in gate.takeReleased()) onStep(s.walk, s.peak, s.timeNs)
+        }
+        // Senzor javlja ~50 puta u sekundi - prikaz se osvežava tek na promenu od 1°.
+        val heading = direction.heading() ?: return
+        if (lastHeading.isNaN() || abs(angleDiffDeg(heading, lastHeading)) >= 1f) {
+            lastHeading = heading
+            onHeading(heading)
+        }
+    }
+
     private val listener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
             when (event.sensor.type) {
                 Sensor.TYPE_ROTATION_VECTOR -> {
+                    if (lastRotationNs != 0L && event.timestamp < lastRotationNs) return
                     lastRotationNs = event.timestamp
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    recorder?.rotation(event.timestamp, rotationMatrix)
-                    direction.onRotation(rotationMatrix, event.timestamp)
-                    lift?.onRotation(rotationMatrix)
-                    gait?.onRotation(rotationMatrix)
-                    if (trackSteps) {
-                        gate.onRotation(rotationMatrix, event.timestamp).takeIf { it > 0 }?.let {
-                            recorder?.droppedSteps(event.timestamp, it)
-                        }
-                        // Slab polazak u ruci se pušta kasnije (posle čekanja ili na pauzi).
-                        for (s in gate.takeReleased()) onStep(s.walk, s.peak, s.timeNs)
+                    if (onGyro) {
+                        // Vratio se: koliko je smer iz žiroskopa odlutao (merilo za snimak).
+                        val rv = Math.toDegrees(kotlin.math.atan2(rotationMatrix[1].toDouble(), rotationMatrix[4].toDouble())).toFloat()
+                        recorder?.rotationWatchdog(event.timestamp, "NAZAD", event.sensor.name, event.timestamp - gyroSinceNs,
+                            angleDiffDeg(gyro.azimuthDeg(), rv))
+                        onGyro = false
                     }
-                    // Senzor javlja ~50 puta u sekundi - prikaz se osvežava tek na promenu od 1°.
-                    val heading = direction.heading() ?: return
-                    if (lastHeading.isNaN() || abs(angleDiffDeg(heading, lastHeading)) >= 1f) {
-                        lastHeading = heading
-                        onHeading(heading)
+                    gyro.seed(rotationMatrix)
+                    onOrientation(rotationMatrix, event.timestamp)
+                }
+                Sensor.TYPE_GYROSCOPE -> {
+                    gyro.onGyroscope(event.values[0], event.values[1], event.values[2], event.timestamp)
+                    if (!gyro.isSeeded || lastRotationNs == 0L || event.timestamp - lastRotationNs < GYRO_FALLBACK_NS) return
+                    if (!onGyro) {
+                        onGyro = true
+                        gyroSinceNs = event.timestamp
+                        recorder?.rotationWatchdog(event.timestamp, "ZIROSKOP", event.sensor.name, event.timestamp - lastRotationNs)
                     }
+                    gyro.matrix(gyroMatrix)
+                    onOrientation(gyroMatrix, event.timestamp)
                 }
                 Sensor.TYPE_ACCELEROMETER -> {
                     lastAccelNs = event.timestamp
                     checkRotation(event.timestamp)
+                    gyro.onAccelerometer(event.values[0], event.values[1], event.values[2])
                     recorder?.accelerometer(event.timestamp, event.values[0], event.values[1], event.values[2])
                     direction.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
                     // Pre detektora koraka - korak koji on javi vidi i ovaj uzorak.
@@ -106,6 +138,8 @@ class PdrSensorSession(
      * sledeći senzor sa liste. Teren 16.10.2026 (i od 09.10.): rotation vector je prestajao na 100-290 s (ekran ugašen ili
      * aplikacija u pozadini), a akcelerometar je radio - koraci su išli zamrznutim smerom (177 koraka napolju pravo). Kratke
      * praznine od ~3 s se poklapaju sa Google Play uslugama koje se prijavljuju na isti senzor (`dumpsys sensorservice`).
+     * Teren 17.10.2026: ponovna prijava ne vraća senzor (156 s i 36 s tišine, ~3 min pošto je aplikacija otišla sa ekrana,
+     * do povratka na ekran), a drugog senzora na listi nema - za to vreme smer daje žiroskop ([GyroOrientation]).
      */
     private fun checkRotation(nowNs: Long) {
         if (lastRotationNs == 0L || rotationSensors.isEmpty()) return
@@ -127,8 +161,12 @@ class PdrSensorSession(
         rotationSensors.firstOrNull()?.let {
             sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME)
         }
+        onGyro = false
         if (trackSteps) {
             sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
+                sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME)
+            }
+            sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.let {
                 sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME)
             }
         }
@@ -170,8 +208,14 @@ fun PdrHeadingEffect(
 /** Senzor orijentacije ćuti ovoliko (a akcelerometar radi) -> ponovna prijava ([PdrSensorSession] checkRotation). */
 private const val ROTATION_SILENT_NS = 1_000_000_000L
 
-/** Između dve ponovne prijave. */
-private const val ROTATION_RETRY_NS = 2_000_000_000L
+/** Između dve ponovne prijave (17.10.2026: ponovna prijava na 2 s nije vraćala senzor - ređe, samo pokušaj). */
+private const val ROTATION_RETRY_NS = 10_000_000_000L
+
+/**
+ * Senzor orijentacije ćuti ovoliko -> orijentacija iz žiroskopa ([GyroOrientation]). Pola sekunde: obično stiže na 20 ms,
+ * a kratke praznine od Google Play usluga (~3 s, 16.10.2026) bi inače zadržale smer.
+ */
+private const val GYRO_FALLBACK_NS = 500_000_000L
 
 /** Ćuti i posle ponovne prijave -> drugi senzor sa liste (AOSP fuzija umesto Xiaomi-jevog). */
 private const val ROTATION_SWITCH_NS = 3_000_000_000L
