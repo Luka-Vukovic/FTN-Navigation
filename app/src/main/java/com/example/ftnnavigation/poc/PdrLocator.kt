@@ -108,7 +108,8 @@ private const val ENTER_RADIUS_M = 6.0
 /**
  * Kad su uslovi za ulazak ispunjeni, tačka je i dalje do [ENTER_RADIUS_M] od ulaza (teren 08.10.2026: NB 5,3 m - korisnik
  * "možda 7 koraka pre"; NTP opet prerano). Ulazak tek kad koraci pređu taj put ka ulazu (deo koraka u pravcu ulaza),
- * osim ovoliko (vrata, korak).
+ * osim ovoliko (vrata, korak). Samo za ulazak u obrisu: ulazak po pravcu koraka ([ENTER_STEPS_NEAR_M]) čeka ceo put do vrata
+ * (teren 17.10.2026, AMF: "skoro 10 koraka prerano"; bez popusta i u obrisu je NB 09.10. kasnio 5 m više).
  */
 private const val ENTER_SLACK_M = 1.0
 
@@ -2122,7 +2123,8 @@ class PdrLocator(
             } else {
                 stepM
             }
-            if (pending.walkedM >= pending.remainingM - ENTER_SLACK_M) return enter(pending.entrance)
+            val slack = if (pending.byDirection) 0.0 else ENTER_SLACK_M
+            if (pending.walkedM >= pending.remainingM - slack) return enter(pending.entrance)
             if (distance(graph.position(pending.entrance.outside), p) <= ENTER_CANCEL_M) return null
             pendingEntry = null
         }
@@ -2148,7 +2150,6 @@ class PdrLocator(
             val minCos = cos(Math.toRadians(if (entrance.outside.id == exitedEntrance?.id) EXITED_ENTER_STEP_ANGLE_DEG else ENTER_STEP_ANGLE_DEG))
             if (campusSteps.any { it.x * inward.x + it.y * inward.y < minCos }) continue
             trace?.invoke(String.format(Locale.ROOT, "ulaz po pravcu koraka: %s, do vrata %.1f m", entrance.outside.id, toDoor))
-            if (toDoor <= ENTER_SLACK_M) return enter(entrance)
             pendingEntry = PendingEntry(entrance, toDoor, byDirection = true)
             return null
         }

@@ -161,6 +161,23 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("NB", 0), locator.place)
     }
 
+    /**
+     * Teren 17.10.2026, AMF: "Ovde sam" ~5 m ispred glavnog ulaza, pa pravo kroz vrata - tačka je ušla metar pred vratima
+     * (korisnik: "skoro 10 koraka prerano"). Ulazak po pravcu koraka sada čeka ceo put do vrata.
+     */
+    @Test
+    fun fromCampus_stepsTowardDoor_entersOnlyAtDoor() {
+        val entrance = graph.position(node("K-U-AMF-1"))
+        val inward = inwardOf("AMF-m1-ULAZ")
+        val start = PointM(entrance.x - inward.x * 5, entrance.y - inward.y * 5)
+        val locator = PdrLocator(graph, campus, declination, stairPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val azimuth = magneticAzimuth(entrance, PointM(entrance.x + inward.x, entrance.y + inward.y))
+        val entered = (1..10).firstOrNull { locator.step(azimuth, stepM) == PlaceReason.ULAZ }
+        assertNotNull("nije ušao (tačka ${locator.position()})", entered)
+        assertTrue("ušao posle $entered koraka, pre vrata", entered!! * stepM >= 5f)
+        assertEquals(PdrPlace("AMF", -1), locator.place)
+    }
+
     /** Hod spolja uz zid pored ulaza (pravac koraka nije kroz vrata) nije ulazak. */
     @Test
     fun fromCampus_walkingAlongWallPastDoor_doesNotEnter() {
