@@ -825,6 +825,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             lift = LiftRideDetector(),
             onLiftRide = ::onLiftRide,
             gait = stairGait,
+            onHeadingFrozen = { locator?.headingFrozen = it },
         ).also { it.start() }
         PdrTrackingService.start(app)
         state = state.copy(isTracking = true)
@@ -834,6 +835,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     private fun stopTracking() {
         session?.stop()
         session = null
+        locator?.headingFrozen = false
         // Bez praćenja nema koraka koje bi pitanje ponovilo.
         locator?.dismissLift()
         state = state.copy(liftPrompt = null)

@@ -207,15 +207,16 @@ TOP = {  # V sprat: manji, ispod srednjeg hodnika je krov sa dve evakuacione sta
         [(451, 1280), (1305, 1280), (1305, 1389), (451, 1389)],
         [(1080, 813), (1150, 813), (1150, 1280), (1080, 1280)],
     ],
+    # Uz glavni hodnik (teren 18.10.2026, uvećan isečak fotografije): levo tri sobe (pregrade y 774 i 1021; do 18.10. četiri,
+    # 762 / 1020 / 1204), desno pregrada na y 1074 (bila 1040).
     "rooms": [
-        [(121, 547), (345, 547), (345, 762), (121, 762)],
-        [(121, 762), (345, 762), (345, 1020), (121, 1020)],
-        [(121, 1020), (345, 1020), (345, 1204), (121, 1204)],
-        [(121, 1204), (345, 1204), (345, 1297), (121, 1297)],
+        [(121, 547), (345, 547), (345, 774), (121, 774)],
+        [(121, 774), (345, 774), (345, 1020), (121, 1020)],
+        [(121, 1020), (345, 1020), (345, 1297), (121, 1297)],
         [(445, 646), (666, 646), (666, 817), (445, 817)],
         [(765, 646), (869, 646), (869, 817), (765, 817)],
-        [(451, 817), (666, 817), (666, 1040), (451, 1040)],
-        [(451, 1040), (666, 1040), (666, 1280), (451, 1280)],
+        [(451, 817), (666, 817), (666, 1074), (451, 1074)],
+        [(451, 1074), (666, 1074), (666, 1280), (451, 1280)],
         [(666, 817), (1080, 817), (1080, 1280), (666, 1280)],
         *[[(1150, a), (1305, a), (1305, b), (1150, b)] for a, b in
           ((813, 900), (900, 990), (990, 1080), (1080, 1180), (1180, 1280))],
@@ -247,7 +248,9 @@ GROUND = {
     ],
     "rooms": [
         [(719, 348), (1143, 642), (1143, 829), (719, 829)],  # LAB
-        [(450, 905), (654, 905), (654, 1283), (450, 1283)],  # amfiteatar
+        # amfiteatar (001). Do 18.10.2026 počinjao na y 905, a traka do jezgra sa liftovima je bila prazna - korisnik: "ne postoji
+        # prostorija između tog dela sa liftom i stepenicama i 001, to zapravo pripada 001".
+        [(450, 817), (654, 817), (654, 1283), (450, 1283)],
         [(654, 905), (1096, 905), (1096, 1283), (654, 1283)],  # atrijum
         [(1043, 1272), (1299, 1272), (1299, 1547), (1043, 1547)],  # L2
         [(1043, 1553), (1299, 1553), (1299, 1830), (1043, 1830)],  # L1
@@ -348,15 +351,19 @@ FIRST_CORE = "B1580"  # I sprat: S3 i L3 iz donjeg hodnika (vrata jezgra dole)
 # kraju hodnika, vrata ka hodniku.
 CORNER_419 = ((1990, 1600), (1925, 1608), "B1985")
 
-# V sprat (TOP["rooms"]): korisnik - vrata "na kraju" kod 504-510 (sada ipak na sredini, kao drugde).
+# V sprat (TOP["rooms"]): korisnik - vrata "na kraju" kod 504-510. Od 18.10.2026 vrata soba uz glavni hodnik po fotografiji
+# (pri kraju sobe; do tada na sredini zida). Ključ je samo redni broj (indeksi soba u TOP više ne odgovaraju stranici).
 TOP_LABELS = {
-    0: (504, (233, 655), (345, 655), "M676"), 1: (505, (233, 891), (345, 891), "M890"),
-    2: (506, (233, 1112), (345, 1112), "M1112"), 6: (507, (559, 929), (451, 929), "M890"),
-    7: (508, (559, 1160), (451, 1160), "M1112"),
+    0: (504, (233, 660), (345, 755), "M755"), 1: (505, (233, 897), (345, 1000), "M1000"),
+    2: (506, (233, 1158), (345, 1075), "M1075"), 6: (507, (559, 945), (451, 1050), "M1050"),
+    7: (508, (559, 1177), (451, 1250), "M1250"),
     **{i: (n, (1228, y), (1150, y), f"R{y}") for i, n, y in zip(range(9, 14), range(516, 511, -1), (856, 945, 1035, 1130, 1230))},
     14: (509, (815, 1473), (815, 1389), "C815"), 15: (510, (1025, 1473), (1025, 1389), "C1025"),
     16: (511, (1213, 1473), (1213, 1389), "C1212"),
 }
+
+# V sprat, glavni hodnik: stalni čvorovi + naspram vrata soba uz njega (TOP_LABELS).
+TOP_MAIN = sorted({450, 595, 676, 1334, 1470} | {int(attach[1:]) for _, _, _, attach in TOP_LABELS.values() if attach.startswith("M")})
 
 # Isto mesto na svakom spratu (liftovi se na planovima poklapaju); stepenice su susedni spratovi.
 LIFTS = {"L1": (513, 676), "L2": (302, 1505), "L3": (1492, 1516)}
@@ -434,12 +441,47 @@ def points(g, floor, spec):
         g.node(floor, key, x, y)
 
 
+# Sobe uz glavni hodnik po spratu (teren 18.10.2026, korisnik: "raspored prostorija i zidova nije baš tačan ... mislim na
+# prostorije uz glavni hodnik"; očitano sa uvećanih isečaka ispravljenih fotografija sa mrežom, strip.py u scratchpad-u):
+# soba -> (y od, y do, y vrata), None = spojena sa susednom (zida na fotografiji nema). Levo od hodnika (0-4) vrata na x 345,
+# desno (10-12) na x 451; vrata su pri kraju sobe, ne na sredini zida. Do 18.10. su II-IV imali iste pregrade (TYPICAL) i
+# vrata na sredini. III: 312 spojena sa sobom ispod (korisnik, 04.10.) - pregrada 311 | 312 je na y 1052, ne na 1000.
+# I sprat nije menjan: na fotografiji nema pregrade između soba 0 i 1, a korisnik je na vratima očitao 106 i 107.
+WEST_ROOMS = {
+    2: {0: (547, 640, 630), 1: (640, 833, 700), 2: (833, 925, 910), 3: (925, 1204, 965), 4: (1204, 1297, 1250),
+        10: (817, 1050, 1015), 11: (1050, 1204, 1095), 12: (1204, 1280, 1250)},
+    3: {0: None, 1: (547, 833, 770), 2: (833, 1020, 990), 3: (1020, 1204, 1180), 4: (1204, 1297, 1250),
+        10: (817, 1052, 1040), 11: (1052, 1280, 1250), 12: None},
+    4: {0: None, 1: (547, 833, 776), 2: (833, 1020, 840), 3: (1020, 1297, 1075), 4: None,
+        10: (817, 1022, 1000), 11: (1022, 1205, 1185), 12: (1205, 1280, 1250)},
+}
+
+
+def west_shape(room, y0, y1):
+    """Soba uz glavni hodnik od y0 do y1: levo (0-4) prati spoljni zid (x 60 između y 640 i 1020, inače 126), desno do x 666."""
+    if room >= 10:
+        return [(451, y0), (666, y0), (666, y1), (451, y1)]
+    left = lambda y: 60 if 640 <= y < 1020 else 126  # noqa: E731
+    pts = [(left(y0), y0), (345, y0), (345, y1), (left(y1 - 1), y1)]
+    for y in (1020, 640):  # izbočina spoljnog zida, odozdo nagore
+        if y0 < y < y1:
+            pts += [(left(y), y), (left(y - 1), y)]
+    return pts
+
+
+def west_door(room, spec):
+    """(centar, vrata, čvor hodnika) sobe uz glavni hodnik; čvor hodnika M<y vrata> (typical_floor ga dodaje)."""
+    y0, y1, yd = spec
+    xs = [x for x, _ in west_shape(room, y0, y1)]
+    center = ((min(xs) + max(xs)) // 2, (y0 + y1) // 2)
+    return center, (345 if room < 10 else 451, yd), f"M{yd}"
+
+
 def typical_plan(f):
-    """Crtež II-IV sprata: zajednička geometrija + pregrade podeljenih soba i spojene sobe tog sprata."""
+    """Crtež II-IV sprata: zajednička geometrija + sobe uz glavni hodnik, pregrade podeljenih soba i spojene sobe tog sprata."""
     rooms = list(TYPICAL["rooms"])
-    if f == 3:  # korisnik (04.10.2026): "može se uraditi merge prostorije NTP-312 i neobeležene prostorije ispod nje"
-        rooms[11] = [(451, 1000), (666, 1000), (666, 1280), (451, 1280)]
-        rooms[12] = None
+    for room, spec in WEST_ROOMS.get(f, {}).items():
+        rooms[room] = west_shape(room, *spec[:2]) if spec else None
     for room in SPLIT.get(f, ()):
         rooms[room] = None
         rooms += SPLIT_SHAPES[room]
@@ -459,15 +501,18 @@ def typical_floor(g, f):
     # I sprat: gornji hodnik je niži (FIRST), pa i njegovi čvorovi.
     top = {f"U{x}": (x, 636) for x in (690, 782, 882, 982, 1040)} if f == 1 else \
         {f"U{x}": (x, 595) for x in (715, 817, 921, 1023)}
+    # Glavni hodnik: čvorovi naspram vrata soba uz njega (WEST_ROOMS) i stalni (stepeništa, raskrsnice).
+    main = sorted({450, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608} |
+                  {spec[2] for spec in WEST_ROOMS.get(f, {}).values() if spec})
     points(g, f, {
-        **{f"M{y}": (400, y) for y in (450, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608)},
+        **{f"M{y}": (400, y) for y in main},
         "U513": LIFT_EXIT, "U640": (640, 595), **top,
         **{f"R{y}": (1350, y) for y in (830, 930, 1160)},
         **{f"C{x}": (x, 1334) for x in (560, 815, 870, 983, 1170, 1350, 1494, 1600, 1795)},
         "K1350": (1350, 1470), "K1795": (1795, 1470),
         **{f"B{x}": (x, 1608) for x in OFFICES[1:]},
     })
-    g.chain(f, [f"M{y}" for y in (450, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608)])
+    g.chain(f, [f"M{y}" for y in main])
     g.chain(f, ["M595", "U513", "U640", *sorted(top, key=lambda k: top[k][0])])
     g.chain(f, ["R830", "R930", "R1160", "C1350", "K1350", "B1343"])
     if f == 1:
@@ -509,8 +554,8 @@ def typical_floor(g, f):
             spec = CORNER_419
         elif f == 1 and room in FIRST_MID_DOORS:
             spec = FIRST_MID_DOORS[room]
-        elif f == 3 and room == 11:  # spojena sa sobom ispod (typical_plan)
-            spec = ((559, 1140), *TYPICAL_DOORS[11][1:])
+        elif WEST_ROOMS.get(f, {}).get(room):
+            spec = west_door(room, WEST_ROOMS[f][room])
         else:
             spec = TYPICAL_DOORS[room]
         g.room(f, f"NTP-{numbers[0]}", *spec)
@@ -538,7 +583,7 @@ def first_suite(g):
 def top_floor(g):
     f = 5
     points(g, f, {
-        **{f"M{y}": (400, y) for y in (450, 595, 676, 890, 1112, 1250, 1334, 1470)},
+        **{f"M{y}": (400, y) for y in TOP_MAIN},
         "U513": LIFT_EXIT, **{f"U{x}": (x, 595) for x in (640, 817, 920)},
         **{f"C{x}": (x, 1334) for x in (560, 815, 870, 1025, 1115, 1212)},
         **{f"R{y}": (1115, y) for y in (856, 945, 1035, 1130, 1230)},
@@ -546,7 +591,7 @@ def top_floor(g):
         # na V spratu dostiže samo stepenicama/liftom odozdo
         "T1350": (1350, 1340), "T1494": (1494, 1340), "T1600": (1600, 1340),
     })
-    g.chain(f, [f"M{y}" for y in (450, 595, 676, 890, 1112, 1250, 1334, 1470)])
+    g.chain(f, [f"M{y}" for y in TOP_MAIN])
     g.chain(f, ["M595", "U513", "U640", "U817", "U920"])
     g.chain(f, ["M1334", "C560", "C815", "C870", "C1025", "C1115", "C1212"])
     g.chain(f, ["T1350", "T1494", "T1600"])
@@ -564,10 +609,12 @@ def ground_floor(g):
     f = 0
     points(g, f, {
         "V0": (0, 120), "V1": (ULAZ_FTN[0], 120), **{f"H{y}": (290, y) for y in (160, 450, 598, 700, 1000, 1250, 1340)},
-        **{f"M{y}": (400, y) for y in (1340, 1470, 1620, 1782)},
+        # Hol uz istočni zid (M380-M1340): od glavnog ulaza pravo do S1, pored vrata 001 (teren 18.10.2026, korisnik nacrtao
+        # na snimku ekrana "zbog realnijeg kretanja"; do tada samo sredinom hola, H160-H1340).
+        **{f"M{y}": (400, y) for y in (380, 598, 874, 1340, 1470, 1620, 1782)},
         "VA": (-275, 120),  # zapadni kraj predvorja "ULAZ - FTN", ka NTP-A
         "VB": (-600, 320),  # ispred južnog zida NTP-A
-        "U560": (560, 598), "U690": (690, 598), "P740": (690, 740), "P865": (690, 865),
+        "U513": (LIFT_EXIT[0], 598), "U560": (560, 598), "U690": (690, 598), "P740": (690, 740), "P865": (690, 865),
         "W900": (900, 865), "PA": (1200, 760), "PB": (1250, 865), "PC": (1250, 1100),
         **{f"P{y}": (1350, y) for y in (1300, 1420, 1690)},
         **{f"LB{x}": (x, 1340) for x in (1494, 1600, 1790)},
@@ -580,12 +627,15 @@ def ground_floor(g):
                 "M1782", "ULAZ"])
     g.chain(f, ["H1340", "W143", "W0", "W-130"])
     g.chain(f, ["V1", "VA", "VB"])
-    g.chain(f, ["H598", "U560", "U690", "P740", "P865", "W900", "PB"])
+    g.chain(f, ["H598", "M598", "U513", "U560", "U690", "P740", "P865", "W900", "PB"])
+    g.chain(f, ["M380", "M598", "M874", "M1340"])
     g.chain(f, ["ULAZ-PASAZ-Z", "PA", "PB", "PC", "P1300", "P1420", "P1690", "ULAZ-PASAZ-I"])
     g.chain(f, ["P1300", "LB1494", "LB1600", "LB1790"])
     g.chain(f, ["M1782", "BB510", "BB630", "BB750"])
     stair_nodes(g, f, {"S1": "H450", "S2": "M1470", "S3": "LB1600"})
-    g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-0-U560")
+    g.edge("NTP-0-S1", "NTP-0-M380")  # hodnik uz zid hola stiže pravo na dno kraka naviše (pravcem kraka)
+    # Vrata dvojnog lifta L1 gledaju ka S1 na svim spratovima (teren 18.10.2026) - i u prizemlju izlaz pravo gore (bilo koso ka U560).
+    g.edge(g.node(f, "L1", *LIFTS["L1"], "LIFT"), "NTP-0-U513")
     g.edge(g.node(f, "L2", *LIFTS["L2"], "LIFT"), "NTP-0-M1470")
     g.edge(g.node(f, "L3", *LIFTS["L3"], "LIFT"), "NTP-0-LB1494")
     # NTP-A: poslovni deo. Korisnik (teren 03.10.2026): vrata "na kraju", upravno na vrata 001, na zidu suprotnom od
@@ -600,7 +650,8 @@ def ground_floor(g):
     g.room(f, "NTP-L4", (1580, 1150), (1580, 1297), "LB1600")
     # Teren 03.10.2026 (korisnik): 001 je soba "AMFITEATAR" sa plana (učionica; vrata bliže stepeništu S2 -
     # PRETPOSTAVKA: na zidu ka holu, donji kraj), 003 prva od tri male sobe ispod S2, 004 soba desno od L4.
-    g.room(f, "NTP-001", (552, 1094), (450, 1250), "H1250")
+    # Vrata 001: korisnik upisao na snimku ekrana (18.10.2026) - zapadni zid, pri vrhu sobe, ka hodniku uz zid hola.
+    g.room(f, "NTP-001", (552, 1050), (450, 874), "M874")
     g.room(f, "NTP-003", (510, 1645), (510, 1740), "BB510")
     g.room(f, "NTP-004", (1930, 1331), (1780, 1360), "LB1790")
     # NTP-005 nije nađen na terenu - izmišljeno mesto u levom krilu.

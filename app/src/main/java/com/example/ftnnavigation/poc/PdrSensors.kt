@@ -34,6 +34,8 @@ class PdrSensorSession(
     private val lift: LiftRideDetector? = null,
     private val onLiftRide: (LiftRide) -> Unit = {},
     private val gait: StairGait? = null,
+    /** Smer je nepoznat (true) dok ćute i senzor orijentacije i žiroskop, pa opet poznat (false) - [tiltFallback]. */
+    private val onHeadingFrozen: (Boolean) -> Unit = {},
 ) {
     private val rotationMatrix = FloatArray(9)
     private val gyroMatrix = FloatArray(9)
@@ -63,6 +65,11 @@ class PdrSensorSession(
     private val gyro = GyroOrientation()
     private var onGyro = false
     private var gyroSinceNs = 0L
+    private var lastGyroNs = 0L
+
+    // Ćuti i žiroskop (teren 18.10.2026: ućuti zajedno sa senzorom orijentacije, radi samo akcelerometar) - nagib iz
+    // akcelerometra, smer (azimut) zamrznut ([tiltFallback]).
+    private var onTilt = false
 
     /** Orijentacija (iz senzora orijentacije ili, dok on ćuti, iz žiroskopa) - smer, kapija, lift, stepenice, snimak. */
     private fun onOrientation(matrix: FloatArray, timestamp: Long) {
@@ -92,17 +99,25 @@ class PdrSensorSession(
                     if (lastRotationNs != 0L && event.timestamp < lastRotationNs) return
                     lastRotationNs = event.timestamp
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    if (onGyro) {
+                    if (onGyro || onTilt) {
                         // Vratio se: koliko je smer iz žiroskopa odlutao (merilo za snimak).
                         val rv = Math.toDegrees(kotlin.math.atan2(rotationMatrix[1].toDouble(), rotationMatrix[4].toDouble())).toFloat()
                         recorder?.rotationWatchdog(event.timestamp, "NAZAD", event.sensor.name, event.timestamp - gyroSinceNs,
                             angleDiffDeg(gyro.azimuthDeg(), rv))
+                        if (onTilt) onHeadingFrozen(false)
                         onGyro = false
+                        onTilt = false
                     }
                     gyro.seed(rotationMatrix)
                     onOrientation(rotationMatrix, event.timestamp)
                 }
                 Sensor.TYPE_GYROSCOPE -> {
+                    lastGyroNs = event.timestamp
+                    if (onTilt) {
+                        // Žiroskop se vratio pre senzora orijentacije - smer opet prati okrete.
+                        onTilt = false
+                        onHeadingFrozen(false)
+                    }
                     gyro.onGyroscope(event.values[0], event.values[1], event.values[2], event.timestamp)
                     if (!gyro.isSeeded || lastRotationNs == 0L || event.timestamp - lastRotationNs < GYRO_FALLBACK_NS) return
                     if (!onGyro) {
@@ -118,6 +133,7 @@ class PdrSensorSession(
                     checkRotation(event.timestamp)
                     gyro.onAccelerometer(event.values[0], event.values[1], event.values[2])
                     recorder?.accelerometer(event.timestamp, event.values[0], event.values[1], event.values[2])
+                    tiltFallback(event.timestamp)
                     direction.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
                     // Pre detektora koraka - korak koji on javi vidi i ovaj uzorak.
                     gait?.onAccelerometer(event.values[0], event.values[1], event.values[2], event.timestamp)
@@ -154,10 +170,32 @@ class PdrSensorSession(
         recorder?.rotationWatchdog(nowNs, if (switch) "ZAMENA" else "PONOVO", sensor.name, silentNs)
     }
 
+    /**
+     * Ćute i senzor orijentacije i žiroskop (teren 18.10.2026: oba ućute ~3 min pošto aplikacija ode sa ekrana, radi samo
+     * akcelerometar - rezerva iz 17.10. se nijednom nije uključila) -> orijentacija sa nagibom iz akcelerometra i zamrznutim
+     * smerom. Kapija koraka ([HandlingGate]) tako vidi premeštanje telefona: na klupi u NB-u (6 min sedenja, ekran ugašen)
+     * prošlo je 10-ak lažnih koraka, tačka je otišla 7,4 m. Smer je za to vreme nepoznat ([onHeadingFrozen]).
+     */
+    private fun tiltFallback(nowNs: Long) {
+        if (!gyro.isSeeded || lastRotationNs == 0L || nowNs - lastRotationNs < GYRO_FALLBACK_NS) return
+        if (lastGyroNs != 0L && nowNs - lastGyroNs < GYRO_FALLBACK_NS) return
+        if (!onTilt) {
+            onTilt = true
+            if (!onGyro) gyroSinceNs = nowNs
+            recorder?.rotationWatchdog(nowNs, "NAGIB", "akcelerometar", nowNs - lastRotationNs)
+            onHeadingFrozen(true)
+        }
+        gyro.matrix(gyroMatrix)
+        onOrientation(gyroMatrix, nowNs)
+    }
+
     fun start() {
         // GAME (~50 Hz) i za orijentaciju: ubrzanje se okreće u koordinate sveta uzorak po uzorak.
         rotationIndex = 0
         lastRotationNs = 0L
+        lastGyroNs = 0L
+        if (onTilt) onHeadingFrozen(false)
+        onTilt = false
         rotationSensors.firstOrNull()?.let {
             sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME)
         }

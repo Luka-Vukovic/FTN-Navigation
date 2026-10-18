@@ -776,7 +776,9 @@ class PdrLocatorTest {
         // Od mesta gde je trag prošao pored vrata (3 m ispred njih) do ulaska: koraka * dužina - 3 m kroz vrata.
         val walkedIn = steps * stepM - 3.0
         val inside = graph.position(node("NTP-0-ULAZ"))
-        assertTrue("${distance(locator.position(), inside)} m od ulaza, hodao ${walkedIn} m", distance(locator.position(), inside) <= walkedIn + 2)
+        // +2,5 m: od 18.10.2026 hol ima i pravi hodnik uz zid od glavnog ulaza (M380-M1340), pa svi koraci idu punom dužinom
+        // (bilo 20,63 m naspram 18,6 + 2).
+        assertTrue("${distance(locator.position(), inside)} m od ulaza, hodao ${walkedIn} m", distance(locator.position(), inside) <= walkedIn + 2.5)
         val point = locator.match!!.point
         assertTrue("na hodniku", listOf(point.from, point.to).none { it.type == NodeType.PROSTORIJA || it.type == NodeType.VRATA })
     }
@@ -1211,35 +1213,68 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("NB", 1), back.place)
     }
 
-    /** Sa najnižeg nivoa se može samo gore - i tako se nauči strana okreta stepeništa bez crteža krakova (Kula). */
+    /** Sa najnižeg nivoa se može samo gore - i tako se nauči strana okreta stepeništa bez crteža krakova (ITC; Kula je od 18.10.2026 spirala). */
     @Test
     fun fromLowestLevel_goesUp_andLearnsTurn() {
-        val (locator, away) = atStairs("KULA/S", 0)
+        val (locator, away) = atStairs("ITC/S", 0)
         assertEquals(listOf(PlaceReason.STEPENICE), locator.flights(away, -180f))
-        assertEquals(PdrPlace("KULA", 1), locator.place)
+        assertEquals(PdrPlace("ITC", 1), locator.place)
         assertEquals(false, locator.lastStairChange!!.guessed)
-        assertEquals(-1, locator.learnedStairTurns["KULA/S"])
+        assertEquals(-1, locator.learnedStairTurns["ITC/S"])
         // Naučeno važi na drugim spratovima: okret ulevo je gore, udesno dole.
-        val (up, awayUp) = atStairs("KULA/S", 2, locator.learnedStairTurns)
+        val (up, awayUp) = atStairs("ITC/S", 2, locator.learnedStairTurns)
         up.flights(awayUp, -180f)
-        assertEquals(PdrPlace("KULA", 3), up.place)
-        val (down, awayDown) = atStairs("KULA/S", 2, locator.learnedStairTurns)
+        assertEquals(PdrPlace("ITC", 3), up.place)
+        val (down, awayDown) = atStairs("ITC/S", 2, locator.learnedStairTurns)
         down.flights(awayDown, 180f)
+        assertEquals(PdrPlace("ITC", 1), down.place)
+    }
+
+    /**
+     * Teren 18.10.2026, Kula P -> I (hod-20261018-111513, 1124-1170 s): kvadratna spirala, krakovi od 3 i 7 gazišta, okret
+     * od 90° na svakom ugaonom gazištu - pun krug je sprat (u smeru kazaljke gore). Pa isti krug unazad je silazak.
+     */
+    @Test
+    fun kulaSpiralStairs_fullTurnClockwise_goesUp_counterclockwise_goesDown() {
+        // Od 1132.7 s - koraci pre toga (prilaz, pauze) su na snimku odbačeni ([HandlingGate]).
+        val azimuths = listOf(
+            295.0, 314.5, 328.1, 327.1, 326.0, 326.8, 335.7, 353.4, 23.4,
+            49.6, 65.7, 86.5, 116.1, 138.7, 147.8, 148.3, 146.8, 148.0, 170.5, 181.0, 189.3, 210.2, 230.9, 251.3, 264.8, 277.8,
+            291.3, 306.8, 326.2, 336.4, 340.4, 346.3, 347.0, 347.7, 346.7, 345.0, 344.1,
+        ).map { it.toFloat() }
+        val up = locatorAt("KULA-0-S")
+        // Na stepeništu je korak kratak (gazište ~0,3 m, na ugaonom gazištu manje) - punom dužinom tačka odluta iz hola.
+        val treadM = 0.4f
+        assertEquals(listOf(PlaceReason.STEPENICE), azimuths.mapNotNull { up.step(it, treadM) })
+        assertEquals(PdrPlace("KULA", 1), up.place)
+        assertEquals(1, up.lastStairChange!!.turn)
+        val down = locatorAt("KULA-2-S")
+        assertEquals(listOf(PlaceReason.STEPENICE), azimuths.reversed().map { it + 180f }.mapNotNull { down.step(it, treadM) })
         assertEquals(PdrPlace("KULA", 1), down.place)
+    }
+
+    /** Kruženje hodnikom oko jezgra Kule (IV sprat, strane od 10 koraka) nije stepenište. */
+    @Test
+    fun kulaCorridorLoopAroundCore_noFloorChange() {
+        val locator = locatorAt("KULA-4-S")
+        val azimuths = (0 until 4).flatMap { side -> List(10) { 330f + 90f * side } } + List(10) { 330f }
+        val reasons = azimuths.mapNotNull { locator.step(it, stepM) }
+        assertTrue("$reasons", reasons.none { it == PlaceReason.STEPENICE })
+        assertEquals("$reasons", PdrPlace("KULA", 4), locator.place)
     }
 
     /** Strana se ne zna, a sprat nije krajnji: pretpostavka ka odredištu; "Ovde sam" na drugom spratu uči stranu. */
     @Test
     fun unknownTurn_guessesTowardDestination_correctionLearns() {
-        val (locator, away) = atStairs("KULA/S", 3)
-        locator.destination = PdrPlace("KULA", 1)
+        val (locator, away) = atStairs("ITC/S", 3)
+        locator.destination = PdrPlace("ITC", 1)
         locator.flights(away, 180f)
-        assertEquals(PdrPlace("KULA", 2), locator.place)
+        assertEquals(PdrPlace("ITC", 2), locator.place)
         assertEquals(true, locator.lastStairChange!!.guessed)
-        val s4 = stairs.getValue("KULA/S").nodes.getValue(4)
-        locator.setPosition(PdrPlace("KULA", 4), Offset(s4.x, s4.y))
+        val s4 = stairs.getValue("ITC/S").nodes.getValue(4)
+        locator.setPosition(PdrPlace("ITC", 4), Offset(s4.x, s4.y))
         // Okret udesno je bio penjanje (3 -> 4).
-        assertEquals(1, locator.learnedStairTurns["KULA/S"])
+        assertEquals(1, locator.learnedStairTurns["ITC/S"])
     }
 
     // AMF po evakuacionom planu prizemlja (teren 05.10.2026: "nije dobra pozicija stepenica na AMF prizemlju").

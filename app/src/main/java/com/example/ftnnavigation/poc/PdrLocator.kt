@@ -213,6 +213,9 @@ private const val STAIR_ENTER_DEG = 50f
  */
 private const val STAIR_NEAR_M = 5.0
 
+/** Pun krug na spiralnom stepeništu ([SPIRAL_STAIRS]) počinje najviše ovoliko od čvora stepeništa (stepenište Kule je 4,9 x 3,3 m). */
+private const val SPIRAL_NEAR_M = 4.0
+
 /**
  * Let pored stepeništa sa nacrtanim krakovima mora ići pravcem krakova (do ovoliko, sa ispravkom smera). Greška smera u
  * zgradama je do ~15-20° (teren 03.-10.10.2026); lažna promena 10.10. (NB I sprat) je imala let ~90° od kraka.
@@ -599,6 +602,17 @@ class PdrLocator(
         }
 
     private var pathInterrupted = false
+
+    /**
+     * Smer koraka je zamrznut - senzor orijentacije i žiroskop ćute ([PdrSensorSession]). Put od sidra tada ne meri grešku
+     * smera (teren 18.10.2026: napolju posle 231 s tišine "greška −34°", naučeno u zajedničku ispravku), a hod hodnikom je ne uči.
+     */
+    var headingFrozen: Boolean = false
+        set(value) {
+            if (value && anchor != null) pathInterrupted = true
+            if (value) corridorRun = 0
+            field = value
+        }
 
     /**
      * Ispravka koja se dodaje azimutu (−naučena greška + ispravka iz pravca hodnika; 0 ako je isključena ili još nije
@@ -1176,6 +1190,7 @@ class PdrLocator(
             watch.trim(WATCH_STEPS)
             if (startClimb(azimuthDeg)) return null
             stairTurnNearby(azimuthDeg)?.let { return it }
+            spiralNearby()?.let { return it }
         }
         if (++stepsSinceChange < MIN_STEPS_BETWEEN_CHANGES) return null
         return if (place.isCampus) enterBuilding(lengthM.toDouble() * (redo + 1)) else leaveThroughGateway()
@@ -1305,7 +1320,7 @@ class PdrLocator(
      */
     private fun learnFromCorridor(from: EdgePoint?, to: EdgePoint?, dxM: Double, dyM: Double, lengthM: Float) {
         // Za vreme provere posle ulaska ispravka se ne primenjuje ([corridorBiasDeg]) - razlika tada nije merena uz nju.
-        if (from == null || to == null || place.isCampus || entryCheck != null || lengthM < CORRIDOR_MIN_STEP_M ||
+        if (from == null || to == null || place.isCampus || entryCheck != null || headingFrozen || lengthM < CORRIDOR_MIN_STEP_M ||
             to.from.type in ROOM_NODE_TYPES || to.to.type in ROOM_NODE_TYPES
         ) {
             corridorRun = 0
@@ -1391,6 +1406,8 @@ class PdrLocator(
         val node = listOf(point.from, point.to).firstOrNull { it.type == NodeType.STEPENISTE } ?: return false
         val stair = stairs[stairKey(node)] ?: return false
         if (offFlightStair?.first == stair.key) return false
+        // Spirala (Kula) se ne prati kao hod po stepeništu - sprat menja pun krug ([spiralNearby]).
+        if (stair.key in SPIRAL_STAIRS) return false
         val corridor = stair.corridor(node)
         val other = if (point.from.id == node.id) point.to else point.from
         val s = local(node.x, node.y)
@@ -1530,6 +1547,9 @@ class PdrLocator(
         val stair = stairs.values
             .filter { it.buildingId == place.buildingId && place.floor in it.nodes }
             .filter { s -> pathsOf(s, place.floor)?.all(::isStraight) != true }
+            // Spirala (Kula) ima svoje pravilo ([spiralNearby]); kruženje hodnikom oko jezgra Kule (strane po ~10 koraka,
+            // okreti od 90°) je ovde preko pravila za širok međupodest bilo "sprat".
+            .filter { it.key !in SPIRAL_STAIRS }
             .minByOrNull { it.distanceTo(start) }
             ?.takeIf { it.distanceTo(start) <= STAIR_NEAR_M }
             ?: return null
@@ -1546,6 +1566,29 @@ class PdrLocator(
         stepStarts.clear()
         showClimb(climb)
         return reason
+    }
+
+    /**
+     * Spiralno stepenište ([SPIRAL_STAIRS], Kula): pun krug ([StairWalk.spiral]) koji je počeo do [SPIRAL_NEAR_M] od čvora
+     * stepeništa -> sprat više (okret u smeru penjanja) ili niže; tačka na čvoru stepeništa novog sprata, dalje hod kao po
+     * hodniku. Teren 18.10.2026: krakovi od 3 i 7 gazišta i okreti od 90° - let - okret - let ništa nije prepoznao, a ivica
+     * hodnik - stepenište (0,6 m) je tačka preskakala, pa nije ni ušla na stepenište.
+     */
+    private fun spiralNearby(): PlaceReason? {
+        val (start, sense) = watch.spiral() ?: return null
+        val at = watch.positionAt(start) ?: return null
+        val stair = stairs.values.firstOrNull { s ->
+            s.key in SPIRAL_STAIRS && s.buildingId == place.buildingId &&
+                s.nodesOn(place.floor).any { distance(local(it.x, it.y), at) <= SPIRAL_NEAR_M }
+        } ?: return null
+        val from = place.floor
+        val to = from + if (sense == SPIRAL_STAIRS.getValue(stair.key)) 1 else -1
+        val node = stair.nodes[to] ?: return null
+        trace?.invoke("stepenište ${stair.key}: pun krug ${if (sense > 0) "u smeru kazaljke" else "suprotno"} -> sprat $to")
+        moveTo(node)
+        lastStairChange = StairChange(stair.key, stair.buildingId, from, to, sense, guessed = false)
+        stepsSinceStairChange = 0
+        return PlaceReason.STEPENICE
     }
 
     /**

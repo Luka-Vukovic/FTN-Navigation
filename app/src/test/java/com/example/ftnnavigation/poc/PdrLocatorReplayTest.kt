@@ -212,30 +212,63 @@ class PdrLocatorReplayTest {
         var liveDetector = newDetector()
         var redetected = 0
         var recordedSteps = 0
+        fun orient(m: FloatArray, t: Long) {
+            lift.onRotation(m)
+            gait?.onRotation(m)
+            direction?.onRotation(m, t)
+            gate.onRotation(m, t).takeIf { n -> n > 0 }?.let { n -> log(t, "odbačeno koraka: $n") }
+            gate.takeReleased().takeIf { r -> r.isNotEmpty() }?.let { released ->
+                confirm?.let { c -> confirms.appendLine(c.line()) }
+                confirm = Confirm(file.nameWithoutExtension, sec(t), released.size, sec(released.last().timeNs) - sec(released.first().timeNs),
+                    released.map { s -> s.peak }, false)
+                released.forEach(::apply)
+            }
+            confirm?.let { c ->
+                val dt = sec(t) - c.t
+                if (dt <= 1.0) c.turn1 = maxOf(c.turn1, gate.restAngleDeg)
+                if (dt <= 2.0) c.turn2 = maxOf(c.turn2, gate.restAngleDeg)
+                if (dt <= 4.0) c.turn4 = maxOf(c.turn4, gate.restAngleDeg)
+            }
+        }
+        // Kao na telefonu (od 18.10.2026): dok senzor orijentacije ćuti, nagib iz akcelerometra uz zamrznut smer
+        // ([PdrSensorSession] tiltFallback). Snimci pre toga nemaju R redove za to vreme - rezerva se ovde računa iz A redova;
+        // noviji imaju R redove rezerve i W NAGIB / NAZAD. PDR_TILT=0 - bez rezerve, za poređenje.
+        val tilt = GyroOrientation().takeIf { System.getenv("PDR_TILT") != "0" }
+        val tiltMatrix = FloatArray(9)
+        var lastRotationNs = 0L
+        var frozen = false
+        var frozenByPhone = false
+        fun freeze(t: Long, value: Boolean) {
+            if (frozen == value) return
+            frozen = value
+            locator.headingFrozen = value
+            log(t, if (value) "smer nepoznat (senzor orijentacije ćuti)" else "smer opet poznat")
+        }
         for ((i, f) in lines.withIndex()) {
             val t = f.getOrNull(1)?.toLongOrNull() ?: continue
             traceT = t
             when (f[0]) {
                 "R" -> FloatArray(9) { f[2 + it].toFloat() }.let {
-                    lift.onRotation(it)
-                    gait?.onRotation(it)
-                    direction?.onRotation(it, t)
-                    gate.onRotation(it, t).takeIf { n -> n > 0 }?.let { n -> log(t, "odbačeno koraka: $n") }
-                    gate.takeReleased().takeIf { r -> r.isNotEmpty() }?.let { released ->
-                        confirm?.let { c -> confirms.appendLine(c.line()) }
-                        confirm = Confirm(file.nameWithoutExtension, sec(t), released.size, sec(released.last().timeNs) - sec(released.first().timeNs),
-                            released.map { s -> s.peak }, false)
-                        released.forEach(::apply)
+                    lastRotationNs = t
+                    // R redovi rezerve (noviji snimci) ne vraćaju smer - to javlja W NAZAD.
+                    if (!frozenByPhone) {
+                        freeze(t, false)
+                        tilt?.seed(it)
                     }
-                    confirm?.let { c ->
-                        val dt = sec(t) - c.t
-                        if (dt <= 1.0) c.turn1 = maxOf(c.turn1, gate.restAngleDeg)
-                        if (dt <= 2.0) c.turn2 = maxOf(c.turn2, gate.restAngleDeg)
-                        if (dt <= 4.0) c.turn4 = maxOf(c.turn4, gate.restAngleDeg)
-                    }
+                    orient(it, t)
                 }
                 "C" -> if (redetect) liveDetector = newDetector()
                 "A" -> run {
+                    if (tilt != null && tilt.isSeeded && !frozenByPhone) {
+                        tilt.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat())
+                        // Na telefonu posle 0,5 s, ako ćuti i žiroskop. Žiroskop se u snimku ne vidi - kratke praznine (~3 s,
+                        // Google Play usluge) žiroskop pokriva (W ZIROSKOP 18.10.), duge (minuti) ne; zato ovde od 5 s.
+                        if (lastRotationNs != 0L && t - lastRotationNs >= 5_000_000_000L) {
+                            freeze(t, true)
+                            tilt.matrix(tiltMatrix)
+                            orient(tiltMatrix, t)
+                        }
+                    }
                     // Redosled kao u [PdrSensorSession]: smer, detektor koraka, lift.
                     direction?.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
                     gait?.onAccelerometer(f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), t)
@@ -267,7 +300,16 @@ class PdrLocatorReplayTest {
                 }
                 "K" -> stepM = f[2].toFloat()
                 "X" -> log(t, "telefon-locator: ${f.drop(2).joinToString(",")}")
-                "W" -> if (f[2] == "ZIROSKOP" || f[2] == "NAZAD") log(t, "telefon: smer ${f[2]} ${f.drop(4).joinToString(" ")}")
+                "W" -> if (f[2] == "ZIROSKOP" || f[2] == "NAZAD" || f[2] == "NAGIB") {
+                    log(t, "telefon: smer ${f[2]} ${f.drop(4).joinToString(" ")}")
+                    if (f[2] == "NAGIB") {
+                        frozenByPhone = true
+                        freeze(t, true)
+                    } else if (f[2] == "NAZAD") {
+                        frozenByPhone = false
+                        freeze(t, false)
+                    }
+                }
                 "T" -> {
                     locator.destination = f.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let { PdrPlace(it, f[3].toInt()) }
                     log(t, "telefon: odredište ${locator.destination?.let { "${it.buildingId} ${it.floor}" } ?: "-"}")

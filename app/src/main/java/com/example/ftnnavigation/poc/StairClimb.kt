@@ -78,6 +78,26 @@ private const val EXTRA_FLIGHT_STEPS = 3
  */
 val STAIR_UP_TURN = mapOf("NB/S" to 1, "F/S" to -1)
 
+/**
+ * Stepeništa kao kvadratna spirala (teren 18.10.2026, Kula, korisnik: "stepenice idu kvadratno-spiralno, u smeru kazaljke
+ * na satu kad se penjem gore. Gazišta ima 3, 7, 3, 7"; "svako poslednje gazište je veće, kvadratno, kao neki prelaz, pa se
+ * tu može napraviti i dva koraka"): četiri kraka po spratu, okret od 90° posle svakog - sprat je pun krug, a ne dva leta i
+ * okret od 180° ([StairWalk.floorTurn]). Vrednost: strana okreta pri penjanju (+1 u smeru kazaljke).
+ */
+val SPIRAL_STAIRS = mapOf("KULA/S" to 1)
+
+/** Sprat na spiralnom stepeništu: okret za ovoliko u jednom smeru (pun krug, uz grešku kompasa). Snimak 18.10.: 0 -> I 336-373°. */
+const val SPIRAL_TURN_DEG = 330f
+
+/**
+ * Pun krug najviše kroz ovoliko koraka. Snimak 18.10. (Kula 0 -> I): 25 koraka (20 gazišta i po 1-2 koraka na ugaonom
+ * gazištu). Kruženje hodnikom oko jezgra Kule (IV-IX sprat, ~40 m) traži ~50 koraka.
+ */
+private const val SPIRAL_MAX_STEPS = 40
+
+/** U punom krugu nijedan niz istog smera nije duži od ovoga (krak od 7 gazišta - snimak 7 koraka; strana hodnika je duža). */
+private const val SPIRAL_MAX_RUN = 8
+
 /** Sufiks čvora na dnu kraka naniže (stepenište sa krakovima, teren 05.10.2026): NB-1-S-D. */
 const val DOWN_FOOT_SUFFIX = "-D"
 
@@ -280,6 +300,36 @@ class StairWalk {
         it.times += times
         it.positions += positions
     }
+
+    /**
+     * Pun krug na spiralnom stepeništu ([SPIRAL_STAIRS]): od koraka (indeks) do poslednjeg okret od bar [SPIRAL_TURN_DEG]
+     * na jednu stranu, kroz najviše [SPIRAL_MAX_STEPS] koraka, bez niza istog smera dužeg od [SPIRAL_MAX_RUN]. Vraća
+     * (indeks prvog koraka kruga, strana okreta: +1 u smeru kazaljke) za najkraći takav krug, inače null.
+     */
+    fun spiral(): Pair<Int, Int>? {
+        val n = headings.size
+        if (n < 3) return null
+        val sums = FloatArray(n)
+        for (i in 1 until n) sums[i] = sums[i - 1] + angleDiffDeg(headings[i], headings[i - 1])
+        for (start in n - 3 downTo maxOf(0, n - 1 - SPIRAL_MAX_STEPS)) {
+            val turn = sums[n - 1] - sums[start]
+            val sense = when {
+                turn >= SPIRAL_TURN_DEG -> 1
+                turn <= -SPIRAL_TURN_DEG -> -1
+                else -> continue
+            }
+            var runStart = start
+            for (i in start + 1 until n) {
+                if (abs(angleDiffDeg(headings[i], headings[runStart])) > RUN_DEG) runStart = i
+                if (i - runStart + 1 > SPIRAL_MAX_RUN) return null
+            }
+            return start to sense
+        }
+        return null
+    }
+
+    /** Gde je bila tačka posle koraka [i] (metri plana), ako je zadato. */
+    fun positionAt(i: Int): PointM? = positions.getOrNull(i)
 
     /** Koraka u trenutnom nizu istog smera (let posle okreta). */
     fun currentRunSteps(): Int = runs().lastOrNull()?.count() ?: 0
