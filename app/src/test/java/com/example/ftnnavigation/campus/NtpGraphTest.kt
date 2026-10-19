@@ -55,7 +55,7 @@ class NtpGraphTest {
     @Test
     fun liftsStackedOnEveryFloor() {
         val lifts = ntpNodes.filter { it.type == NodeType.LIFT }.groupBy { it.id.substringAfterLast('-') }
-        assertEquals(setOf("L1", "L2", "L3"), lifts.keys)
+        assertEquals(setOf("L1A", "L1B", "L2", "L3"), lifts.keys)
         for ((name, shafts) in lifts) {
             assertEquals(name, 6, shafts.size)
             assertEquals(name, 1, shafts.map { it.x to it.y }.distinct().size)
@@ -253,7 +253,7 @@ class NtpGraphTest {
     @Test
     fun liftToilet_enteredFromUpperCorridor() {
         for (floor in 1..4) {
-            val lift = graph.node("NTP-$floor-L1")!!
+            val lift = graph.node("NTP-$floor-L1B")!!
             val toilet = ntpNodes.filter { it.floor == floor && it.amenity == AMENITY_TOALET }
                 .minBy { hypot((it.x - lift.x).toDouble(), (it.y - lift.y).toDouble()) }
             val door = graph.neighbors(toilet.id).single().first
@@ -270,8 +270,28 @@ class NtpGraphTest {
     fun s1FootOpensIntoLiftCorridor() {
         for (floor in 1..5) {
             assertNotNull("sprat $floor", graph.edge("NTP-$floor-S1-D", "NTP-$floor-U513"))
-            val route = checkNotNull(graph.route("NTP-$floor-S1-D", "NTP-$floor-L1")).nodes.map { it.id }
-            assertFalse(route.toString(), "NTP-$floor-M450" in route)
+            for (cabin in listOf("L1A", "L1B")) {
+                val route = checkNotNull(graph.route("NTP-$floor-S1-D", "NTP-$floor-$cabin")).nodes.map { it.id }
+                assertFalse(route.toString(), "NTP-$floor-M450" in route)
+            }
+        }
+    }
+
+    /**
+     * L1 je dvojni lift (korisnik, teren 17, 19.10.2026 uveče: "graf do dvojnih liftova treba da vodi do oba lifta"): dve kabine,
+     * svaka sa vožnjama na sve spratove, pravo u hodnik ispred sebe i koso do sredine ispred lifta (U513).
+     */
+    @Test
+    fun dualLiftL1_bothCabinsReachable() {
+        for (floor in NtpPlan.FLOORS) {
+            for ((cabin, front) in listOf("L1A" to "U486", "L1B" to "U541")) {
+                val id = "NTP-$floor-$cabin"
+                val walk = graph.neighbors(id).filter { (_, type) -> type == EdgeType.HOD }.map { it.first.id }.toSet()
+                assertEquals(id, setOf("NTP-$floor-$front", "NTP-$floor-U513"), walk)
+                val rides = graph.neighbors(id).filter { (_, type) -> type == EdgeType.LIFT }.map { it.first.floor }.toSet()
+                assertEquals(id, NtpPlan.FLOORS.toSet() - floor, rides)
+                assertNotNull(id, graph.route(NtpPlan.ENTRANCE_ID, id))
+            }
         }
     }
 
