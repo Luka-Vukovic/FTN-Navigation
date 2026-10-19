@@ -26,7 +26,13 @@ WALL = (155, 375, 335, 554)  # OSM obris u zajedničkom sistemu (18,3 x 18,2 m)
 BUILDING = "KULA"
 FLOORS = list(range(10))
 
-STAIRS = [("S", (285, 427, 333, 460), (280, 443))]
+# Spiralno stepenište (korisnik, teren 18. i 19.10.2026): kvadratna spirala oko okna, naviše u smeru kazaljke, krakovi od 3, 7, 3 i
+# 7 gazišta; prvi krak (3) je paralelan pravcu Kula -> Amfiteatri (gore na planu), duži krakovi duž dužeg zida stepeništa.
+# Poslednje gazište svakog kraka je veće, kvadratno (ugaoni podest). Krug počinje i završava se u donjem levom uglu - tu je sprat;
+# čvor stepeništa je levo od njega, uz hodnik oko lifta. Putanja ide u JSON ("spirals") - po njoj se tačka kreće (PdrLocator).
+SPIRAL = {"loop": [(290.5, 454.5), (290.5, 432.5), (327.5, 432.5), (327.5, 454.5), (290.5, 454.5)],
+          "treads": [3, 7, 3, 7], "width": 11}
+STAIRS = [("S", (285, 427, 333, 460), (280, 455))]
 LIFTS = [("L", (224, 447, 263, 478), (243, 484))]
 RING = [[(215, 437), (274, 437), (274, 495), (215, 495), (215, 437)]]  # hodnik oko lifta
 CAMPUS_LINKS = [("K-U-KULA-1", "KULA-0-ULAZ"), ("K-P-NB-KULA", "KULA-0-PROLAZ-NB"), ("K-P-AMF-KULA", "KULA-0-PROLAZ-AMF")]
@@ -160,6 +166,8 @@ def floor_5():
 
 PLANS = {0: floor_0(), 1: floor_1(), 2: floor_2(), 3: floor_3(), 4: typical(4), 5: floor_5(),
          **{f: typical(f) for f in range(6, 10)}}
+for _plan in PLANS.values():
+    _plan["spiral"] = {"S": SPIRAL}
 
 
 def build():

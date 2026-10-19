@@ -243,7 +243,38 @@ def stairwells_json(plans, rel):
             for f, plan in plans.items() for key, fl in plan.get("flights", {}).items() for v in variants(fl)]
 
 
-def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=(), stairwells=()):
+def spiral_parts(spec):
+    """Spiralno stepenište ("spiral" u planu: loop = sredine krakova od ugla do ugla redom naviše, zatvoreno; treads = broj
+    gazišta po kraku; width = širina kraka): (krakovi [(pravougaonik, linije gazišta)], ugaoni podesti, okno u sredini)."""
+    loop, treads, w = spec["loop"], spec["treads"], spec["width"]
+    h = w / 2
+    flights, corners = [], []
+    for (ax, ay), (bx, by), n in zip(loop, loop[1:], treads):
+        corners.append((ax - h, ay - h, ax + h, ay + h))
+        if ax == bx:  # krak duž y
+            y0, y1 = min(ay, by) + h, max(ay, by) - h
+            r = (ax - h, y0, ax + h, y1)
+            lines = " ".join(f"M{ax - h:g},{y0 + (y1 - y0) * k / n:g} H{ax + h:g}" for k in range(1, n))
+        else:  # krak duž x
+            x0, x1 = min(ax, bx) + h, max(ax, bx) - h
+            r = (x0, ay - h, x1, ay + h)
+            lines = " ".join(f"M{x0 + (x1 - x0) * k / n:g},{ay - h:g} V{ay + h:g}" for k in range(1, n))
+        flights.append((r, lines))
+    xs, ys = [x for x, _ in loop], [y for _, y in loop]
+    well = (min(xs) + h, min(ys) + h, max(xs) - h, max(ys) - h)
+    return flights, corners, well
+
+
+def spirals_json(plans, rel):
+    """Spiralna stepeništa (isti krug na svakom spratu): putanja redom naviše (relativno na viewport) i gazišta po kraku."""
+    seen = {}
+    for plan in plans.values():
+        for key, spec in plan.get("spiral", {}).items():
+            seen[key] = {"key": key, "path": [list(rel(*p)) for p in spec["loop"]], "treads": list(spec["treads"])}
+    return list(seen.values())
+
+
+def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=(), stairwells=(), spirals=()):
     vx, vy, vw, vh = viewport
 
     def rel(x, y):
@@ -266,6 +297,8 @@ def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=(
         # [čvor ove zgrade, čvor druge zgrade sa planom] - prolaz mimo kampusa (npr. NB - Kula na I spratu)
         **({"indoorLinks": [list(link) for link in indoor_links]} if indoor_links else {}),
         **({"stairwells": stairwells_json(stairwells, rel)} if stairwells else {}),
+        # Spiralna stepeništa (Kula) - po putanji se tačka kreće na stepeništu.
+        **({"spirals": spirals_json(spirals, rel)} if spirals else {}),
     }
     path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
@@ -314,14 +347,22 @@ def drawable(plan, viewport, wall, building_name, script, source="snimaka aplika
     if plan.get("entrances"):
         parts.append(("Ulazi", path(fill=C_ENTRANCE, data=" ".join(rect(*e) for e in plan["entrances"]))))
     flights = plan.get("flights", {})
-    stairs = [s[1] for s in plan.get("stairs", []) if s[1] and s[0] not in flights] + plan.get("steps", [])
+    spiral = plan.get("spiral", {})
+    stairs = [s[1] for s in plan.get("stairs", []) if s[1] and s[0] not in flights and s[0] not in spiral] + plan.get("steps", [])
     all_variants = [v for fl in flights.values() for v in variants(fl)]
     runs = list(dict.fromkeys(r for v in all_variants for r in ([v["up"]] if v["draw_up"] else []) + ([v["down"]] if v["draw_down"] else [])))
     if stairs or runs:
         parts.append(("Stepeništa", path(fill=C_STAIRS, data=" ".join(rect(*s) for s in stairs + runs))
                       + path(stroke=C_TREAD, width=0.8, data=" ".join(treads(*s) for s in stairs + runs))))
-    # Međupodesti krakova i oni zadati samo za crtež ("landings" - F-blok: međupodest sa pasarelom).
-    landings = list(dict.fromkeys(v["landing"] for v in all_variants)) + plan.get("landings", [])
+    spiral_corners = []
+    for spec in spiral.values():
+        sp_flights, corners, well = spiral_parts(spec)
+        spiral_corners += corners
+        parts.append(("Spiralno stepenište", path(fill=C_STAIRS, data=" ".join(rect(*r) for r, _ in sp_flights))
+                      + path(stroke=C_TREAD, width=0.8, data=" ".join(lines for _, lines in sp_flights))
+                      + path(fill=C_ROOF, stroke=C_WALL, width=0.8, data=rect(*well))))
+    # Međupodesti krakova i oni zadati samo za crtež ("landings" - F-blok: međupodest sa pasarelom; ugaoni podesti spirale).
+    landings = list(dict.fromkeys(v["landing"] for v in all_variants)) + plan.get("landings", []) + spiral_corners
     if landings:
         parts.append(("Međupodesti", path(fill=C_STAIRS, stroke=C_TREAD, width=0.8,
                                           data=" ".join(rect(*l) for l in landings))))
@@ -369,7 +410,8 @@ def write_all(g, plans, viewport, wall, building_name, script, prefix, entrance,
         (res / f"{floor_res(prefix, f)}.xml").write_text(drawable(plan, viewport, wall, building_name, script, source), encoding="utf-8")
     asset = ROOT / f"app/src/main/assets/{g.building.lower()}.json"
     write_json(g, asset, viewport, list(plans), entrance, campus_links, indoor_links,
-               plans if any(p.get("flights") for p in plans.values()) else ())
+               plans if any(p.get("flights") for p in plans.values()) else (),
+               plans if any(p.get("spiral") for p in plans.values()) else ())
     rooms = sum(1 for n in g.nodes.values() if n[3] == "PROSTORIJA" and n[4])
     print(f"{g.building}: {len(g.nodes)} čvorova, {len(g.edges)} ivica, {rooms} sala -> {asset.name}")
 

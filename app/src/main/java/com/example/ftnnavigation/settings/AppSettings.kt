@@ -30,6 +30,9 @@ fun snapStepLength(meters: Float): Float {
     return ((MIN_STEP_LENGTH_M + increments * STEP_LENGTH_INCREMENT_M) * 100).roundToInt() / 100f
 }
 
+/** Dužina koraka u opsegu, na cm (naučena napolju iz GPS-a). */
+fun roundStepLength(meters: Float): Float = (meters.coerceIn(MIN_STEP_LENGTH_M, MAX_STEP_LENGTH_M) * 100).roundToInt() / 100f
+
 /** Podešavanja aplikacije sa ekrana Podešavanja (osim obaveštenja - ona su u `DepartureScheduler`). */
 object AppSettings {
     private const val PREFS = "settings"
@@ -41,6 +44,7 @@ object AppSettings {
     private const val KEY_FAVORITES = "favorite_destinations"
     private const val KEY_RECENTS = "recent_destinations"
     private const val KEY_STEP_LENGTH = "step_length_m"
+    private const val KEY_STEP_SAMPLES = "step_length_samples"
 
     /** Mapa se okreće za po 90° po smeru korisnika; podrazumevano isključeno. */
     fun autoRotateMap(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_ROTATE_MAP, false)
@@ -54,10 +58,20 @@ object AppSettings {
 
     fun setFloorChange(context: Context, value: FloorChange) = prefs(context).edit { putString(KEY_FLOOR_CHANGE, value.name) }
 
-    /** Koliko tačka pređe po koraku (PDR); podrazumevano [DEFAULT_STEP_LENGTH_M]. */
-    fun stepLengthM(context: Context): Float = snapStepLength(prefs(context).getFloat(KEY_STEP_LENGTH, DEFAULT_STEP_LENGTH_M))
+    /**
+     * Koliko tačka pređe po koraku (PDR); podrazumevano [DEFAULT_STEP_LENGTH_M]. Na cm: ručno se bira na 5 cm ([snapStepLength]),
+     * a napolju se uči iz GPS-a ([com.example.ftnnavigation.poc.StepLengthLearner]).
+     */
+    fun stepLengthM(context: Context): Float = roundStepLength(prefs(context).getFloat(KEY_STEP_LENGTH, DEFAULT_STEP_LENGTH_M))
 
-    fun setStepLengthM(context: Context, meters: Float) = prefs(context).edit { putFloat(KEY_STEP_LENGTH, snapStepLength(meters)) }
+    fun setStepLengthM(context: Context, meters: Float) = prefs(context).edit { putFloat(KEY_STEP_LENGTH, roundStepLength(meters)) }
+
+    /** Dužine koraka sa poslednjih deonica napolju ([com.example.ftnnavigation.poc.StepLengthLearner]). */
+    fun stepLengthSamples(context: Context): List<Float> =
+        prefs(context).getString(KEY_STEP_SAMPLES, null)?.split(';')?.mapNotNull { it.toFloatOrNull() }.orEmpty()
+
+    fun setStepLengthSamples(context: Context, samples: List<Float>) =
+        prefs(context).edit { putString(KEY_STEP_SAMPLES, samples.joinToString(";")) }
 
     /** Ruta računa gužvu između časova (procena iz rasporeda); podrazumevano uključeno. */
     fun crowdRouting(context: Context): Boolean = prefs(context).getBoolean(KEY_CROWD_ROUTING, true)

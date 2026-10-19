@@ -20,6 +20,8 @@ data class EdgePoint(val from: Node, val to: Node, val t: Double) {
  * se dodaju koraci. Slobodna pozicija sme da odstupi od ivice najviše toleranciju matchera:
  * korak poprečno na hodnik se tako ne gubi (skretanje u ogranak hodnika), a drift kompasa se ne
  * nagomilava. [stuckXM]/[stuckYM]: zbir koraka (m) od kad se tačka na grafu ne pomera.
+ * [free]: korisnik je u otvorenom prostoru (hol, [MapMatcher] areas) - prikazuje se slobodna pozicija, a [point] je
+ * najbliža tačka grafa (za rutu i prelaze).
  */
 data class MatchedPosition(
     val point: EdgePoint,
@@ -27,7 +29,12 @@ data class MatchedPosition(
     val y: Float,
     val stuckXM: Double = 0.0,
     val stuckYM: Double = 0.0,
-)
+    val free: Boolean = false,
+) {
+    /** Gde je korisnik (relativno na plan): u otvorenom prostoru slobodna pozicija, inače tačka na grafu. */
+    val shownX: Float get() = if (free) x else point.x
+    val shownY: Float get() = if (free) y else point.y
+}
 
 /** Koliko slobodna pozicija sme da odstupi od ivice (m). TODO: proveriti na terenu (širina hodnika). */
 const val MATCH_TOLERANCE_M = 2.0
@@ -69,6 +76,48 @@ private val DEAD_END_TYPES = ROOM_TYPES + NodeType.LIFT
 /** Izlazi sa sprata na kraju hodnika (na kampus ili u drugu zgradu). */
 private val EXIT_TYPES = setOf(NodeType.ULAZ, NodeType.PROLAZ)
 
+/** Ivice do ovih čvorova nisu deo otvorenog prostora ([MapMatcher] areas). */
+private val AREA_EXCLUDED_TYPES = EXIT_TYPES + NodeType.STEPENISTE + NodeType.LIFT
+
+/** Čvor ovoliko van poligona otvorenog prostora (m) je još u njemu (čvorovi na ivici hola). */
+private const val AREA_EDGE_M = 0.3
+
+/** Tačka u poligonu (parni-neparni preseci). */
+private fun inside(poly: List<Pair<Double, Double>>, x: Double, y: Double): Boolean {
+    var result = false
+    var j = poly.size - 1
+    for (i in poly.indices) {
+        val (xi, yi) = poly[i]
+        val (xj, yj) = poly[j]
+        if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) result = !result
+        j = i
+    }
+    return result
+}
+
+/** Najbliža tačka ivice poligona. */
+private fun closestOnBoundary(poly: List<Pair<Double, Double>>, x: Double, y: Double): Pair<Double, Double> {
+    var best = poly[0]
+    var bestD = Double.MAX_VALUE
+    for (i in poly.indices) {
+        val (ax, ay) = poly[i]
+        val (bx, by) = poly[(i + 1) % poly.size]
+        val len2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay)
+        val t = if (len2 == 0.0) 0.0 else (((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2).coerceIn(0.0, 1.0)
+        val cx = ax + (bx - ax) * t
+        val cy = ay + (by - ay) * t
+        val d = hypot(x - cx, y - cy)
+        if (d < bestD) {
+            bestD = d
+            best = cx to cy
+        }
+    }
+    return best
+}
+
+private fun insideOrOn(poly: List<Pair<Double, Double>>, x: Double, y: Double): Boolean =
+    inside(poly, x, y) || closestOnBoundary(poly, x, y).let { (cx, cy) -> hypot(x - cx, y - cy) <= AREA_EDGE_M }
+
 /**
  * Map-matching PDR pozicije na ivice hoda ([EdgeType.HOD]) jednog sprata zgrade. Posle
  * svakog koraka pozicija se projektuje na najbližu ivicu, ali biraju se samo ivice do kojih se
@@ -95,6 +144,13 @@ private val EXIT_TYPES = setOf(NodeType.ULAZ, NodeType.PROLAZ)
  * skrenula u krak ka prolazu u Amfiteatre - korak 56° od kraka, 34° od hodnika - prešla ga celog i
  * okinula prolaz).
  *
+ * Otvoren prostor ([areas], poligoni sprata - hol): graf je tu samo nekoliko linija kroz prostor, a korisnik ide pravo
+ * kuda hoće (teren 19.10.2026, NTP prizemlje: iz lifta dijagonalno preko hola ka predvorju "ULAZ - FTN" - tačka je išla
+ * hodnikom uz zid do S1 i zaglavila se, promašaj 9 m; 12.10. kruženje po istom holu 18 m). Dok je tačka na ivici čija su
+ * oba kraja u prostoru, a slobodna pozicija ostaje u njemu, slobodna pozicija se ne vezuje za ivicu ([MatchedPosition.free]
+ * - ona se prikazuje), a tačka na grafu je najbliža ivica prostora. Izlaz iz prostora: najbliža dostižna ivica van njega
+ * (hodnik, stepenište); ka zidu bez izlaza slobodna pozicija ostaje na ivici poligona.
+ *
  * Računa se u metrima plana (relativne koordinate × dimenzije); rotacija i pomeraj smeštaja
  * plana ne menjaju rastojanja.
  */
@@ -103,8 +159,13 @@ class MapMatcher(
     buildingId: String,
     floor: Int,
     private val toleranceM: Double = MATCH_TOLERANCE_M,
+    areas: List<List<PlanPoint>> = emptyList(),
 ) {
     private val scale = graph.placement(buildingId).scale
+
+    // Otvoreni prostori u metrima plana.
+    private val areaPolygons: List<List<Pair<Double, Double>>> =
+        areas.map { poly -> poly.map { it.x * scale.widthM.toDouble() to it.y * scale.heightM.toDouble() } }
 
     private inner class Segment(val a: Node, val b: Node) {
         val ax = a.x * scale.widthM.toDouble()
@@ -115,6 +176,14 @@ class MapMatcher(
 
         /** Deo grane sale (vrata su uvek samo između sale i hodnika) ili lifta. */
         val isRoom = a.type in DEAD_END_TYPES || b.type in DEAD_END_TYPES
+
+        /**
+         * Otvoren prostor (indeks u [areaPolygons]) kome ivica pripada - oba kraja u njemu; -1 ako nijednom. Grane sala,
+         * ivice do stepeništa i do izlaza sa sprata nisu deo prostora: kroz njih se iz prostora izlazi (prelaz kroz vrata
+         * zgrade traži slobodnu poziciju iza kapije).
+         */
+        val area: Int = if (isRoom || a.type in AREA_EXCLUDED_TYPES || b.type in AREA_EXCLUDED_TYPES) -1
+        else areaPolygons.indexOfFirst { insideOrOn(it, ax, ay) && insideOrOn(it, bx, by) }
 
         fun other(node: Node) = if (node.id == a.id) b else a
 
@@ -193,12 +262,14 @@ class MapMatcher(
         val px = x * scale.widthM.toDouble()
         val py = y * scale.heightM.toDouble()
         val nearest = segments.values.filter { !corridorOnly || !it.isRoom }.minByOrNull { it.distance(px, py) } ?: return null
+        if (nearest.area >= 0 && inside(areaPolygons[nearest.area], px, py)) return freeIn(nearest.area, px, py)
         return fix(nearest, px, py)
     }
 
     /** Jedan korak [dxM]/[dyM] (metri plana: x udesno, y naniže) od pozicije [from]. */
     fun step(from: MatchedPosition, stepX: Double, stepY: Double): MatchedPosition {
         val current = segmentOf(from.point)
+        if (current.area >= 0) return areaStep(from, current, stepX, stepY)
         val (dxM, dyM) = alongCorridor(current, stepX, stepY)
         val px = from.x * scale.widthM + dxM
         val py = from.y * scale.heightM + dyM
@@ -215,6 +286,35 @@ class MapMatcher(
         return escapeRoom(next.point, stuckX, stuckY)
             ?: escapeStuck(next.point, stuckX, stuckY)
             ?: next.copy(stuckXM = stuckX, stuckYM = stuckY)
+    }
+
+    /**
+     * Korak sa ivice otvorenog prostora: slobodna pozicija ostaje u prostoru -> slobodno; izašla iz njega blizu dostižne ivice
+     * van prostora (hodnik, stepenište, izlaz) -> na nju; inače (zid) na ivicu poligona.
+     */
+    private fun areaStep(from: MatchedPosition, current: Segment, stepX: Double, stepY: Double): MatchedPosition {
+        val poly = areaPolygons[current.area]
+        val px = from.x * scale.widthM + stepX
+        val py = from.y * scale.heightM + stepY
+        if (inside(poly, px, py)) return freeIn(current.area, px, py)
+        val reach = hypot(px - from.point.x * scale.widthM, py - from.point.y * scale.heightM) + toleranceM
+        val exit = segmentsNear(from.point, reach)
+            .filter { it.area != current.area && allowed(it, current) }
+            .minByOrNull { it.distance(px, py) }
+        if (exit != null && exit.distance(px, py) <= toleranceM) return fix(exit, px, py)
+        val (cx, cy) = closestOnBoundary(poly, px, py)
+        return freeIn(current.area, cx, cy)
+    }
+
+    /** Slobodna pozicija u prostoru [area]; tačka na grafu je najbliža ivica tog prostora. */
+    private fun freeIn(area: Int, px: Double, py: Double): MatchedPosition {
+        val nearest = segments.values.filter { it.area == area }.minBy { it.distance(px, py) }
+        return MatchedPosition(
+            EdgePoint(nearest.a, nearest.b, nearest.project(px, py)),
+            (px / scale.widthM).toFloat(),
+            (py / scale.heightM).toFloat(),
+            free = true,
+        )
     }
 
     /**

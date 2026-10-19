@@ -17,8 +17,10 @@ import com.example.ftnnavigation.graph.MatchedPosition
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.OpenArea
 import com.example.ftnnavigation.graph.PlanPoint
 import com.example.ftnnavigation.graph.PointM
+import com.example.ftnnavigation.graph.SpiralPath
 import com.example.ftnnavigation.graph.StairPath
 import com.example.ftnnavigation.graph.indoorBuilding
 import java.util.Locale
@@ -91,6 +93,25 @@ private const val MAX_GPS_OUTLIERS = 5
 
 /** Nesigurnost pozicije na ulazu / posle ručnog označavanja (m²). */
 private const val KNOWN_VARIANCE_M2 = 4.0
+
+/**
+ * Smer zamrznut napolju ([PdrLocator.headingFrozen]): korak ide pravcem kojim se GPS pomerio u poslednjih ovoliko
+ * sekundi ... Teren 19.10.2026, NB -> NTP u džepu sa ugašenim ekranom (415 s): koraci zamrznutim smerom su odvlačili tačku
+ * do 20-23 m od GPS-a (tačnost 6-9 m), tri GPS skoka; tačka je posle toga u NTP ušla ~10 koraka kasno.
+ */
+private const val GPS_COURSE_NS = 10_000_000_000L
+
+/** ... ako se pomerio bar ovoliko (inače korak ne pomera tačku - samo GPS). */
+private const val GPS_COURSE_MIN_M = 3.0
+
+/** Lokacije lošije od ovoga ne ulaze u pravac kretanja iz GPS-a. */
+private const val GPS_COURSE_MAX_ACCURACY_M = 15f
+
+/** Korak bez poznatog smera je nesigurniji ([STEP_VARIANCE_M2]): GPS jače povlači tačku. */
+private const val FROZEN_STEP_VARIANCE_M2 = 1.5
+
+/** Najviše ovoliko lokacija u pravcu kretanja (i kad lokacije nemaju vreme - testovi). */
+private const val GPS_TRACK_MAX = 12
 
 // Prelazi.
 
@@ -215,6 +236,21 @@ private const val STAIR_NEAR_M = 5.0
 
 /** Pun krug na spiralnom stepeništu ([SPIRAL_STAIRS]) počinje najviše ovoliko od čvora stepeništa (stepenište Kule je 4,9 x 3,3 m). */
 private const val SPIRAL_NEAR_M = 4.0
+
+/** Na spiralu ([PdrLocator.startSpiral]) se ulazi do ovoliko od čvora stepeništa ... */
+private const val SPIRAL_ENTER_M = 2.0
+
+/** ... korakom do ovoliko od pravca prvog kraka. */
+private const val SPIRAL_ENTER_DEG = 50f
+
+/** Okret suprotno od smera spirale za ovoliko (od najdaljeg) - nije na spirali. */
+private const val SPIRAL_BACK_DEG = 70f
+
+/**
+ * Posle poslednjeg gazišta kraka još ovoliko koraka pravo pre nego što se smatra da je sišao (korisnik: "svako poslednje gazište
+ * je veće, kvadratno, kao neki prelaz, pa se tu može napraviti i dva koraka").
+ */
+private const val SPIRAL_OVERRUN_STEPS = 2
 
 /**
  * Let pored stepeništa sa nacrtanim krakovima mora ići pravcem krakova (do ovoliko, sa ispravkom smera). Greška smera u
@@ -426,6 +462,13 @@ private const val FLOOR_HEIGHT_M = 3.75
 private const val FLOOR_ROUNDING = 0.35
 
 /**
+ * Izmereno preko poslednjeg sprata lifta u smeru vožnje do ovoliko spratova -> taj sprat (dalje lift ne ide). Duge vožnje
+ * mere više: NTP P -> V 18,9-21,0 m, V -> P do −21,0 m (teren 13.-19.10.2026) = do 0,6 sprata preko. Ceo sprat preko i dalje
+ * pita ([lift_beyondLiftFloors_asks]).
+ */
+private const val LIFT_END_SLACK_FLOORS = 0.75
+
+/**
  * Pitanje "na koji sprat?" posle vožnje liftom [lift] kad broj spratova iz pomeraja nije siguran: [floors] su spratovi
  * do kojih lift ide, bez sprata [fromFloor] na kome je tačka (od najvišeg); [suggested] je sprat najbliži izmerenom.
  */
@@ -561,7 +604,16 @@ class PdrLocator(
     private val campus: CampusData,
     declinationDeg: Float,
     stairPaths: List<StairPath> = emptyList(),
+    openAreas: List<OpenArea> = emptyList(),
+    spiralPaths: List<SpiralPath> = emptyList(),
 ) {
+    // Krugovi spiralnih stepeništa (Kula) po ključu stepeništa.
+    private val spirals: Map<String, SpiralPath> = spiralPaths.associateBy { it.stairKey }
+
+    // Otvoreni prostori (hol) po spratu - za map-matching.
+    private val areasByPlace: Map<PdrPlace, List<List<PlanPoint>>> =
+        openAreas.groupBy({ PdrPlace(it.buildingId, it.floor) }, { it.polygon })
+
     var place = PdrPlace(NbPlan.BUILDING_ID)
         private set
 
@@ -646,11 +698,16 @@ class PdrLocator(
     private val matchers = HashMap<PdrPlace, MapMatcher>()
 
     private fun matcherFor(place: PdrPlace): MapMatcher? =
-        if (place.isCampus) null else matchers.getOrPut(place) { MapMatcher(graph, place.buildingId, place.floor) }
+        if (place.isCampus) null else matchers.getOrPut(place) {
+            MapMatcher(graph, place.buildingId, place.floor, areas = areasByPlace[place].orEmpty())
+        }
 
     // Napolju.
     private var varianceM2 = KNOWN_VARIANCE_M2
     private var gpsOutliers = 0
+
+    // Skorašnje GPS lokacije napolju - pravac kretanja dok je smer zamrznut ([gpsCourse]).
+    private val gpsTrack = ArrayDeque<GpsFix>()
 
     /** U zgradi: nov detektor posle svakog sidra, da izlazak potvrde samo lokacije posle ulaska. */
     private var exitDetector: BuildingDetector? = null
@@ -906,6 +963,29 @@ class PdrLocator(
     private var watch = StairWalk()
 
     /**
+     * Koraci za pun krug spiralnog stepeništa ([spiralNearby]) i mesto posle svakog. Ne briše se pri prolazu u drugu zgradu
+     * (isti sprat): prvi krak spirale Kule ide ka prolazu u NB, pa je tačka na prvim stepenicima prošla u NB i nazad (teren
+     * 19.10.2026, kula-up), a [watch] se pri svakom prelazu briše - krug se nije video.
+     */
+    private var spiralWatch = StairWalk()
+    private val spiralPlaces = ArrayList<PdrPlace>()
+
+    private fun clearSpiral() {
+        spiralWatch = StairWalk()
+        spiralPlaces.clear()
+    }
+
+    private fun trackSpiral(azimuthDeg: Float, redo: Int, timeNs: Long?, at: PointM) {
+        if (spiralPlaces.lastOrNull()?.floor?.let { it != place.floor } == true) clearSpiral()
+        val r = min(redo, spiralPlaces.size)
+        repeat(r) { spiralPlaces.removeAt(spiralPlaces.size - 1) }
+        spiralWatch.step(azimuthDeg, redo, timeNs, at)
+        repeat(r + 1) { spiralPlaces += place }
+        spiralWatch.trim(WATCH_STEPS)
+        while (spiralPlaces.size > WATCH_STEPS) spiralPlaces.removeAt(0)
+    }
+
+    /**
      * Koliko je poslednji korak stvarno prešao (m): na stepeništu samo gazište. Kad se let prepozna tek posle okreta
      * ([stairTurnNearby]), u ovom koraku se oduzima višak već brojanih koraka leta (zbir za "Pređeno" ostaje tačan).
      */
@@ -932,9 +1012,9 @@ class PdrLocator(
      */
     val nearStairs: Boolean
         get() {
-            if (climb != null) return true
+            if (climb != null || spiralWalk != null) return true
             if (place.isCampus || passage != null) return false
-            val p = match?.point?.let { Offset(it.x, it.y) } ?: raw ?: return false
+            val p = match?.let { Offset(it.shownX, it.shownY) } ?: raw ?: return false
             val here = local(p.x, p.y)
             return stairs.values.any { stair ->
                 stair.buildingId == place.buildingId &&
@@ -943,7 +1023,7 @@ class PdrLocator(
         }
 
     /** Tačka je na stepeništu (hod po kraku/podestu) - [WalkingDirection.onStairs]. */
-    val onStairs: Boolean get() = climb != null
+    val onStairs: Boolean get() = climb != null || spiralWalk != null
 
     /** Smer za prikaz, u odnosu na "gore" plana mesta. */
     fun headingOnPlan(azimuthDeg: Float): Float = normalizeDeg(azimuthDeg + headingBiasDeg - planUp.getValue(place.buildingId))
@@ -955,7 +1035,7 @@ class PdrLocator(
      * tačka je zalepljena za hodnik, a pokazivač se klatio).
      */
     fun corridorHeadingOnPlan(planHeadingDeg: Float): Float? {
-        if (place.isCampus || climb != null || passage != null) return null
+        if (place.isCampus || climb != null || spiralWalk != null || passage != null) return null
         val point = match?.point ?: return null
         if (point.from.type != NodeType.HODNIK || point.to.type != NodeType.HODNIK) return null
         val a = local(point.from.x, point.from.y)
@@ -982,11 +1062,13 @@ class PdrLocator(
         exitedEntrance = null
         if (!measure) {
             lastStairChange = null
+            clearSpiral()
             setAnchor(place, point)
             varianceM2 = KNOWN_VARIANCE_M2
             return null
         }
         learnStairTurn(place)
+        clearSpiral()
         val check = checkHeading(place, point)
         if (check is HeadingCheck.Measured && check.reliable) {
             headingErrors.addLast(angleDiffDeg(check.errorDeg, 0f))
@@ -1027,6 +1109,7 @@ class PdrLocator(
     fun clearRedo() {
         stepStarts.clear()
         watch = StairWalk()
+        clearSpiral()
         clearLift()
     }
 
@@ -1048,6 +1131,7 @@ class PdrLocator(
         corridorRun = 0
         stepStarts.clear()
         climb = null
+        spiralWalk = null
         offFlightStair = null
         watch = StairWalk()
         lastStairChange = null
@@ -1063,8 +1147,8 @@ class PdrLocator(
     fun liftRide(ride: LiftRide): LiftOutcome? {
         if (liftPrompt != null) return null
         val raw = raw ?: return null
-        if (passage != null || place.isCampus) return null
-        val here = match?.point?.let { local(it.x, it.y) } ?: local(raw.x, raw.y)
+        if (passage != null || spiralWalk != null || place.isCampus) return null
+        val here = match?.let { local(it.shownX, it.shownY) } ?: local(raw.x, raw.y)
         val lift = lifts[place].orEmpty()
             .minByOrNull { distance(local(it.x, it.y), here) }
             ?.takeIf { distance(local(it.x, it.y), here) <= LIFT_RIDE_NEAR_M }
@@ -1076,10 +1160,11 @@ class PdrLocator(
         val from = place.floor
         val measured = ride.heightM / FLOOR_HEIGHT_M
         var floors = Math.round(measured).toInt()
-        // Do pola sprata preko poslednjeg sprata lifta u smeru vožnje -> taj sprat (dalje lift ne ide). Teren 13.10.2026, NTP
-        // V -> P: −20,3 m = 5,4 sprata, pa pitanje sa predlogom P. Duge vožnje mere malo više (P -> V 19,2-20,3 m).
+        // Malo preko poslednjeg sprata lifta u smeru vožnje -> taj sprat (dalje lift ne ide). Teren 13.10.2026, NTP V -> P:
+        // −20,3 m = 5,4 sprata; 19.10.2026 P -> V +21,0 m i V -> P −20,9 m = 5,6 sprata - oba puta pitanje.
         val end = (if (ride.up) targets.keys.maxOrNull() else targets.keys.minOrNull())
-        if (end != null && end != from && (if (ride.up) from + measured > end else from + measured < end) && abs(from + measured - end) <= 0.5) {
+        if (end != null && end != from && (if (ride.up) from + measured > end else from + measured < end) &&
+            abs(from + measured - end) <= LIFT_END_SLACK_FLOORS) {
             floors = end - from
         }
         val target = targets[from + floors]
@@ -1138,9 +1223,10 @@ class PdrLocator(
         if (liftPrompt != null) liftSteps += PendingStep(azimuthDeg, lengthM, redoSteps, timeNs)
         forgetCorridorBias(timeNs)
         stepsSinceStairChange++
-        lastStepM = if (climb != null) STAIR_STEP_M else lengthM
+        lastStepM = if (climb != null || spiralWalk != null) STAIR_STEP_M else lengthM
         walkStepM = lengthM
         passage?.let { return passageStep(it, azimuthDeg, lengthM) }
+        spiralWalk?.let { return spiralStep(it, azimuthDeg, lengthM, timeNs) }
         climb?.let { return climbStep(it, azimuthDeg, redoSteps, timeNs, stairScore) }
         landingClimb?.let { c ->
             turnAtGate(c, azimuthDeg)?.let { return it }
@@ -1158,7 +1244,7 @@ class PdrLocator(
             walkedX = from.walkedX
             walkedY = from.walkedY
         }
-        val (dxM, dyM) = stepVector(place, azimuthDeg, lengthM)
+        val (dxM, dyM) = if (place.isCampus && headingFrozen) frozenStepVector(lengthM) else stepVector(place, azimuthDeg, lengthM)
         val before = match?.point
         if (place.isCampus) repeat(redo.coerceAtMost(campusTrail.size)) { campusTrail.removeLast() }
         repeat(redo + 1) {
@@ -1172,22 +1258,29 @@ class PdrLocator(
             walkedX += dxM
             walkedY += dyM
             if (place.isCampus) {
-                varianceM2 += STEP_VARIANCE_M2
+                varianceM2 += if (headingFrozen) FROZEN_STEP_VARIANCE_M2 else STEP_VARIANCE_M2
                 campusTrail.addLast(TrailStep(meters(PdrPlace.CAMPUS, raw), azimuthDeg, lengthM))
                 if (campusTrail.size > DEEP_TRAIL_STEPS) campusTrail.removeFirst()
             }
         }
         this.raw = raw
         this.match = match
-        if (redo == 0) learnFromCorridor(before, match?.point, dxM, dyM, lengthM) else corridorRun = 0
+        if (redo == 0 && match?.free != true) learnFromCorridor(before, match?.point, dxM, dyM, lengthM) else corridorRun = 0
         if (!place.isCampus) entryCheck?.let { check -> checkEntry(check, azimuthDeg, lengthM, redo)?.let { return it } }
-        if (place.isCampus && lengthM > 0f) {
+        // Dok je smer zamrznut, pravac iz GPS-a je pregrub za ulazak kroz vrata po pravcu koraka (19.10.2026: duž istočnog zida
+        // NTP-a lažno kroz PASAŽ) - samo ulazak u obrisu.
+        if (place.isCampus && headingFrozen) campusSteps.clear()
+        else if (place.isCampus && lengthM > 0f) {
             campusSteps.addLast(PointM(dxM / lengthM, dyM / lengthM))
             if (campusSteps.size > ENTER_STEPS) campusSteps.removeFirst()
         }
+        if (place.isCampus) clearSpiral()
         if (!place.isCampus) {
-            watch.step(azimuthDeg, redo, timeNs, match?.point?.let { local(it.x, it.y) } ?: local(raw.x, raw.y))
+            val at = match?.let { local(it.shownX, it.shownY) } ?: local(raw.x, raw.y)
+            watch.step(azimuthDeg, redo, timeNs, at)
             watch.trim(WATCH_STEPS)
+            trackSpiral(azimuthDeg, redo, timeNs, at)
+            if (startSpiral(azimuthDeg)) return null
             if (startClimb(azimuthDeg)) return null
             stairTurnNearby(azimuthDeg)?.let { return it }
             spiralNearby()?.let { return it }
@@ -1223,6 +1316,11 @@ class PdrLocator(
             return PlaceReason.GPS_IZLAZ
         }
         if (fix.accuracyM > MAX_FUSE_ACCURACY_M) return null
+        if (fix.accuracyM <= GPS_COURSE_MAX_ACCURACY_M) {
+            gpsTrack.addLast(fix)
+            while (gpsTrack.size > 1 && (gpsTrack.size > GPS_TRACK_MAX ||
+                    fix.elapsedNs - gpsTrack.first().elapsedNs > GPS_COURSE_NS)) gpsTrack.removeFirst()
+        }
         val gpsVariance = (fix.accuracyM * fix.accuracyM).toDouble()
         if (!tracking) {
             setAnchor(PdrPlace.CAMPUS, relative(PdrPlace.CAMPUS, fix.point))
@@ -1247,6 +1345,20 @@ class PdrLocator(
 
 
     /**
+     * Korak napolju dok je smer zamrznut: pravcem kojim se GPS pomerio ([GPS_COURSE_NS], bar [GPS_COURSE_MIN_M]); bez toga
+     * korak ne pomera tačku (vodi je samo GPS). Mapa kampusa je u metrima, sever gore.
+     */
+    private fun frozenStepVector(lengthM: Float): Pair<Double, Double> {
+        val first = gpsTrack.firstOrNull() ?: return 0.0 to 0.0
+        val last = gpsTrack.last()
+        val dx = last.point.x - first.point.x
+        val dy = last.point.y - first.point.y
+        val d = hypot(dx, dy)
+        if (d < GPS_COURSE_MIN_M) return 0.0 to 0.0
+        return lengthM * dx / d to lengthM * dy / d
+    }
+
+    /**
      * Korak u metrima plana mesta [plan] (x udesno, y naniže); smer je ispravljen zakrenutošću zgrade u kojoj
      * je korisnik ([place]) - u prolazu se korak meri na mapi kampusa.
      */
@@ -1257,10 +1369,12 @@ class PdrLocator(
 
     private fun setAnchor(place: PdrPlace, point: Offset) {
         this.place = place
+        if (!place.isCampus) gpsTrack.clear()
         raw = point
         match = matcherFor(place)?.start(point.x, point.y)
         passage = null
         climb = null
+        spiralWalk = null
         landingClimb = null
         offFlightStair = null
         watch = StairWalk()
@@ -1575,20 +1689,230 @@ class PdrLocator(
      * hodnik - stepenište (0,6 m) je tačka preskakala, pa nije ni ušla na stepenište.
      */
     private fun spiralNearby(): PlaceReason? {
-        val (start, sense) = watch.spiral() ?: return null
-        val at = watch.positionAt(start) ?: return null
+        val (start, sense) = spiralWatch.spiral() ?: return null
+        val at = spiralWatch.positionAt(start) ?: return null
+        val startPlace = spiralPlaces.getOrNull(start) ?: return null
         val stair = stairs.values.firstOrNull { s ->
-            s.key in SPIRAL_STAIRS && s.buildingId == place.buildingId &&
-                s.nodesOn(place.floor).any { distance(local(it.x, it.y), at) <= SPIRAL_NEAR_M }
+            s.key in SPIRAL_STAIRS && s.buildingId == startPlace.buildingId &&
+                s.nodesOn(startPlace.floor).any { distance(meters(startPlace, Offset(it.x, it.y), local = true), at) <= SPIRAL_NEAR_M }
         } ?: return null
-        val from = place.floor
+        clearSpiral()
+        val from = startPlace.floor
         val to = from + if (sense == SPIRAL_STAIRS.getValue(stair.key)) 1 else -1
         val node = stair.nodes[to] ?: return null
         trace?.invoke("stepenište ${stair.key}: pun krug ${if (sense > 0) "u smeru kazaljke" else "suprotno"} -> sprat $to")
         moveTo(node)
         lastStairChange = StairChange(stair.key, stair.buildingId, from, to, sense, guessed = false)
         stepsSinceStairChange = 0
+        // Tačka je na čvoru stepeništa - sledeći korak pravcem prvog kraka ne sme odmah da je vrati na spiralu ([startSpiral]).
+        stepsSinceStairExit = 0
+        offFlightStair = stair.key to to
         return PlaceReason.STEPENICE
+    }
+
+    /**
+     * Hod po spiralnom stepeništu ([SpiralPath], Kula): krug od četiri kraka oko okna. [ordered] su uglovi kruga u smeru hoda
+     * (naviše kao u JSON-u, naniže obrnuto), [treads] gazišta po kraku u tom smeru. Kojim krakom ide, kaže okret od ulaska
+     * ([turn], + = u smeru hoda: naviše u smeru kazaljke): svakih 90° sledeći krak; po kraku tačka ide gazište po korak.
+     */
+    private class SpiralWalk(
+        val stair: Stair,
+        val ordered: List<PlanPoint>,
+        val treads: List<Int>,
+        val up: Boolean,
+        val sense: Int,
+        var lastHeading: Float,
+        val entryRaw: Offset?,
+        val entryMatch: MatchedPosition?,
+    ) {
+        var turn = 0f
+        var maxTurn = 0f
+        var flight = 0
+        var tread = 1
+
+        // Sprat je u ovom krugu već promenjen (kraj poslednjeg kraka), pa ga skretanje u sledeći krug ne menja ponovo.
+        var landed = false
+
+        // Sprat je bar jednom promenjen (prerano skretanje na prvom kraku više nije pogrešan smer ulaska).
+        var changed = false
+
+        // Koraci od početka kruga (ulaska ili podesta sprata) i PDR put tada - za [replayAsCorridor].
+        val loopSteps = ArrayList<PendingStep>()
+        var loopWalked: Pair<Double, Double> = 0.0 to 0.0
+    }
+
+    private var spiralWalk: SpiralWalk? = null
+
+    /**
+     * Teren 19.10.2026 (kula-up; korisnik: "tačka se nije penjala uz stepenice ... prva tri koraka bi trebala da su paralelno sa
+     * smerom u kom se ide iz Kule u AMF"): stepenište je bilo samo pravougaonik, a pun krug je menjao sprat tek na kraju, dok je
+     * tačka išla hodnikom (i kroz prolaz u NB). Sada: tačka do [SPIRAL_ENTER_M] od čvora stepeništa, a korak pravcem prvog kraka
+     * naviše (ili prvog kraka naniže) -> hod po spirali. Prilaz stepeništu (iz hodnika ka čvoru) ide istim pravcem kao prvi krak
+     * naniže, pa se smer menja ako je skretanje na prvom kraku prerano ([spiralStep]).
+     */
+    private fun startSpiral(azimuthDeg: Float, afterMismatch: Boolean = false): Boolean {
+        if (!afterMismatch && stepsSinceStairExit < STAIR_REENTER_STEPS) return false
+        val m = match ?: return false
+        val here = local(m.shownX, m.shownY)
+        val heading = headingOnPlan(azimuthDeg)
+        for ((key, path) in spirals) {
+            val stair = stairs[key] ?: continue
+            if (stair.buildingId != place.buildingId || offFlightStair == key to place.floor) continue
+            val node = stair.nodes[place.floor] ?: continue
+            if (distance(local(node.x, node.y), here) > SPIRAL_ENTER_M) continue
+            // Samo sa ivice do stepeništa - hodnik oko lifta ide pored njega istim pravcem kao prvi krak (teren 12.10.2026 uveče:
+            // hod ka severu pored stepeništa, tačka bi "ušla" na spiralu).
+            if (m.point.from.id != node.id && m.point.to.id != node.id) continue
+            val pts = path.points
+            fun dir(a: PlanPoint, b: PlanPoint): Float {
+                val pa = local(a.x, a.y)
+                val pb = local(b.x, b.y)
+                return azimuthOf(pb.x - pa.x, pb.y - pa.y)
+            }
+            val up = when {
+                stair.nodes[place.floor + 1] != null && abs(angleDiffDeg(heading, dir(pts[0], pts[1]))) <= SPIRAL_ENTER_DEG -> true
+                !afterMismatch && stair.nodes[place.floor - 1] != null &&
+                    abs(angleDiffDeg(heading, dir(pts[pts.size - 1], pts[pts.size - 2]))) <= SPIRAL_ENTER_DEG -> false
+                else -> continue
+            }
+            val upSense = SPIRAL_STAIRS[key] ?: 1
+            val walk = SpiralWalk(
+                stair, if (up) pts else pts.asReversed(), if (up) path.treads else path.treads.asReversed(), up,
+                if (up) upSense else -upSense, heading, raw, match,
+            )
+            // Mesto ulaska već ima ovaj korak (hod) - ponavljaju se samo koraci posle njega.
+            walk.loopWalked = walkedX to walkedY
+            spiralWalk = walk
+            clearSpiral()
+            watch = StairWalk()
+            stepStarts.clear()
+            trace?.invoke("stepenište $key: spirala ${if (up) "naviše" else "naniže"}")
+            showSpiral(walk)
+            return true
+        }
+        return false
+    }
+
+    /** Korak na spiralnom stepeništu: krak po okretu, gazište po korak; kraj kruga menja sprat, hod pravo dalje izlazi. */
+    private fun spiralStep(w: SpiralWalk, azimuthDeg: Float, lengthM: Float, timeNs: Long?): PlaceReason? {
+        val heading = headingOnPlan(azimuthDeg)
+        w.turn += angleDiffDeg(heading, w.lastHeading) * w.sense
+        w.lastHeading = heading
+        w.maxTurn = maxOf(w.maxTurn, w.turn)
+        w.loopSteps += PendingStep(azimuthDeg, lengthM, 0, timeNs)
+        val (dx, dy) = stepVector(place, azimuthDeg, STAIR_STEP_M)
+        walkedX += dx
+        walkedY += dy
+        if (w.turn < w.maxTurn - SPIRAL_BACK_DEG) {
+            trace?.invoke("stepenište ${w.stair.key}: okret nazad - silazi sa spirale")
+            return if (w.flight < 2) replayAsCorridor(w) else leaveSpiral(w)
+        }
+        var reason: PlaceReason? = null
+        val k = Math.floorDiv((w.turn + 45f).toInt(), 90)
+        if (k > w.flight) {
+            // Prerano skretanje na prvom kraku: to je bio prilaz stepeništu, a ne krak (prilaz iz hodnika ide pravcem prvog kraka
+            // naniže, pa skretanje ka prvom kraku naviše) - nazad gde je ušao i ponovo ulazak ovim korakom.
+            if (w.flight == 0 && !w.changed && w.tread < (w.treads[0] + 1) / 2) {
+                trace?.invoke("stepenište ${w.stair.key}: prerano skretanje - drugi smer")
+                spiralWalk = null
+                raw = w.entryRaw
+                match = w.entryMatch
+                if (startSpiral(azimuthDeg, afterMismatch = true)) return null
+                return null
+            }
+            w.flight = k
+            w.tread = 1
+            if (w.flight >= 4) {
+                if (!w.landed) reason = spiralFloor(w)
+                w.flight -= 4
+                w.turn -= 360f
+                w.maxTurn -= 360f
+                w.landed = false
+                if (reason == null && spiralWalk == null) return leaveSpiral(w)
+            }
+        } else {
+            w.tread++
+            if (w.flight == 3 && w.tread > w.treads[3] && !w.landed) {
+                reason = spiralFloor(w)
+                w.landed = true
+                if (spiralWalk == null) return leaveSpiral(w)
+            }
+            if (w.tread > w.treads[w.flight] + SPIRAL_OVERRUN_STEPS) {
+                trace?.invoke("stepenište ${w.stair.key}: hod pravo posle kraka - silazi sa spirale")
+                if (w.landed) return leaveSpiral(w) ?: reason
+                return (if (w.flight < 2) replayAsCorridor(w) else leaveSpiral(w)) ?: reason
+            }
+        }
+        showSpiral(w)
+        return reason
+    }
+
+    /** Kraj kruga: sprat više ili niže (null ako ga nema - silazi sa spirale). */
+    private fun spiralFloor(w: SpiralWalk): PlaceReason? {
+        val from = place.floor
+        val to = from + if (w.up) 1 else -1
+        if (w.stair.nodes[to] == null) {
+            spiralWalk = null
+            return null
+        }
+        place = PdrPlace(w.stair.buildingId, to)
+        w.changed = true
+        w.loopSteps.clear()
+        w.loopWalked = walkedX to walkedY
+        trace?.invoke("stepenište ${w.stair.key}: spirala -> sprat $to")
+        lastStairChange = StairChange(w.stair.key, w.stair.buildingId, from, to, w.sense, guessed = false)
+        stepsSinceStairChange = 0
+        return PlaceReason.STEPENICE
+    }
+
+    /** Silazak sa spirale: tačka na najbliži hodnik sprata (od mesta na spirali); na isto stepenište ne ulazi odmah opet. */
+    private fun leaveSpiral(w: SpiralWalk): PlaceReason? {
+        spiralWalk = null
+        stepsSinceStairExit = 0
+        offFlightStair = w.stair.key to place.floor
+        val r = raw ?: return null
+        match = matcherFor(place)?.start(r.x, r.y, corridorOnly = true)
+        clearSpiral()
+        watch = StairWalk()
+        return null
+    }
+
+    /**
+     * Sišao sa spirale pre trećeg kraka kruga: nije se penjao, nego je hodao pored stepeništa - pravac hodnika uz stepenište
+     * je isti kao prva dva kraka (teren 19.10.2026, Kula I sprat: sa podesta severno pa istočno ka prolazu u NB, kao prvi i drugi
+     * krak sledećeg kruga). Tačka na početak kruga (mesto ulaska ili podest sprata), a koraci od tada se ponove kao hod.
+     */
+    private fun replayAsCorridor(w: SpiralWalk): PlaceReason? {
+        spiralWalk = null
+        stepsSinceStairExit = 0
+        offFlightStair = w.stair.key to place.floor
+        if (w.changed) {
+            val node = w.stair.nodes.getValue(place.floor)
+            raw = Offset(node.x, node.y)
+            match = matcherFor(place)?.start(node.x, node.y, corridorOnly = true)
+        } else {
+            raw = w.entryRaw
+            match = w.entryMatch
+        }
+        walkedX = w.loopWalked.first
+        walkedY = w.loopWalked.second
+        clearSpiral()
+        watch = StairWalk()
+        trace?.invoke("stepenište ${w.stair.key}: nije na spirali - ${w.loopSteps.size} koraka hodnikom")
+        var reason: PlaceReason? = null
+        for (s in w.loopSteps.toList()) step(s.azimuthDeg, s.lengthM, 0, s.timeNs)?.let { reason = it }
+        return reason
+    }
+
+    /** Tačka na kraku spirale: [SpiralWalk.tread] gazišta od početka kraka (na kraju kraka - ugao - čeka okret). */
+    private fun showSpiral(w: SpiralWalk) {
+        val f = w.flight.coerceIn(0, 3)
+        val n = w.treads[f]
+        val t = w.tread.coerceAtMost(n).toFloat() / n
+        val a = w.ordered[f]
+        val b = w.ordered[f + 1]
+        raw = Offset(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+        match = null
     }
 
     /**
@@ -2171,9 +2495,11 @@ class PdrLocator(
             if (distance(graph.position(pending.entrance.outside), p) <= ENTER_CANCEL_M) return null
             pendingEntry = null
         }
+        // Dok je smer zamrznut, tačku vodi GPS, a on korisnika uz zid drži i nekoliko metara u obrisu (19.10.2026, istočni zid
+        // NTP-a: lažno kroz PASAŽ i sa 4 m dubine) - ulazi se samo duboko u obrisu ([enterFromDeepInside]).
         for ((buildingId, list) in entrances) {
             val outline = campus.building(buildingId) ?: continue
-            if (!outline.contains(p) || outline.distanceToWallM(p) < ENTER_DEPTH_M) continue
+            if (headingFrozen || !outline.contains(p) || outline.distanceToWallM(p) < ENTER_DEPTH_M) continue
             val entrance = list.filter { it.outside.id != rejectedEntrance?.id && it.outside.id != exitedEntrance?.id }
                 .minByOrNull { distance(graph.position(it.outside), p) } ?: continue
             val toDoor = distance(graph.position(entrance.outside), p)
@@ -2282,7 +2608,7 @@ class PdrLocator(
         val net = PointM(check.steps.sumOf { it.x }, check.steps.sumOf { it.y })
         val netM = hypot(net.x, net.y)
         if (netM < ENTRY_CHECK_MIN_M) return null
-        val shown = match?.point?.let { Offset(it.x, it.y) } ?: raw ?: return null
+        val shown = match?.let { Offset(it.shownX, it.shownY) } ?: raw ?: return null
         if (distance(meters(place, shown), graph.position(check.entrance.inside)) >= ENTRY_PROGRESS_RATIO * netM) return null
         val door = graph.position(check.entrance.outside)
         val walked = PointM(door.x + net.x, door.y + net.y)
@@ -2441,7 +2767,7 @@ class PdrLocator(
 
     /** GPS je potvrdio izlazak: na ulazu ako je PDR bio blizu njega, inače na GPS lokaciji. */
     private fun exitByGps(fix: GpsFix) {
-        val here = meters(place, match?.point?.let { Offset(it.x, it.y) } ?: raw ?: return, local = true)
+        val here = meters(place, match?.let { Offset(it.shownX, it.shownY) } ?: raw ?: return, local = true)
         val gate = gateways[place].orEmpty()
             .filter { it.target.type == NodeType.ULAZ && !it.target.isIndoor }
             .minByOrNull { distance(meters(place, Offset(it.node.x, it.node.y), local = true), here) }

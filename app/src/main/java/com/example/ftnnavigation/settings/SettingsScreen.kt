@@ -121,7 +121,8 @@ private fun formatMeters(meters: Float): String = String.format(Locale.forLangua
 @Composable
 private fun StepLengthCard(stepLengthM: Float, onChange: (Float) -> Unit) {
     var dragged by remember(stepLengthM) { mutableFloatStateOf(stepLengthM) }
-    val shown = snapStepLength(dragged)
+    // Naučena napolju je na cm (0,82) - klizač je na 5 cm, pa se tek pomeranjem zaokružuje.
+    val shown = if (dragged == stepLengthM) stepLengthM else snapStepLength(dragged)
     SettingsCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(

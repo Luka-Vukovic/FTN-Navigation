@@ -32,6 +32,9 @@ class PdrLocatorReplayTest {
     private val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
     private val plans = INDOOR_BUILDINGS.map { IndoorPlan.parse(File("src/main/assets/${it.asset}").readText()) }
     private val stairPaths = plans.flatMap { it.stairPaths() }
+    // PDR_AREAS=0: bez otvorenih prostora (hol) - za poređenje.
+    private val openAreas = plans.flatMap { it.openAreas() }.takeIf { System.getenv("PDR_AREAS") != "0" }.orEmpty()
+    private val spiralPaths = plans.flatMap { it.spiralPaths() }
     private val graph = seedGraph(campus, plans)
         .let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
@@ -45,6 +48,13 @@ class PdrLocatorReplayTest {
     // Snimci bez `K` reda (pre 08.10.2026) su hodani sa 0,8 m.
     private var stepM = 0.8f
 
+    // Dužina koraka iz GPS-a napolju (kao na telefonu, kroz ceo folder) - ispisuje se, a primenjuje uz PDR_LEARN_STEP=1.
+    private val stepLearner = StepLengthLearner()
+
+    // PDR_LEARN_STEP=1: naučena dužina se i primenjuje (kao na telefonu) - posle prve naučene K redovi se ne slušaju.
+    private val applyLearnedStep = System.getenv("PDR_LEARN_STEP") == "1"
+    private var learnedStepM: Float? = null
+
     @Test
     fun replay() {
         val path = System.getenv("PDR_REPLAY")
@@ -53,7 +63,7 @@ class PdrLocatorReplayTest {
         val files = if (input.isDirectory) input.listFiles { f -> f.extension == "csv" }!!.sorted() else listOf(input)
         val outDir = File("build/pdr-replay").apply { mkdirs() }
         // Snimci iste sesije (bez Reset-a) dele locator - naučena zakrenutost smera prelazi u sledeći snimak.
-        val locator = PdrLocator(graph, campus, declination, stairPaths)
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
         // PDR_DEST=AMF:-1 - odredište (zgrada:sprat) za ceo replay, kao izabrano na telefonu.
         System.getenv("PDR_DEST")?.split(':')?.takeIf { it.size == 2 }?.let { locator.destination = PdrPlace(it[0], it[1].toInt()) }
         for (file in files) {
@@ -111,7 +121,7 @@ class PdrLocatorReplayTest {
     )
 
     private fun PdrLocator.position(): PointM? {
-        val p = match?.point?.let { Offset(it.x, it.y) } ?: raw ?: return null
+        val p = match?.let { Offset(it.shownX, it.shownY) } ?: raw ?: return null
         return graph.placement(place.buildingId).toMeters(p.x, p.y)
     }
 
@@ -180,6 +190,11 @@ class PdrLocatorReplayTest {
         var confirm: Confirm? = null
         fun apply(s: HandlingGate.Step) {
             val lengthM = if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak)
+            if (locator.place.isCampus && !locator.headingFrozen) {
+                stepLearner.onStep(locator.headingOnPlan(s.walk.headingDeg), AccelStepDetector.stepLengthFactor(s.peak))
+            } else {
+                stepLearner.reset()
+            }
             lastScore = gait?.score(s.timeNs)
             val reason = locator.step(s.walk.headingDeg, lengthM, s.walk.redoSteps, s.timeNs, lastScore)
             if (!locator.onStairs) gait?.flat(s.timeNs)
@@ -298,7 +313,7 @@ class PdrLocatorReplayTest {
                 } else {
                     log(t, "telefon: pitanje za lift ${f[3]}")
                 }
-                "K" -> stepM = f[2].toFloat()
+                "K" -> if (learnedStepM == null) stepM = f[2].toFloat()
                 "X" -> log(t, "telefon-locator: ${f.drop(2).joinToString(",")}")
                 "W" -> if (f[2] == "ZIROSKOP" || f[2] == "NAZAD" || f[2] == "NAGIB") {
                     log(t, "telefon: smer ${f[2]} ${f.drop(4).joinToString(" ")}")
@@ -323,6 +338,20 @@ class PdrLocatorReplayTest {
                 }
                 "G" -> {
                     val fix = GpsFix(PointM(f[2].toDouble(), f[3].toDouble()), f[4].toFloat(), t)
+                    if (locator.place.isCampus && !locator.headingFrozen) {
+                        val before = stepLearner.samples
+                        val learned = stepLearner.onGps(fix)
+                        if (learned != null && applyLearnedStep) {
+                            learnedStepM = learned
+                            stepM = learned
+                        }
+                        if (stepLearner.samples != before) {
+                            log(t, String.format(Locale.ROOT, "dužina koraka iz GPS-a: deonica %.2f m, naučeno %s (podešeno %.2f)",
+                                stepLearner.samples.last(), learned?.let { String.format(Locale.ROOT, "%.2f", it) } ?: "-", stepM))
+                        }
+                    } else {
+                        stepLearner.reset()
+                    }
                     val reason = locator.onGps(fix, tracking = true)
                     if (reason != null) anchorKind = reason.name
                     if (reason != null) log(t, "replay: $reason")
@@ -344,7 +373,7 @@ class PdrLocatorReplayTest {
                         if ((bias != 0f || corridor != 0f) && System.getenv("PDR_LEARN_BIAS") != "1") locator.restoreBias(bias, corridor, outside = place.isCampus)
                         // Pozicija na Start (od 05.10.2026): replay kreće odatle ako je drugde (Ovde sam pre Start-a).
                         val at = Offset(f[5].toFloat(), f[6].toFloat())
-                        val now = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw
+                        val now = locator.match?.let { Offset(it.shownX, it.shownY) } ?: locator.raw
                         val scale = graph.placement(place.buildingId).scale
                         val apart = now?.let { hypot((it.x - at.x) * scale.widthM, (it.y - at.y) * scale.heightM) }
                         if (place != locator.place || apart == null || apart > 0.5) {

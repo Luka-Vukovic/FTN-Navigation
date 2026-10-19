@@ -6,6 +6,8 @@ import com.example.ftnnavigation.graph.GraphDatabase
 import com.example.ftnnavigation.graph.GraphRepository
 import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
+import com.example.ftnnavigation.graph.OpenArea
+import com.example.ftnnavigation.graph.SpiralPath
 import com.example.ftnnavigation.graph.StairPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,6 +30,14 @@ suspend fun loadIndoorPlan(context: Context, asset: String): IndoorPlan = withCo
 /** Putanje stepeništa sa krakovima iz planova zgrada (nisu u bazi - za kretanje tačke po stepeništu). */
 suspend fun loadStairPaths(context: Context): List<StairPath> =
     INDOOR_BUILDINGS.flatMap { loadIndoorPlan(context, it.asset).stairPaths() }
+
+/** Otvoreni prostori (hol) iz planova zgrada - za map-matching ([com.example.ftnnavigation.graph.MapMatcher]). */
+suspend fun loadOpenAreas(context: Context): List<OpenArea> =
+    INDOOR_BUILDINGS.flatMap { loadIndoorPlan(context, it.asset).openAreas() }
+
+/** Spiralna stepeništa (Kula) iz planova zgrada - za kretanje tačke po stepeništu. */
+suspend fun loadSpiralPaths(context: Context): List<SpiralPath> =
+    INDOOR_BUILDINGS.flatMap { loadIndoorPlan(context, it.asset).spiralPaths() }
 
 /** Graf kampusa i zgrada iz baze; prazna baza se prvo puni ([seedGraph]). */
 suspend fun loadGraph(context: Context, campus: CampusData): BuildingGraph {

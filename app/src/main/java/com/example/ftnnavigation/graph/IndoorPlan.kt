@@ -27,7 +27,16 @@ data class IndoorPlan(
     val indoorLinks: List<List<String>> = emptyList(),
     /** Stepeništa sa dva kraka i međupodestom, po spratu (nisu deo grafa - za kretanje tačke po stepeništu). */
     val stairwells: List<IndoorStairwell> = emptyList(),
+    /** Otvoreni prostori (hol) po spratu - tačka u njima ide slobodno ([MapMatcher]). */
+    val areas: List<IndoorArea> = emptyList(),
+    /** Spiralna stepeništa (Kula) - isti krug na svakom spratu, po njemu se tačka kreće na stepeništu. */
+    val spirals: List<IndoorSpiral> = emptyList(),
 ) {
+    fun spiralPaths(): List<SpiralPath> =
+        spirals.map { s -> SpiralPath("$buildingId/${s.key}", s.path.map { (x, y) -> PlanPoint(x, y) }, s.treads) }
+
+    fun openAreas(): List<OpenArea> = areas.map { a -> OpenArea(buildingId, a.floor, a.polygon.map { (x, y) -> PlanPoint(x, y) }) }
+
     fun graphNodes(): List<Node> = nodes.map { Node(it.id, buildingId, it.floor, it.x, it.y, it.type, it.name, it.amenity) }
 
     /** Putanje stepeništa, ključ "zgrada/stepenište" kao [com.example.ftnnavigation.poc.stairKey]. */
@@ -49,6 +58,23 @@ data class IndoorPlan(
 /** Stepenište sa krakovima na spratu [floor]: [path] = dno kraka naviše, okret, okret, dno kraka naniže (relativno). */
 @Serializable
 data class IndoorStairwell(val key: String, val floor: Int, val path: List<List<Float>>)
+
+/** Spiralno stepenište [key]: [path] = krug od ugla sprata redom naviše (zatvoren), [treads] = gazišta po kraku. */
+@Serializable
+data class IndoorSpiral(val key: String, val path: List<List<Float>>, val treads: List<Int>)
+
+/**
+ * Krug spiralnog stepeništa [stairKey] ("zgrada/stepenište"): [points] od ugla sprata redom naviše (poslednja = prva, sprat
+ * iznad), [treads] gazišta po kraku. Relativno na plan; isti na svakom spratu.
+ */
+data class SpiralPath(val stairKey: String, val points: List<PlanPoint>, val treads: List<Int>)
+
+/** Otvoren prostor na spratu [floor]: poligon relativno na plan. */
+@Serializable
+data class IndoorArea(val floor: Int, val polygon: List<List<Float>>)
+
+/** Otvoren prostor (hol) zgrade [buildingId] na spratu [floor] - poligon relativno na plan. */
+data class OpenArea(val buildingId: String, val floor: Int, val polygon: List<PlanPoint>)
 
 /** Tačka relativno na plan (0..1). */
 data class PlanPoint(val x: Float, val y: Float)

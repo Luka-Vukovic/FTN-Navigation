@@ -153,7 +153,10 @@ FIRST_MID_ROOMS = [
     [(1015, 1280), (1301, 1280), (1301, 1400), (1015, 1400)],  # iznad toaleta, vrata na desni hodnik
     [(1015, 1400), (1301, 1400), (1301, 1556), (1015, 1556)],  # toaleti
 ]
-FIRST_MID_DOORS = {18: ((782, 1418), (830, 1556), "B872"), 19: ((940, 1418), (900, 1556), "B872")}
+FIRST_MID_DOORS = {18: ((782, 1418), (830, 1556), "B872"), 19: ((940, 1418), (900, 1556), "B872"),
+                   "above_s2": ((575, 1338), (451, 1365), "M1365")}  # 114 (teren 19.10.2026)
+# 110 (teren 19.10.2026): mala soba levo od glavnog hodnika između 109 i L2, vrata na hodnik (pravougaonik, centar, vrata, čvor).
+FIRST_110 = ((240, 1297, 345, 1397), (292, 1347), (345, 1334), "M1334")
 # Oznake (korisnik, 04.10.2026 uveče, na snimku ekrana plana): 119 = hol istočno od desnog hodnika (do 04.10. deo srednjeg
 # hodnika; iz njega se ulazi u 120 = T1, 121 = T2 i 122 = T3), 123 = soba 17 (iz T3), 124 = prostor iza dvokrilnih vrata
 # na kraju donjeg hodnika (do 04.10. nastavak hodnika; kroz njega se ulazi u 125 i 126). Na fotografiji se jezgro sa S3 i
@@ -309,8 +312,8 @@ ABOVE_RIGHT = ((1170, 765), (1301, 805), "R830")  # iznad sobe 14, levo od poče
 # Sprat -> [(soba, broj ili brojevi)]; više brojeva u jednoj sobi: prvi je naziv, ostali su alias (ROOM_ALIASES u
 # Destinations.kt), osim podeljenih soba (SPLIT_DOORS). 111 (I sprat, "između 112 i lifta") nije ucrtan.
 TYPICAL_LABELS = {
-    1: [(0, 106), (1, 107), (2, 108), (3, 109), (4, 110), (10, 112), (11, 113), (12, 114), (14, (115, 116)),
-        (15, (117, 118)), (18, 139), (19, 140),  # 119-124: first_suite
+    1: [(1, 106), (2, 107), (3, 108), (4, 109), ("110", 110), (10, 111), (11, 112), (12, 113), ("above_s2", 114),
+        (14, (115, 116)), (15, (117, 118)), (18, 139), (19, 140),  # 119-124: first_suite
         *[(21 + i, 138 - i) for i in range(14)]],
     2: [(1, 208), (2, 209), (3, 210), (4, 211), (6, 202), (10, 212), (11, 213), (12, 214), (14, 218), (15, 217),
         (16, (221, 222)), (17, (223, 224)), (18, 215), (19, 216), ("above", 219), *[(21 + i, 238 - i) for i in range(14)]],
@@ -446,8 +449,13 @@ def points(g, floor, spec):
 # soba -> (y od, y do, y vrata), None = spojena sa susednom (zida na fotografiji nema). Levo od hodnika (0-4) vrata na x 345,
 # desno (10-12) na x 451; vrata su pri kraju sobe, ne na sredini zida. Do 18.10. su II-IV imali iste pregrade (TYPICAL) i
 # vrata na sredini. III: 312 spojena sa sobom ispod (korisnik, 04.10.) - pregrada 311 | 312 je na y 1052, ne na 1000.
-# I sprat nije menjan: na fotografiji nema pregrade između soba 0 i 1, a korisnik je na vratima očitao 106 i 107.
+# I sprat (teren 19.10.2026, korisnik upisao 106-110 na fotografiju plana; "111-114 ide redom od S1 stepenica do S2
+# stepenica"): levo 106 bez pregrade između soba 0 i 1, 107, 108, 109, pa 110 (FIRST_110, uz L2 - van obrisa ostalih
+# spratova); desno od kutije sa liftovima 111 (uska), 112 (šira), 113 i 114 (iznad S2, FIRST_MID_ROOMS[0]). Pregrade i vrata
+# sa ispravljene fotografije (w1.png, strip.py).
 WEST_ROOMS = {
+    1: {0: None, 1: (547, 840, 790), 2: (840, 1020, 980), 3: (1020, 1205, 1070), 4: (1205, 1297, 1235),
+        10: (817, 900, 830), 11: (900, 1080, 905), 12: (1080, 1280, 1255)},
     2: {0: (547, 640, 630), 1: (640, 833, 700), 2: (833, 925, 910), 3: (925, 1204, 965), 4: (1204, 1297, 1250),
         10: (817, 1050, 1015), 11: (1050, 1204, 1095), 12: (1204, 1280, 1250)},
     3: {0: None, 1: (547, 833, 770), 2: (833, 1020, 990), 3: (1020, 1204, 1180), 4: (1204, 1297, 1250),
@@ -493,8 +501,20 @@ def typical_plan(f):
     return {**TYPICAL, "rooms": [r for r in rooms if r], "tables": tables}
 
 
+def first_plan():
+    """Crtež I sprata: FIRST + sobe uz glavni hodnik (WEST_ROOMS[1]; indeksi 0-5 i 10-13 su isti kao u TYPICAL) i 110."""
+    rooms = list(FIRST["rooms"])
+    for room, spec in WEST_ROOMS[1].items():
+        rooms[room] = west_shape(room, *spec[:2]) if spec else None
+    x0, y0, x1, y1 = FIRST_110[0]
+    outline = list(FIRST["outline"])
+    i = outline.index((345, 1397))
+    outline[i:i + 2] = [(x0, y1), (x0, y0)]
+    return {**FIRST, "outline": outline, "rooms": [r for r in rooms if r] + [[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]]}
+
+
 def plan_for(f):
-    return GROUND if f == 0 else FIRST if f == 1 else TOP if f == 5 else typical_plan(f)
+    return GROUND if f == 0 else first_plan() if f == 1 else TOP if f == 5 else typical_plan(f)
 
 
 def typical_floor(g, f):
@@ -503,7 +523,7 @@ def typical_floor(g, f):
         {f"U{x}": (x, 595) for x in (715, 817, 921, 1023)}
     # Glavni hodnik: čvorovi naspram vrata soba uz njega (WEST_ROOMS) i stalni (stepeništa, raskrsnice).
     main = sorted({450, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608} |
-                  {spec[2] for spec in WEST_ROOMS.get(f, {}).values() if spec})
+                  {spec[2] for spec in WEST_ROOMS.get(f, {}).values() if spec} | ({1365} if f == 1 else set()))
     points(g, f, {
         **{f"M{y}": (400, y) for y in main},
         "U513": LIFT_EXIT, "U640": (640, 595), **top,
@@ -554,6 +574,8 @@ def typical_floor(g, f):
             spec = CORNER_419
         elif f == 1 and room in FIRST_MID_DOORS:
             spec = FIRST_MID_DOORS[room]
+        elif f == 1 and room == "110":
+            spec = FIRST_110[1:]
         elif WEST_ROOMS.get(f, {}).get(room):
             spec = west_door(room, WEST_ROOMS[f][room])
         else:
@@ -731,6 +753,13 @@ def rel(x, y):
     return round((x - VX) / VW, 5), round((y - VY) / VH, 5)
 
 
+# Otvoreni prostori po spratu: tačka u njima ide slobodno, ne po linijama grafa (MapMatcher). Teren 19.10.2026: iz lifta L1
+# dijagonalno preko hola prizemlja ka predvorju "ULAZ - FTN" - tačka je išla hodnikom uz zid do S1 i zaglavila se (9 m);
+# 12.10. kruženje po holu 18 m. Hol = širok deo poligona hola sa crteža (do y 1300); uzak deo ka glavnom ulazu je hodnik
+# (u njemu se korak meri duž hodnika i uči ispravka smera).
+OPEN_AREAS = {0: [[(125, 0), (160, 0), (447, 178), (450, 1300), (125, 1300)]]}
+
+
 def write_json(g, path):
     data = {
         "buildingId": BUILDING,
@@ -747,6 +776,9 @@ def write_json(g, path):
         # Putanje stepeništa sa krakovima (FLIGHTS) - po njima se tačka kreće na stepeništu.
         "stairwells": [{"key": key, "floor": f, "path": [list(rel(*p)) for p in FLIGHTS[key]["path"]]}
                        for f in FLOORS for key in STAIRS],
+        # Otvoreni prostori (OPEN_AREAS) - tačka u njima ide slobodno (MapMatcher).
+        "areas": [{"floor": f, "polygon": [list(rel(*p)) for p in polygon]}
+                  for f, polygons in OPEN_AREAS.items() for polygon in polygons],
     }
     path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 

@@ -127,7 +127,8 @@ def floor_m1():
             R(170, 205, 170, 207), R(205, 230, 170, 207),
             R(266, 285, 183, 207, "Kiosk"),  # pored stepeništa S1 (teren 02.10.2026)
             R(285, 402, 3, 43, "B008"),
-            R(285, 402, 43, 207, "Biblioteka", door=(285, 120)),  # FtnGO "Biblioteka (B009)"
+            # FtnGO "Biblioteka (B009)". Vrata bliže stepeništu, ispod vrata Čitaonice na P (teren 19.10.2026; bila y 120).
+            R(285, 402, 43, 207, "Biblioteka", door=(285, READING_ROOM_STAIR_DOOR[1])),
             R(732, 832, 3, 207, "GRID-2", door=(760, 3)),
         ],
         "stairs": [S1, S2],

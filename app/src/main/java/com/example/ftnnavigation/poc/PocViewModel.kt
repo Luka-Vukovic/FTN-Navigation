@@ -26,6 +26,8 @@ import com.example.ftnnavigation.campus.GpsFix
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
+import com.example.ftnnavigation.campus.loadOpenAreas
+import com.example.ftnnavigation.campus.loadSpiralPaths
 import com.example.ftnnavigation.campus.loadStairPaths
 import com.example.ftnnavigation.campus.offCampusPlaceOf
 import com.example.ftnnavigation.campus.resolveTarget
@@ -62,6 +64,7 @@ import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.settings.AppSettings
 import com.example.ftnnavigation.settings.FloorChange
+import com.example.ftnnavigation.settings.roundStepLength
 import com.example.ftnnavigation.settings.snapStepLength
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -109,7 +112,7 @@ data class PocUiState(
     val shownMatch: MatchedPosition? get() = match.takeIf { snapToGraph }
 
     /** Pozicija za prikaz i rutu: sa grafa, a dok ga nema (ili je lepljenje isključeno) čist PDR. */
-    val position: Offset? get() = shownMatch?.point?.let { Offset(it.x, it.y) } ?: rawPosition
+    val position: Offset? get() = shownMatch?.let { Offset(it.shownX, it.shownY) } ?: rawPosition
 }
 
 /** Šta Mapa prikazuje: spoljnu mapu kampusa ili sprat zgrade sa planom ([building]). */
@@ -238,6 +241,36 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateStepLength(meters: Float) {
         stepLengthM = snapStepLength(meters)
+        AppSettings.setStepLengthM(getApplication(), stepLengthM)
+        recorder?.stepLength(SystemClock.elapsedRealtimeNanos(), stepLengthM)
+        // Ručno podešena - naučeno napolju se briše (uči se iznova).
+        stepLearner.clear()
+        AppSettings.setStepLengthSamples(getApplication(), emptyList())
+    }
+
+    // Dužina koraka iz GPS-a napolju (korisnik, 19.10.2026: "neka se to radi napolju").
+    private val stepLearner = StepLengthLearner(AppSettings.stepLengthSamples(application))
+
+    /** Korak za učenje dužine: samo napolju, za vreme praćenja, sa poznatim smerom. */
+    private fun learnStep(locator: PdrLocator, azimuthDeg: Float, peak: Float) {
+        if (state.isTracking && locator.place.isCampus && !locator.headingFrozen) {
+            stepLearner.onStep(locator.headingOnPlan(azimuthDeg), AccelStepDetector.stepLengthFactor(peak))
+        } else {
+            stepLearner.reset()
+        }
+    }
+
+    /** GPS lokacija za učenje dužine koraka; naučena dužina odmah važi i čuva se kao podešena. */
+    private fun learnStepFromGps(locator: PdrLocator, fix: GpsFix) {
+        if (!state.isTracking || !locator.place.isCampus || locator.headingFrozen) {
+            stepLearner.reset()
+            return
+        }
+        val before = stepLearner.samples
+        val learned = stepLearner.onGps(fix)
+        if (stepLearner.samples != before) AppSettings.setStepLengthSamples(getApplication(), stepLearner.samples)
+        if (learned == null || roundStepLength(learned) == stepLengthM) return
+        stepLengthM = roundStepLength(learned)
         AppSettings.setStepLengthM(getApplication(), stepLengthM)
         recorder?.stepLength(SystemClock.elapsedRealtimeNanos(), stepLengthM)
     }
@@ -439,7 +472,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             ).declination
             val graph = loadGraph(application, campus)
             // Pozicija se ne može postaviti pre ovoga ("Ovde sam" i Start čekaju graf).
-            locator = PdrLocator(graph, campus, declination, loadStairPaths(application)).apply {
+            locator = PdrLocator(
+                graph, campus, declination, loadStairPaths(application), loadOpenAreas(application), loadSpiralPaths(application),
+            ).apply {
                 applyCorrection = state.applyHeadingCorrection
                 restoreStairTurns(AppSettings.stairTurns(application))
                 restoreHeadingErrors(AppSettings.headingErrors(application))
@@ -591,6 +626,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val before = locator.place
         updateDestination(locator)
         val lengthM = stepLengthM * AccelStepDetector.stepLengthFactor(peak)
+        learnStep(locator, step.headingDeg, peak)
         // Vreme koraka (senzor, isti sat kao elapsedRealtimeNanos) - zadržani koraci ([HandlingGate]) stižu kasnije.
         val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs, stairGait.score(timeNs))
         if (!locator.onStairs) stairGait.flat(timeNs)
@@ -788,6 +824,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             gpsRecorder?.building(fix.elapsedNs, detector.current?.id)
         }
         val locator = locator ?: return
+        learnStepFromGps(locator, fix)
         val before = locator.place
         updatePosition(before, locator.onGps(fix, state.isTracking))
     }
@@ -808,7 +845,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val app = getApplication<Application>()
         if (BuildConfig.DEBUG) recorder = SensorRecorder.start(app.filesDir)
         // Gde je tačka (na grafu, ako je zalepljena) - replay odatle kreće.
-        val shown = locator.match?.point?.let { Offset(it.x, it.y) } ?: locator.raw
+        val shown = locator.match?.let { Offset(it.shownX, it.shownY) } ?: locator.raw
         recorder?.place(SystemClock.elapsedRealtimeNanos(), PlaceReason.START, locator.place, shown, locator.headingBiasDeg, locator.learnedCorridorBiasDeg)
         recorder?.stepLength(SystemClock.elapsedRealtimeNanos(), stepLengthM)
         destinationRecorded = false
