@@ -1555,6 +1555,24 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("AMF", -1), locator.place)
     }
 
+    /**
+     * Teren 20.10.2026 uveče (hod-20261020-183111, 761-772 s): trakom niz desni bočni krak ka tremu. Znak stepenica je na
+     * krakovima AMF S1 nizak (0-0,5), pa je tačka na vrhu kraka čekala 11 koraka ("kasnili koraci na stepenicama"). Tačka je
+     * već na vrhu kraka (bez podesta sprata pred njim) - silazi od prvog koraka niz krak.
+     */
+    @Test
+    fun amfS1_downSideFlight_lowStairScore_pointMovesFromFirstStep() {
+        val locator = locatorAt("AMF-0-S1-D-DESNO")
+        val top = graph.position(node("AMF-0-S1-D-KRAK"))
+        val down = magneticAzimuth(top, graph.position(node("AMF-0-PODEST-S1-D")))
+        // Trakom do vrha kraka (3,6 m), pa 3 koraka niz krak; znak kao na snimku.
+        repeat(8) { locator.step(down, 0.75f, stairScore = 0.2f) }
+        val pos = locator.position()
+        val side = stairPath("AMF/S1", 0, 0)
+        assertTrue("na kraku", distanceToSegment(pos, side[3], side[2]) < 0.1)
+        assertTrue("niz krak ${distance(pos, top)} m", distance(pos, top) > 0.4)
+    }
+
     /** S1: iz suterena srednjim krakom i pravo dalje - takođe u trem ka Kuli. */
     @Test
     fun amfS1_fromBasement_upMiddleFlight_intoKulaPorch() {

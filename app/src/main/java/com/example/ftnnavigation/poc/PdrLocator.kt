@@ -1639,7 +1639,13 @@ class PdrLocator(
             beginClimb(stair, up = false, progress, onFlight = true, azimuthDeg, variant)
             // Smer kraka sa crteža, ne iz ovog koraka - na krak se stiže iz okreta (127-137° naspram kraka 180°), pa bi
             // sledeći korak niz krak bio "početak okreta na podestu".
-            climb?.let { it.flightHeading = normalizeDeg(flightPlanDeg(it) - headingBiasDeg + planUp.getValue(place.buildingId)) }
+            // Tačka je već na vrhu kraka (do trake nema podesta sprata), pa silazak ne čeka znak stepenica ([holdsDescent]):
+            // na krakovima AMF S1 znak ostaje nizak (0-0,5), pa je tačka 20.10.2026 uveče čekala na vrhu 11 koraka ("kasnili
+            // koraci na stepenicama").
+            climb?.let {
+                it.flightHeading = normalizeDeg(flightPlanDeg(it) - headingBiasDeg + planUp.getValue(place.buildingId))
+                it.descentStarted = true
+            }
             return true
         }
         val node = listOf(point.from, point.to).firstOrNull { it.type == NodeType.STEPENISTE } ?: return false
@@ -2660,6 +2666,9 @@ class PdrLocator(
      * krak i tu ostala (25 m promašaja). null: nije taj slučaj.
      */
     private fun afterFlight(climb: Climb): Offset? {
+        // Penjanje bočnim krakom AMF S1 izlazi na račvanje S1-D, ne na vrh kraka: put trakom od vrha kraka (8 m u grafu) je
+        // proban 20.10.2026 uveče i bio je gori - 19.10. i 20.10. je korisnik od vrha kraka do oznake u hodniku prešao 4-5 m
+        // manje nego što graf trakom kaže (promašaj 1,4 -> 3,7 m i 2,4 -> 5,5 m).
         if (climb.part != ClimbPart.SECOND || climb.progress < 1.0 || climb.straight <= 0 || pathOf(climb) == null) return null
         val foot = (if (climb.up) climb.stair.downNodes[place.floor] else climb.stair.nodes[place.floor]) ?: return null
         val corridor = climb.stair.corridor(foot)
