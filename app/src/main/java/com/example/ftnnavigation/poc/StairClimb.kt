@@ -33,7 +33,7 @@ const val STAIR_TURN_PER_FLOOR_DEG = 360f
 const val FLIGHT_STEPS = 6
 
 /** Koraci istog smera: svaki do ovoliko od prvog koraka niza. */
-private const val RUN_DEG = 20f
+const val RUN_DEG = 20f
 
 /** Okret mora biti skoro završen (do ovoliko) pre leta posle njega. */
 private const val TURN_SLACK_DEG = 30f
@@ -93,10 +93,10 @@ const val SPIRAL_TURN_DEG = 330f
  * Pun krug najviše kroz ovoliko koraka. Snimak 18.10. (Kula 0 -> I): 25 koraka (20 gazišta i po 1-2 koraka na ugaonom
  * gazištu). Kruženje hodnikom oko jezgra Kule (IV-IX sprat, ~40 m) traži ~50 koraka.
  */
-private const val SPIRAL_MAX_STEPS = 40
+const val SPIRAL_MAX_STEPS = 40
 
 /** U punom krugu nijedan niz istog smera nije duži od ovoga (krak od 7 gazišta - snimak 7 koraka; strana hodnika je duža). */
-private const val SPIRAL_MAX_RUN = 8
+const val SPIRAL_MAX_RUN = 8
 
 /** Sufiks čvora na dnu kraka naniže (stepenište sa krakovima, teren 05.10.2026): NB-1-S-D. */
 const val DOWN_FOOT_SUFFIX = "-D"
@@ -326,6 +326,13 @@ class StairWalk {
             return start to sense
         }
         return null
+    }
+
+    /** Okret od koraka [start] do poslednjeg (+ u smeru kazaljke). */
+    fun turnSince(start: Int): Float {
+        var turn = 0f
+        for (i in start + 1 until headings.size) turn += angleDiffDeg(headings[i], headings[i - 1])
+        return turn
     }
 
     /** Gde je bila tačka posle koraka [i] (metri plana), ako je zadato. */

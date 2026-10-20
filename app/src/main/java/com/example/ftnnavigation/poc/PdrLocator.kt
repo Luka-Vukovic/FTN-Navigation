@@ -246,11 +246,28 @@ private const val SPIRAL_ENTER_DEG = 50f
 /** Okret suprotno od smera spirale za ovoliko (od najdaljeg) - nije na spirali. */
 private const val SPIRAL_BACK_DEG = 70f
 
+/** Posle promene sprata: okret nazad za ovoliko - silazak niz spiralu (19.10. šetanje smera u mestu: 97°; 20.10. silazak: 157°). */
+private const val SPIRAL_DESCENT_BACK_DEG = 135f
+
+/** ... a okret opet napred za ovoliko od najmanjeg - nov krug (šetanje smera u mestu). */
+private const val SPIRAL_RESUME_DEG = 45f
+
 /**
  * Posle poslednjeg gazišta kraka još ovoliko koraka pravo pre nego što se smatra da je sišao (korisnik: "svako poslednje gazište
- * je veće, kvadratno, kao neki prelaz, pa se tu može napraviti i dva koraka").
+ * je veće, kvadratno, kao neki prelaz, pa se tu može napraviti i dva koraka"). Bilo 2: teren 20.10.2026, Kula I -> II - prvi
+ * krak 5 koraka (dva kratka pre gazišta, pa skretanje kroz dva koraka na podestu), tačka je posle 5. koraka sišla sa spirale.
  */
-private const val SPIRAL_OVERRUN_STEPS = 2
+private const val SPIRAL_OVERRUN_STEPS = 4
+
+/** ... osim na prvom kraku posle promene sprata (tamo se izlazi u hodnik istim pravcem - ostaje 2 kao ranije). */
+private const val SPIRAL_OVERRUN_AFTER_FLOOR_STEPS = 2
+
+/**
+ * Posle sprata iz punog kruga ([PdrLocator] spiralNearby) okret se broji dalje; ako se hod po stepeništu završi (okret nazad,
+ * pravo, predugo) posle bar ovoliko okreta u istom smeru, to je još jedan sprat - poslednji krug nema okret ka sledećem kraku.
+ * Teren 20.10.2026, Kula II -> P: drugi krug je do izlaska u prizemlje imao ~255°, pa je P promašen (ostalo I).
+ */
+private const val SPIRAL_CARRY_DEG = 225f
 
 /**
  * ... a na poslednjem kraku kruga, kad je sprat već promenjen, ovoliko: skretanje u sledeći krug je postepeno (teren 19.10.2026
@@ -503,6 +520,13 @@ private const val MIN_BIAS_DISTANCE_M = 10.0
 /** Veća razlika dužina znači da je put bio zbrkan (ili pogrešno označen) - smer se ne dira. */
 private val BIAS_LENGTH_RATIO = 0.5..2.0
 
+/**
+ * PDR put od sidra (zbir koraka kao vektor) mora biti bar ovoliki deo pređenog puta (zbir dužina koraka). Teren 20.10.2026
+ * (NTP III): ~190 m hodnikom tamo-nazad, pa "Ovde sam" 19 m od sidra - zbir koraka 11 m (6 % puta), "greška +50°" je naučena
+ * u zajedničku ispravku i ostatak dana kvarila smer.
+ */
+private const val MIN_BIAS_STRAIGHTNESS = 0.5
+
 /** Veća ispravka je verovatno pogrešno označeno mesto. */
 private const val MAX_BIAS_CORRECTION_DEG = 90f
 
@@ -732,6 +756,9 @@ class PdrLocator(
     private var anchor: PointM? = null
     private var walkedX = 0.0
     private var walkedY = 0.0
+
+    // Zbir dužina koraka od sidra ([MIN_BIAS_STRAIGHTNESS]); koraci ponovljeni iznutra se mogu brojati dvaput - samo strože.
+    private var walkedPathM = 0.0
 
     /** Pozicija pre koraka - za ponavljanje koraka kad se ispravi smer ([WalkingDirection.WalkStep.redoSteps]). */
     private class StepStart(val raw: Offset, val match: MatchedPosition?, val walkedX: Double, val walkedY: Double)
@@ -988,6 +1015,71 @@ class PdrLocator(
         spiralPlaces.clear()
     }
 
+    /** Okret posle sprata iz punog kruga ([SPIRAL_CARRY_DEG]): [turn] u smeru tog kruga, od kraja kruga (360°). */
+    private class SpiralCarry(val stair: Stair, val sense: Int, var floor: Int, var turn: Float, var lastHeading: Float) {
+        var maxTurn = maxOf(turn, 0f)
+        var steps = 0
+        var runHeading = lastHeading
+        var run = 1
+
+        // Koraci posle najvećeg okreta (izlazak sa stepeništa) - ponove se kao hod sa novog sprata.
+        val afterMax = ArrayList<PendingStep>()
+    }
+
+    private var spiralCarry: SpiralCarry? = null
+
+    private fun carrySpiral(c: SpiralCarry, azimuthDeg: Float, lengthM: Float, timeNs: Long?): PlaceReason? {
+        val heading = headingOnPlan(azimuthDeg)
+        c.turn += angleDiffDeg(heading, c.lastHeading) * c.sense
+        c.lastHeading = heading
+        c.steps++
+        if (abs(angleDiffDeg(heading, c.runHeading)) > RUN_DEG) {
+            c.runHeading = heading
+            c.run = 1
+        } else {
+            c.run++
+        }
+        if (c.turn > c.maxTurn) {
+            c.maxTurn = c.turn
+            c.afterMax.clear()
+        } else {
+            c.afterMax += PendingStep(azimuthDeg, lengthM, 0, timeNs)
+        }
+        val dir = if (c.sense == SPIRAL_STAIRS.getValue(c.stair.key)) 1 else -1
+        if (c.turn >= SPIRAL_TURN_DEG) {
+            // Još jedan pun krug bez izlaska: sprat dalje.
+            val node = c.stair.nodes[c.floor + dir] ?: run { spiralCarry = null; return null }
+            trace?.invoke("stepenište ${c.stair.key}: još jedan krug -> sprat ${c.floor + dir}")
+            val from = c.floor
+            c.floor += dir
+            c.turn -= 360f
+            c.maxTurn = maxOf(c.turn, 0f)
+            c.steps = 0
+            c.afterMax.clear()
+            moveTo(node)
+            spiralCarry = c
+            lastStairChange = StairChange(c.stair.key, c.stair.buildingId, from, c.floor, c.sense, guessed = false)
+            stepsSinceStairChange = 0
+            stepsSinceStairExit = 0
+            offFlightStair = c.stair.key to c.floor
+            return PlaceReason.STEPENICE
+        }
+        if (c.maxTurn - c.turn <= SPIRAL_BACK_DEG && c.run <= SPIRAL_MAX_RUN && c.steps <= SPIRAL_MAX_STEPS) return null
+        spiralCarry = null
+        if (c.maxTurn < SPIRAL_CARRY_DEG) return null
+        val node = c.stair.nodes[c.floor + dir] ?: return null
+        trace?.invoke("stepenište ${c.stair.key}: izlazak posle ${c.maxTurn.toInt()}° - sprat ${c.floor + dir}")
+        val from = c.floor
+        moveTo(node)
+        lastStairChange = StairChange(c.stair.key, c.stair.buildingId, from, from + dir, c.sense, guessed = false)
+        stepsSinceStairChange = 0
+        stepsSinceStairExit = 0
+        offFlightStair = c.stair.key to from + dir
+        clearSpiral()
+        for (s in c.afterMax.toList()) step(s.azimuthDeg, s.lengthM, 0, s.timeNs)
+        return PlaceReason.STEPENICE
+    }
+
     private fun trackSpiral(azimuthDeg: Float, redo: Int, timeNs: Long?, at: PointM) {
         if (spiralPlaces.lastOrNull()?.floor?.let { it != place.floor } == true) clearSpiral()
         val r = min(redo, spiralPlaces.size)
@@ -1235,6 +1327,7 @@ class PdrLocator(
         // bio u liftu).
         if (liftPrompt != null) liftSteps += PendingStep(azimuthDeg, lengthM, redoSteps, timeNs)
         forgetCorridorBias(timeNs)
+        walkedPathM += lengthM
         stepsSinceStairChange++
         lastStepM = if (climb != null || spiralWalk != null) STAIR_STEP_M else lengthM
         walkStepM = lengthM
@@ -1298,7 +1391,9 @@ class PdrLocator(
             if (returnToSpiral(azimuthDeg) || startSpiral(azimuthDeg, from = beforeMatch) || startSpiral(azimuthDeg)) return null
             if (startClimb(azimuthDeg)) return null
             stairTurnNearby(azimuthDeg)?.let { return it }
-            spiralNearby()?.let { return it }
+            val carry = spiralCarry
+            if (carry != null) carrySpiral(carry, azimuthDeg, lengthM, timeNs)?.let { return it }
+            else spiralNearby(azimuthDeg)?.let { return it }
         }
         if (++stepsSinceChange < MIN_STEPS_BETWEEN_CHANGES) return null
         return if (place.isCampus) enterBuilding(lengthM.toDouble() * (redo + 1)) else leaveThroughGateway()
@@ -1402,6 +1497,7 @@ class PdrLocator(
         climb = null
         spiralWalk = null
         spiralReturn = null
+        spiralCarry = null
         landingClimb = null
         offFlightStair = null
         watch = StairWalk()
@@ -1410,6 +1506,7 @@ class PdrLocator(
         anchor = meters(place, point, local = true)
         walkedX = 0.0
         walkedY = 0.0
+        walkedPathM = 0.0
         pathInterrupted = false
         stepStarts.clear()
         gpsOutliers = 0
@@ -1450,7 +1547,8 @@ class PdrLocator(
             residualDeg = residual,
             walkedM = walkedM.toFloat(),
             actualM = actualM.toFloat(),
-            reliable = actualM / walkedM in BIAS_LENGTH_RATIO && abs(residual) <= MAX_BIAS_CORRECTION_DEG,
+            reliable = actualM / walkedM in BIAS_LENGTH_RATIO && abs(residual) <= MAX_BIAS_CORRECTION_DEG &&
+                walkedM >= MIN_BIAS_STRAIGHTNESS * walkedPathM,
             applied = applyCorrection,
         )
     }
@@ -1715,7 +1813,7 @@ class PdrLocator(
      * hodniku. Teren 18.10.2026: krakovi od 3 i 7 gazišta i okreti od 90° - let - okret - let ništa nije prepoznao, a ivica
      * hodnik - stepenište (0,6 m) je tačka preskakala, pa nije ni ušla na stepenište.
      */
-    private fun spiralNearby(): PlaceReason? {
+    private fun spiralNearby(azimuthDeg: Float): PlaceReason? {
         val (start, sense) = spiralWatch.spiral() ?: return null
         val at = spiralWatch.positionAt(start) ?: return null
         val startPlace = spiralPlaces.getOrNull(start) ?: return null
@@ -1723,12 +1821,14 @@ class PdrLocator(
             s.key in SPIRAL_STAIRS && s.buildingId == startPlace.buildingId &&
                 s.nodesOn(startPlace.floor).any { distance(meters(startPlace, Offset(it.x, it.y), local = true), at) <= SPIRAL_NEAR_M }
         } ?: return null
+        val overshoot = abs(spiralWatch.turnSince(start)) - 360f
         clearSpiral()
         val from = startPlace.floor
         val to = from + if (sense == SPIRAL_STAIRS.getValue(stair.key)) 1 else -1
         val node = stair.nodes[to] ?: return null
         trace?.invoke("stepenište ${stair.key}: pun krug ${if (sense > 0) "u smeru kazaljke" else "suprotno"} -> sprat $to")
         moveTo(node)
+        spiralCarry = SpiralCarry(stair, sense, to, overshoot, headingOnPlan(azimuthDeg))
         lastStairChange = StairChange(stair.key, stair.buildingId, from, to, sense, guessed = false)
         stepsSinceStairChange = 0
         // Tačka je na čvoru stepeništa - sledeći korak pravcem prvog kraka ne sme odmah da je vrati na spiralu ([startSpiral]).
@@ -1762,6 +1862,9 @@ class PdrLocator(
 
         // Sprat je bar jednom promenjen (prerano skretanje na prvom kraku više nije pogrešan smer ulaska).
         var changed = false
+
+        // Okret nazad posle promene sprata ([SPIRAL_BACK_DEG]): najmanji okret od tada - odluka čeka (nov krug ili silazak).
+        var reversingMin: Float? = null
 
         // Koraci od početka kruga (ulaska ili podesta sprata) i PDR put tada - za [replayAsCorridor].
         val loopSteps = ArrayList<PendingStep>()
@@ -1856,6 +1959,7 @@ class PdrLocator(
         // Mesto ulaska već ima ovaj korak (hod) - ponavljaju se samo koraci posle njega.
         walk.loopWalked = walkedX to walkedY
         spiralWalk = walk
+        spiralCarry = null
         clearSpiral()
         watch = StairWalk()
         stepStarts.clear()
@@ -1873,24 +1977,49 @@ class PdrLocator(
         val (dx, dy) = stepVector(place, azimuthDeg, STAIR_STEP_M)
         walkedX += dx
         walkedY += dy
-        if (w.turn < w.maxTurn - SPIRAL_BACK_DEG) {
-            // Posle promene sprata "okret nazad" koji opet gleda pravcem prvog kraka je nov krug, ne silazak: teren 19.10.2026
-            // uveče, Kula na I spratu (P -> II) - zastao i gledao Mapu, smer telefona je šetao 3 -> 120 -> 26° kroz slabe korake,
-            // pa sever (prvi krak) i dalje krug; tačka je sišla sa spirale, a II sprat je dao tek pun krug dok je tačka bila u NB.
+        // Posle promene sprata, na prvim kracima sledećeg kruga, okret nazad je ili šetanje smera telefona u mestu (teren 19.10.2026
+        // uveče, Kula I: zastao i gledao Mapu, smer 3 -> 120 -> 26° kroz slabe korake, pa dalje krug naviše) ili silazak (teren
+        // 20.10.2026, Kula II: odmah nazad niz spiralu - okret je pri tome prošao pravac prvog kraka, pa je ranije pravilo "nov krug"
+        // tu vratilo tačku naviše, a II -> I -> P je dao samo jedan sprat). Odluka čeka: dalje nazad - silazak, opet napred - nov krug.
+        val reversingMin = w.reversingMin
+        if (reversingMin != null || (w.changed && !w.landed && w.turn < w.maxTurn - SPIRAL_BACK_DEG)) {
+            val min = minOf(reversingMin ?: w.turn, w.turn)
+            w.reversingMin = min
             val first = spiralDir(w.ordered[0], w.ordered[1])
-            if (w.changed && abs(angleDiffDeg(heading, first)) <= SPIRAL_ENTER_DEG) {
-                trace?.invoke("stepenište ${w.stair.key}: okret nazad posle promene sprata - nov krug od prvog kraka")
-                w.flight = 0
+            if (w.maxTurn - w.turn >= SPIRAL_DESCENT_BACK_DEG && w.stair.nodes[place.floor - if (w.up) 1 else -1] != null) {
+                trace?.invoke("stepenište ${w.stair.key}: okret nazad posle promene sprata - silazak")
+                val path = spirals.getValue(w.stair.key)
+                val back = w.maxTurn - w.turn
+                beginSpiral(w.stair.key, w.stair, path, !w.up, heading)
+                spiralWalk?.let { d ->
+                    d.changed = true
+                    d.turn = back
+                    d.maxTurn = back
+                    d.flight = Math.floorDiv((back + 45f).toInt(), 90).coerceAtMost(3)
+                    showSpiral(d)
+                }
+                return null
+            }
+            if (w.turn >= min + SPIRAL_RESUME_DEG) {
+                w.reversingMin = null
+                trace?.invoke("stepenište ${w.stair.key}: okret nazad posle promene sprata - nov krug")
+                // Okret se meri od pravca prvog kraka, ne od ovog koraka (krak po tome gde je sada smer: 19.10. već drugi krak).
+                val t = angleDiffDeg(heading, first) * w.sense
+                w.turn = if (t < -45f) t + 360f else t
+                w.maxTurn = w.turn
+                w.flight = Math.floorDiv((w.turn + 45f).toInt(), 90).coerceIn(0, 3)
                 w.tread = 1
-                // Okret se meri od pravca prvog kraka, ne od ovog koraka (on je možda već u skretanju ka drugom kraku).
-                w.turn = angleDiffDeg(heading, first) * w.sense
-                w.maxTurn = maxOf(0f, w.turn)
                 w.landed = false
                 w.loopSteps.clear()
                 w.loopWalked = walkedX to walkedY
                 showSpiral(w)
                 return null
+            } else {
+                showSpiral(w)
+                return null
             }
+        }
+        if (w.turn < w.maxTurn - SPIRAL_BACK_DEG) {
             // Izašao na sprat posle penjanja i okreće se nazad -> nekoliko koraka sme odmah niz spiralu ([spiralReturn]). Samo posle
             // penjanja: posle silaska u prizemlje Kule korisnik je skrenuo u hodnik ka severu pored stepeništa (pravac prvog kraka
             // naviše) - to bi bilo lažno penjanje (replay 19.10. uveče).
@@ -1934,7 +2063,13 @@ class PdrLocator(
                 w.landed = true
                 if (spiralWalk == null) return leaveSpiral(w)
             }
-            if (w.tread > w.treads[w.flight] + if (w.landed) SPIRAL_LANDING_OVERRUN_STEPS else SPIRAL_OVERRUN_STEPS) {
+            val overrun = when {
+                w.landed -> SPIRAL_LANDING_OVERRUN_STEPS
+                // Prvi krak posle promene sprata: hodnik uz stepenište ide istim pravcem (izlazak u hodnik ka severu, 18.10.).
+                w.changed && w.flight == 0 -> SPIRAL_OVERRUN_AFTER_FLOOR_STEPS
+                else -> SPIRAL_OVERRUN_STEPS
+            }
+            if (w.tread > w.treads[w.flight] + overrun) {
                 trace?.invoke("stepenište ${w.stair.key}: hod pravo posle kraka - silazi sa spirale")
                 if (w.landed) return leaveSpiral(w) ?: reason
                 return (if (w.flight < 2) replayAsCorridor(w) else leaveSpiral(w)) ?: reason

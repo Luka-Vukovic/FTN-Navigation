@@ -583,6 +583,21 @@ class PdrLocatorTest {
         assertNull(locator.headingErrorDeg)
     }
 
+    /**
+     * Teren 20.10.2026 (NTP III): hod tamo-nazad, pa "Ovde sam" - zbir koraka kao vektor je mali deo pređenog puta, ugao između
+     * njega i stvarnog puta nije greška smera ("+50°" je bila naučena). Meri se, ali se ne uči.
+     */
+    @Test
+    fun recalibration_afterWalkingThereAndBack_unreliable() {
+        val locator = outdoorLocator()
+        repeat(40) { locator.step(east, stepM) }
+        repeat(25) { locator.step(east + 180f, stepM) }
+        val check = locator.setPosition(PdrPlace.CAMPUS, campusOffset(PointM(outdoor.x + 6, outdoor.y + 10))) as HeadingCheck.Measured
+        assertTrue(check.lengthRatio in 0.5f..2f)
+        assertTrue(!check.reliable)
+        assertNull(locator.headingErrorDeg)
+    }
+
     /** Označavanje na drugom spratu (stepenice) nije poređenje puta - smer se ne dira. */
     @Test
     fun recalibration_onOtherFloor_keepsHeading() {
@@ -1327,6 +1342,37 @@ class PdrLocatorTest {
         assertEquals("$reasons", List(4) { PlaceReason.STEPENICE }, reasons)
         val floors = places.map { it.floor }
         assertEquals(listOf(0, 1, 2, 1, 0), floors.filterIndexed { i, f -> i == 0 || f != floors[i - 1] })
+        assertTrue(places.all { it.buildingId == "KULA" })
+    }
+
+    /**
+     * Teren 20.10.2026 (hod-20261020-113923, 546-612 s, kula-up / kula-turn): "Ovde sam" uz stepenište Kule na I spratu, spiralom
+     * na II (prvi krak 5 koraka - dva kratka i skretanje kroz podest), pa odmah nazad niz spiralu do prizemlja i izlaz u hol.
+     * Ranije: tačka je posle prvog kraka sišla sa spirale, na II je okret nazad bio "nov krug" naviše, a od II -> P je prepoznat
+     * samo I sprat.
+     */
+    @Test
+    fun kulaSpiral_upOneFloor_thenStraightBackDownTwoFloors() {
+        val azimuths = listOf(
+            270.8, 283.4, 272.4, 273.0, 280.9, 300.1, 327.2, 343.3, 347.7, 347.9, 349.6, 349.2, 3.5, 23.5, 45.8, 80.2, 118.9,
+            133.1, 136.0, 140.4, 146.0, 151.7, 168.6, 203.8, 255.5, 291.6, 339.6, 346.5, 350.3, 344.1, 338.4, 330.4, 320.2, 301.6,
+            268.6, 250.5, 229.9, 218.0, 193.2, 167.8, 156.3, 149.2, 150.4, 150.1, 147.4, 142.8, 122.7, 87.9, 67.2, 41.0, 11.2,
+            359.5, 341.1, 339.0, 334.4, 326.9, 319.6, 282.9, 267.0, 230.3, 202.6, 180.9, 175.5, 171.7, 159.6, 154.8, 157.9,
+            155.5, 140.1, 108.9, 94.1, 84.5, 87.9, 122.0, 164.2, 191.0, 214.0, 235.8, 251.7, 252.9, 257.4, 242.5, 222.3,
+        ).map { it.toFloat() }
+        val lengths = listOf(
+            0.33f, 0.40f, 0.80f, 0.80f, 0.44f, 0.33f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f,
+            0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.33f, 0.80f, 0.40f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f,
+            0.80f, 0.80f, 0.27f, 0.80f, 0.30f, 0.80f, 0.80f, 0.80f, 0.56f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f,
+            0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.32f, 0.19f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f, 0.80f,
+            0.80f, 0.80f, 0.80f, 0.80f, 0.75f, 0.24f, 0.80f, 0.80f, 0.62f, 0.80f, 0.80f, 0.53f, 0.80f, 0.28f, 0.80f,
+        )
+        val locator = locatorAt("KULA-1-S")
+        locator.restoreBias(-9.09f, -0.80f)
+        val places = mutableListOf<PdrPlace>()
+        val reasons = azimuths.indices.mapNotNull { i -> locator.step(azimuths[i], lengths[i]).also { places += locator.place } }
+        val floors = places.map { it.floor }
+        assertEquals("$reasons", listOf(1, 2, 1, 0), floors.filterIndexed { i, f -> i == 0 || f != floors[i - 1] })
         assertTrue(places.all { it.buildingId == "KULA" })
     }
 
