@@ -271,6 +271,46 @@ class WalkingDirectionTest {
     }
 
     /**
+     * Teren 21.10.2026 popodne, ispred NTP-a: u hodu je zapamćen položaj u ruci sa pogrešnim odstupanjem (+129°; telefon u
+     * labavom džepu ekranom ka nebu liči na ruku), a vađenje iz džepa u isti nagib ga je vratilo - u NTP ušao sa smerom ~130°
+     * pogrešnim. Iz džepa u ruku: 0, ne zapamćen položaj.
+     */
+    @Test
+    fun phoneTakenFromPocketIntoHand_rememberedGripWithWrongOffset_offsetZero() {
+        fun tilted(yawDeg: Double, pitchDeg: Double): Pose {
+            val th = Math.toRadians(pitchDeg)
+            val f = forward(yawDeg)
+            return Pose(y = f * cos(th) + up * sin(th), z = f * -sin(th) + up * cos(th))
+        }
+        stand(1.0, tilted(30.0, 30.0))
+        direction.reset()
+        // Nagnut telefon gleda 90° levo od hoda: odstupanje +90° naučeno i zapamćeno uz taj nagib.
+        walk(8.0, 120.0) { tilted(30.0, 30.0) }
+        assertNear(90.0, direction.offset.toFloat(), 10.0, "naučeno odstupanje")
+        stand(12.0, inPocket(screenAzimuthDeg = 120.0, walkAzimuthDeg = 120.0))
+        assertTrue(direction.isAnchored)
+        stand(3.0, tilted(200.0, 30.0))
+        assertTrue("telefon se nije smirio u ruci", direction.isAnchored)
+        assertNear(0.0, direction.offset.toFloat(), 5.0, "odstupanje posle vađenja")
+    }
+
+    /**
+     * Ispravka iz pravca GPS-a ([WalkingDirection.turnOffset]) važi dok se telefon ne premesti - pravac iz ubrzanja je ne
+     * vraća (21.10.2026: ispravka na 179°, sledeći korak opet 132°).
+     */
+    @Test
+    fun courseCorrection_keptAgainstPhase_clearedWhenRepositioned() {
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        direction.turnOffset(40.0)
+        walk(6.0, 30.0) { inHand(30.0) }.forEach { assertNear(70.0, it, 5.0, "posle ispravke") }
+        stand(3.0, inPocket(screenAzimuthDeg = 70.0, walkAzimuthDeg = 70.0))
+        assertTrue(direction.isAnchored)
+        assertNear(180.0, direction.offset.toFloat(), 10.0, "u džepu bez ispravke")
+    }
+
+    /**
      * Teren 12.10.2026 (Kula, NTP III): "Ovde sam", pa telefon u džep, a telo se za to vreme okrene ~90° - smer od pre
      * premeštanja to sakrije, pa ceo hod u džepu ide 90° pogrešno. Pravac iz ubrzanja je po koraku slab, ali usrednjen preko
      * više koraka dosledan - odstupanje se ispravi posle nekoliko koraka, a ti koraci se ponove.

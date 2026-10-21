@@ -109,6 +109,17 @@ class WalkingDirection {
     private var offsetDeg = 0.0
     private var anchored = true
 
+    // Dodatak smeru iz pravca GPS-a napolju ([turnOffset]); briše se kad se telefon premesti.
+    private var courseDeg = 0.0
+
+    /**
+     * Od kada je telefon u istom položaju sa istim odstupanjem (smirivanje, ispravka u džepu) - za [PdrLocator.courseError];
+     * dok se premešten telefon smiruje - nikad.
+     */
+    val poseSinceNs: Long get() = if (anchored) poseStartNs else Long.MAX_VALUE
+    private var poseStartNs = 0L
+    private var lastRotationNs = 0L
+
     // Pravac telefona i smer hoda u poslednjem koraku bez okreta; da li se pravac iz ubrzanja slagao.
     private var steadyPhoneDeg: Double? = null
     private var steadyWalkDeg = 0.0
@@ -146,7 +157,7 @@ class WalkingDirection {
     val isAnchored: Boolean get() = anchored
 
     /** Odstupanje: smer hoda - pravac telefona (-180..180). */
-    val offset: Double get() = offsetDeg
+    val offset: Double get() = angleDiff(offsetDeg + courseDeg, 0.0)
 
     /**
      * Korisnik je na stepeništu ili tik uz njega ([PdrLocator.nearStairs], postavlja se posle svakog koraka): pravac hoda iz
@@ -167,6 +178,7 @@ class WalkingDirection {
     /** Nova orijentacija; [matrix] je 3x3 matrica iz `SensorManager.getRotationMatrixFromVector`. */
     fun onRotation(matrix: FloatArray, timestampNs: Long) {
         matrix.copyInto(rotation, endIndex = 9)
+        lastRotationNs = timestampNs
         // Kolone matrice su ose telefona u koordinatama sveta (istok, sever, gore).
         val e = (matrix[1] - matrix[2]).toDouble()
         val n = (matrix[4] - matrix[5]).toDouble()
@@ -195,6 +207,7 @@ class WalkingDirection {
                 anchored = false
                 fromPocket = abs(poseHistory.first().up[2]) < POCKET_UP_Z
                 heldWalkDeg = motionStartWalkDeg()
+                courseDeg = 0.0
                 poseHistory.clear()
                 unsettledSinceNs = timestampNs
                 upSlow.copyInto(settleRef)
@@ -237,7 +250,7 @@ class WalkingDirection {
     /** Da li se "gore" u koordinatama telefona u poslednjih [REPOSITION_WINDOW_NS] okrenulo > [REPOSITION_DEG]. */
     private fun repositioned(timestampNs: Long): Boolean {
         if (poseHistory.isEmpty() || timestampNs - poseHistory.last().timestampNs >= POSE_HISTORY_STEP_NS) {
-            poseHistory.addLast(PoseSample(timestampNs, upFast.copyOf(), azimuth(smoothE, smoothN) + offsetDeg))
+            poseHistory.addLast(PoseSample(timestampNs, upFast.copyOf(), azimuth(smoothE, smoothN) + offsetDeg + courseDeg))
         }
         while (timestampNs - poseHistory.first().timestampNs > MOTION_LOOKBACK_NS) poseHistory.removeFirst()
         val windowStart = poseHistory.first { timestampNs - it.timestampNs <= REPOSITION_WINDOW_NS }
@@ -309,7 +322,8 @@ class WalkingDirection {
         val step = steer(phone, previousStepNs)
         val pocketRedo = pocketOffset(phone)
         rememberGrip()
-        return if (pocketRedo > 0) WalkStep(normalize(phone + offsetDeg), maxOf(pocketRedo, step.redoSteps)) else step
+        val walk = if (pocketRedo > 0) WalkStep(normalize(phone + offsetDeg), maxOf(pocketRedo, step.redoSteps)) else step
+        return if (courseDeg == 0.0) walk else walk.copy(headingDeg = normalize(walk.headingDeg + courseDeg))
     }
 
     /**
@@ -373,13 +387,25 @@ class WalkingDirection {
         val mean = Math.toDegrees(atan2(se, sn))
         if (abs(angleDiff(mean, offsetDeg)) <= POCKET_FIX_DEG) return 0
         offsetDeg = angleDiff(mean, 0.0)
+        poseStartNs = stepTimes.last()
         forgetTurns()
         return minOf(pocketPhases.size - 1, MAX_TURN_STEPS)
+    }
+
+    /**
+     * Smer hoda je pogrešan za [deltaDeg] (napolju iz pravca GPS-a, [PdrLocator.courseError]). Ide u poseban dodatak
+     * ([courseDeg]) koji važi dok se telefon ne premesti: odstupanje bi pravac iz ubrzanja odmah vratio - u džepu je dosledno
+     * ~45° pored pravca GPS-a (teren 21.10.2026 popodne: ispravka na 179°, sledeći korak opet 132°).
+     */
+    fun turnOffset(deltaDeg: Double) {
+        if (!anchored) return
+        courseDeg = angleDiff(courseDeg + deltaDeg, 0.0)
     }
 
     /** Početak praćenja: telefon je u ruci, okrenut napred (odstupanje 0). */
     fun reset() {
         offsetDeg = 0.0
+        courseDeg = 0.0
         anchored = true
         pocketUntilNs = null
         uprightSinceNs = null
@@ -403,7 +429,7 @@ class WalkingDirection {
     }
 
     /** Smer hoda za pravac telefona [phone]; dok se premešten telefon ne smiri - smer od pre premeštanja. */
-    private fun walking(phone: Double): Double = if (anchored) phone + offsetDeg else heldWalkDeg
+    private fun walking(phone: Double): Double = if (anchored) phone + offsetDeg + courseDeg else heldWalkDeg
 
     /**
      * Telefon se smirio posle premeštanja: odstupanje tako da se nastavi smer od pre premeštanja. Izvađen iz džepa u ruku
@@ -411,12 +437,19 @@ class WalkingDirection {
      * (analiza promašaja 12.10.2026, NTP 09.10.: posle vožnje liftom u džepu odstupanje 45° umesto ~0, 24 m promašaja).
      */
     private fun settle() {
-        if (!restoreGrip()) {
-            offsetDeg = if (fromPocket && upSlow[2] >= HAND_UP_Z) 0.0 else angleDiff(heldWalkDeg, azimuth(smoothE, smoothN))
+        // Iz džepa u ruku: 0, ne zapamćen položaj u ruci - položaj zapamćen sa pogrešnim odstupanjem (telefon u labavom džepu
+        // ekranom ka nebu u hodu liči na ruku) bi ga vratio. Teren 21.10.2026 popodne, ispred NTP-a: vađenje je dalo 0, pa je
+        // zapamćen položaj vratio +129° - u NTP ušao sa smerom ~130° pogrešnim ("pogrešan je smer"), tačka nije ušla.
+        if (fromPocket && upSlow[2] >= HAND_UP_Z) {
+            offsetDeg = 0.0
+        } else if (!restoreGrip()) {
+            offsetDeg = angleDiff(heldWalkDeg, azimuth(smoothE, smoothN))
             offsetFromSettle = true
         }
         walkSteps = 0
         anchored = true
+        courseDeg = 0.0
+        poseStartNs = lastRotationNs
         pocketUntilNs = null
         uprightSinceNs = null
         poseHistory.clear()

@@ -355,6 +355,8 @@ class PdrLocatorReplayTest {
                     val reason = locator.onGps(fix, tracking = true)
                     if (reason != null) anchorKind = reason.name
                     if (reason != null) log(t, "replay: $reason")
+                    // Ispravka odstupanja iz pravca GPS-a menja smer samo kad smer računa replay ([direction]).
+                    if (direction != null) locator.courseError(direction.poseSinceNs)?.let(direction::turnOffset)
                     row(t, "G", fix)
                 }
                 "L" -> {

@@ -214,6 +214,55 @@ class LiftRideTest {
     }
 
     /**
+     * Teren 21.10.2026 popodne, NTP L1 I -> V u ruci: usred vožnje 4 "koraka" za 2,4 s (rukovanje telefonom, std do 1,55) -
+     * vožnja nije prepoznata ("do juče je radilo"). Uz jak polazak i kočenje kratak niz koraka u vožnji se ne broji.
+     */
+    @Test
+    fun handlingInLongRide_stillDetected() {
+        val s = sim()
+        s.run(10.0)
+        s.run(3.0) { 0.5 }
+        s.run(2.0)
+        s.run(2.4, noise = 0.9, stepEveryS = 0.6)
+        s.run(4.0)
+        s.run(3.0) { -0.5 }
+        s.run(5.0)
+        assertEquals(1, s.rides.size)
+        assertEquals(0.5 * 3.0 * (3.0 + 8.4), s.rides.single().heightM, 1.5)
+    }
+
+    /** ... a dug hod između dva jaka impulsa i dalje nije vožnja. */
+    @Test
+    fun walkingBetweenStrongPulses_noRide() {
+        val s = sim()
+        s.run(10.0)
+        s.run(3.0) { 0.5 }
+        s.run(8.0, noise = 0.5, stepEveryS = 0.5) { 2.0 * sin(2 * PI * 2 * it) }
+        s.run(3.0) { -0.5 }
+        s.run(10.0)
+        assertEquals(emptyList<LiftRide>(), s.rides)
+    }
+
+    /**
+     * 21.10.2026: pri kraju kočenja korpa sa 2 "koraka" (trzaj kabine, std 0,94) je prelomila kočenje - pomeraj 12,3 m umesto
+     * ~15 m (IV umesto V). Jedna bučna korpa istog znaka usred impulsa ga ne prekida.
+     */
+    @Test
+    fun noisyBinInsideBraking_heightKept() {
+        val s = sim()
+        s.run(10.0)
+        s.run(3.0) { 0.5 }
+        s.run(8.0)
+        s.run(2.0) { -0.5 }
+        s.detector.onStep(s.t + 100_000_000L)
+        s.run(0.5, noise = 0.9) { -0.5 }
+        s.run(0.5) { -0.5 }
+        s.run(5.0)
+        assertEquals(1, s.rides.size)
+        assertEquals(0.5 * 3.0 * 11.0, s.rides.single().heightM, 1.2)
+    }
+
+    /**
      * 11.10.2026 kod kuće (telefon u džep stojeći): mali "polazak", par sekundi rukovanja telefonom (koraci u bučnim
      * korpama std 0,67-1,4), pa suprotan impuls - nije vožnja. Koraci uz impuls se zanemaruju samo u tihim korpama.
      */

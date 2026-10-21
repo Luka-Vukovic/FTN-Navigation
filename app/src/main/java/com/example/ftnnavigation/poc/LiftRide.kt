@@ -52,6 +52,23 @@ private const val JERK_NS = 1_000_000_000L
  */
 private const val JERK_QUIET_STD = 0.55
 
+/**
+ * Rukovanje telefonom usred duže vožnje: kad su i polazak i kočenje jaki (|dv| bar [HANDLED_RIDE_MIN_DV], vožnja preko više
+ * spratova), do [HANDLED_MAX_STEPS] "koraka" u nizu od najviše [HANDLED_SPAN_NS] se ne broji. Teren 21.10.2026 popodne, NTP L1
+ * I -> V u ruci: 4 "koraka" za 2,4 s usred vožnje (std do 1,55), vožnja nije prepoznata ("do juče je radilo"). Lažni kandidati
+ * na svim snimcima 29.09.-21.10. imaju 12-23 koraka za 12-26 s, ili slab impuls (|dv| 0,41-0,78). PROCENA.
+ */
+private const val HANDLED_RIDE_MIN_DV = 1.0
+private const val HANDLED_MAX_STEPS = 6
+private const val HANDLED_SPAN_NS = 3_000_000_000L
+
+/**
+ * Impuls preskače najviše ovoliko bučnih korpi (trzaj sa "korakom") istog znaka. 21.10.2026: kočenje je pri kraju imalo korpu
+ * sa 2 "koraka" (std 0,94) - impuls se prelomio, pa je kočenje bilo kraće (odnos 0,7) i pomeraj 12,3 m umesto ~15 m (IV
+ * umesto V).
+ */
+private const val MAX_NOISY_BINS_IN_PULSE = 1
+
 /** Brzina koju polazak doda i kočenje oduzme mora biti slična (odnos; na snimcima 0,85-0,95). */
 private val DV_RATIO = 0.5..2.0
 
@@ -82,7 +99,12 @@ class LiftRideDetector {
         var bins = 0
         var dv = 0.0
         var stdSum = 0.0
-        val std: Double get() = stdSum / bins
+        var noisyBins = 0
+
+        /** Bučna korpa istog znaka koja čeka da se impuls nastavi ([MAX_NOISY_BINS_IN_PULSE]). */
+        var noisy: Pair<Bin, Double>? = null
+        var quietBins = 0
+        val std: Double get() = stdSum / quietBins
     }
 
     /** Treći red matrice rotacije: "gore" u koordinatama telefona. */
@@ -170,23 +192,37 @@ class LiftRideDetector {
         // prepoznata ("prvi put se dešava").
         val jerkInPulse = pulse != null && bin.steps > 0 && bin.stdMag < JERK_QUIET_STD
         val sign = when {
-            !bin.calm && !jerkInPulse -> 0
             a > PULSE_THRESHOLD -> 1
             a < -PULSE_THRESHOLD -> -1
             else -> 0
         }
+        val quiet = bin.calm || jerkInPulse
         if (pulse != null && sign == pulse.sign) {
-            pulse.add(bin, a)
-            return null
+            if (quiet) {
+                // Bučna korpa pre ove je deo impulsa tek kad se impuls posle nje nastavi.
+                pulse.noisy?.let { pulse.add(it.first, it.second, noisy = true) }
+                pulse.noisy = null
+                pulse.add(bin, a)
+                return null
+            }
+            if (pulse.noisy == null && pulse.noisyBins < MAX_NOISY_BINS_IN_PULSE) {
+                pulse.noisyBins++
+                pulse.noisy = bin to a
+                return null
+            }
         }
-        current = if (sign != 0) Pulse(sign, start, base).also { it.add(bin, a) } else null
+        current = if (sign != 0 && quiet) Pulse(sign, start, base).also { it.add(bin, a) } else null
         return pulse?.let(::finish)
     }
 
-    private fun Pulse.add(bin: Bin, a: Double) {
+    /** Bučna korpa ([noisy]) menja brzinu, ali ne ulazi u prosečnu std impulsa. */
+    private fun Pulse.add(bin: Bin, a: Double, noisy: Boolean = false) {
         bins++
         dv += a * BIN_S
-        stdSum += bin.stdMag
+        if (!noisy) {
+            stdSum += bin.stdMag
+            quietBins++
+        }
         endNs = bin.startNs + BIN_NS
     }
 
@@ -199,7 +235,10 @@ class LiftRideDetector {
                 val jerk = t < start.endNs + JERK_NS || t >= pulse.startNs - JERK_NS
                 t >= start.endNs && t < pulse.startNs && !(jerk && quietAt(t))
             }
-            if (between <= MAX_STEPS_IN_RIDE && abs(pulse.dv) / abs(start.dv) in DV_RATIO) {
+            val inRide = steps.filter { it >= start.endNs && it < pulse.startNs }
+            val handled = abs(start.dv) >= HANDLED_RIDE_MIN_DV && abs(pulse.dv) >= HANDLED_RIDE_MIN_DV &&
+                inRide.size <= HANDLED_MAX_STEPS && (inRide.isEmpty() || inRide.last() - inRide.first() <= HANDLED_SPAN_NS)
+            if ((between <= MAX_STEPS_IN_RIDE || handled) && abs(pulse.dv) / abs(start.dv) in DV_RATIO) {
                 pending = null
                 return LiftRide(start.startNs, pulse.endNs, height(start, pulse))
             }

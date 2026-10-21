@@ -839,6 +839,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         learnStepFromGps(locator, fix)
         val before = locator.place
         updatePosition(before, locator.onGps(fix, state.isTracking))
+        if (state.isTracking) locator.courseError(walkingDirection.poseSinceNs)?.let(walkingDirection::turnOffset)
     }
 
     /** Bez pozicije praćenje kreće sa GPS lokacije (napolju), na kampusu. */

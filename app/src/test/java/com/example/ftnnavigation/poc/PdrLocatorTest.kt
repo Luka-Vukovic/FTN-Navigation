@@ -1482,6 +1482,32 @@ class PdrLocatorTest {
         assertTrue("${distance(locator.position(), end)} m od GPS-a", distance(locator.position(), end) < 3.0)
     }
 
+    /**
+     * Teren 21.10.2026 popodne, NB -> NTP u džepu: smer koraka dosledno 40-130° pored pravca GPS-a (pogrešno odstupanje
+     * telefona). Na pravoj deonici razlika koja traje 10 s se vraća kao ispravka; kad se slažu - ništa.
+     */
+    @Test
+    fun outsideStepsFarFromGpsCourse_courseError() {
+        val start = graph.position(node("K-U-NB-1")).let { PointM(it.x + 10.0, it.y + 20.0) }
+        for ((stepGeoDeg, expected) in listOf(0f to 90.0, 90f to null)) {
+            val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+                setPosition(PdrPlace.CAMPUS, campusOffset(start))
+            }
+            var error: Double? = null
+            // Korak na 0,5 s (0,7 m), lokacija svake sekunde (kao na telefonu - pravac se meri preko najviše 12 lokacija).
+            repeat(80) { i ->
+                val t = (i + 1) * 500_000_000L
+                // Koraci ka [stepGeoDeg] (geografski), korisnik (GPS) ide na istok.
+                locator.step(stepGeoDeg - declination, 0.7f, timeNs = t)
+                if (i % 2 == 1) {
+                    locator.onGps(GpsFix(PointM(start.x + 0.7 * (i + 1), start.y), 4f, elapsedNs = t), tracking = true)
+                    if (error == null) error = locator.courseError(0L)
+                }
+            }
+            if (expected == null) assertEquals(null, error) else assertEquals(expected, error!!, 10.0)
+        }
+    }
+
     /** Strana se ne zna, a sprat nije krajnji: pretpostavka ka odredištu; "Ovde sam" na drugom spratu uči stranu. */
     @Test
     fun unknownTurn_guessesTowardDestination_correctionLearns() {

@@ -250,9 +250,17 @@ class StairWalk {
      * promena u ovom hodu, sa strane [sense] (0 dok promene nije bilo). Okret se meri od kraja leta pre prve promene do
      * početka trenutnog leta (bar [FLIGHT_STEPS] koraka) - i okret na podestu u istom smeru pre prvog leta (hodnik ->
      * stepenište, NB I -> P) tako ne smeta. Inače 0. Promenu treba potvrditi ([confirmChange]).
+     *
+     * [onStair]: tačka je na samom stepeništu - smer trenutnog leta sme da klizi i pre prve promene (ranija podela ostaje
+     * stroga). Teren 21.10.2026 popodne, NB P -> I (desnom stranom oba kraka): drugi krak 187° -> 212° kroz 9 koraka, dva niza
+     * po 5 - "drugi krak bez promene sprata". Klizanje svih nizova je kvarilo 4 prava prelaza (03.-20.10.).
      */
-    fun floorTurn(changes: Int, sense: Int): Int {
-        val runs = runs(drifting = anchor != null)
+    fun floorTurn(changes: Int, sense: Int, onStair: Boolean = false): Int {
+        var runs = runs(drifting = anchor != null)
+        if (onStair && anchor == null && runs.isNotEmpty() && runs.last().count() < FLIGHT_STEPS) {
+            val drifted = runs(drifting = true).last()
+            if (drifted.count() >= FLIGHT_STEPS) runs = runs.filter { it.last < drifted.first } + listOf(drifted)
+        }
         val current = runs.lastOrNull() ?: return 0
         if (current.count() < FLIGHT_STEPS) return 0
         val from = anchor ?: flightBefore(runs, current) ?: return 0

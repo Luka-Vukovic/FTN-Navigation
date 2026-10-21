@@ -113,6 +113,24 @@ private const val FROZEN_STEP_VARIANCE_M2 = 1.5
 /** Najviše ovoliko lokacija u pravcu kretanja (i kad lokacije nemaju vreme - testovi). */
 private const val GPS_TRACK_MAX = 12
 
+/**
+ * Napolju, smer koraka naspram pravca GPS-a ([PdrLocator.courseError]): na pravoj deonici (GPS se pomerio bar
+ * [COURSE_CHECK_MIN_M] za bar 3/4 [GPS_COURSE_NS], skoro pravo; bar [COURSE_MIN_STEPS] koraka istog pravca) razlika veća od
+ * [COURSE_FIX_DEG] koja traje [COURSE_HOLD_NS] je pogrešno odstupanje telefona (džep), ne greška kompasa (ta je +-15°, uči se
+ * iz "Ovde sam"); ispravka je srednja vrednost razlike na početku i kraju. Teren 21.10.2026 popodne, NB -> NTP u džepu: smer
+ * koraka 40-130° pored pravca GPS-a ~2,5 min ("pogrešan smer,
+ * skoro pa suprotan"), i u NTP ušao sa istim odstupanjem. Na snimcima 03.-21.10. (bez zamrznutog smera) razlika > 40° na 10 s
+ * prozoru samo u džepu (17.10., 21.10.) i 4 puta pojedinačno. PROCENA.
+ */
+private const val COURSE_CHECK_MIN_M = 10.0
+private const val COURSE_GPS_STRAIGHT = 0.9
+private const val COURSE_MAX_ACCURACY_M = 10f
+private const val COURSE_MIN_STEPS = 8
+private const val COURSE_STEP_CONSISTENCY = 0.95
+private const val COURSE_FIX_DEG = 40.0
+private const val COURSE_AGREE_DEG = 20.0
+private const val COURSE_HOLD_NS = 10_000_000_000L
+
 // Prelazi.
 
 /** Ulazak: tačka bar ovoliko unutar obrisa zgrade sa planom ... */
@@ -753,6 +771,10 @@ class PdrLocator(
     // Skorašnje GPS lokacije napolju - pravac kretanja dok je smer zamrznut ([gpsCourse]).
     private val gpsTrack = ArrayDeque<GpsFix>()
 
+    // Napolju: koraci (vreme, geografski azimut) za poređenje sa pravcem GPS-a, i od kada se razlikuju ([courseError]).
+    private val courseSteps = ArrayDeque<Pair<Long, Double>>()
+    private var courseMismatch: Pair<Long, Double>? = null
+
     /** U zgradi: nov detektor posle svakog sidra, da izlazak potvrde samo lokacije posle ulaska. */
     private var exitDetector: BuildingDetector? = null
 
@@ -1363,6 +1385,14 @@ class PdrLocator(
             walkedY = from.walkedY
         }
         val (dxM, dyM) = if (place.isCampus && headingFrozen) frozenStepVector(lengthM) else stepVector(place, azimuthDeg, lengthM)
+        if (place.isCampus && !headingFrozen && timeNs != null && lengthM > 0f) {
+            repeat(redo.coerceAtMost(courseSteps.size)) { courseSteps.removeLast() }
+            repeat(redo + 1) { courseSteps.addLast(timeNs to Math.toDegrees(atan2(dxM, -dyM))) }
+            while (timeNs - courseSteps.first().first > 2 * GPS_COURSE_NS) courseSteps.removeFirst()
+        } else {
+            courseSteps.clear()
+            courseMismatch = null
+        }
         val beforeMatch = match
         val before = match?.point
         if (place.isCampus) repeat(redo.coerceAtMost(campusTrail.size)) { campusTrail.removeLast() }
@@ -1478,6 +1508,53 @@ class PdrLocator(
         return null
     }
 
+
+    /**
+     * Napolju (posle GPS lokacije): za koliko stepeni okrenuti smer koraka da ide pravcem GPS-a, kad se dosledno razilaze
+     * (vidi [COURSE_FIX_DEG]); null ako je u redu ili se ne zna. Posle ispravke se meri iznova (samo novi koraci).
+     */
+    fun courseError(poseSinceNs: Long): Double? {
+        val error = courseMismatchNow(poseSinceNs)
+        if (error == null) {
+            courseMismatch = null
+            return null
+        }
+        val now = gpsTrack.last().elapsedNs
+        val since = courseMismatch
+        if (since == null || abs(angleDeg(error - since.second)) > COURSE_AGREE_DEG) {
+            courseMismatch = now to error
+            return null
+        }
+        if (now - since.first < COURSE_HOLD_NS) return null
+        courseMismatch = null
+        courseSteps.clear()
+        val mean = since.second + angleDeg(error - since.second) / 2
+        trace?.invoke(String.format(Locale.ROOT, "smer koraka %+.0f° pored pravca GPS-a - ispravljeno", -mean))
+        return mean
+    }
+
+    /** Razlika pravca GPS-a i koraka na poslednjem prozoru, samo od [poseSinceNs] (telefon tada u istom položaju). */
+    private fun courseMismatchNow(poseSinceNs: Long): Double? {
+        if (!place.isCampus || headingFrozen || gpsTrack.size < 3) return null
+        if (gpsTrack.any { it.accuracyM > COURSE_MAX_ACCURACY_M }) return null
+        val first = gpsTrack.first()
+        val last = gpsTrack.last()
+        if (first.elapsedNs < poseSinceNs || last.elapsedNs - first.elapsedNs < GPS_COURSE_NS * 3 / 4) return null
+        val dx = last.point.x - first.point.x
+        val dy = last.point.y - first.point.y
+        val d = hypot(dx, dy)
+        val path = gpsTrack.zipWithNext { a, b -> hypot(b.point.x - a.point.x, b.point.y - a.point.y) }.sum()
+        if (d < COURSE_CHECK_MIN_M || d < COURSE_GPS_STRAIGHT * path) return null
+        val steps = courseSteps.filter { it.first in first.elapsedNs..last.elapsedNs }
+        if (steps.size < COURSE_MIN_STEPS) return null
+        val sx = steps.sumOf { sin(Math.toRadians(it.second)) }
+        val sy = steps.sumOf { cos(Math.toRadians(it.second)) }
+        if (hypot(sx, sy) < COURSE_STEP_CONSISTENCY * steps.size) return null
+        val error = angleDeg(Math.toDegrees(atan2(dx, -dy)) - Math.toDegrees(atan2(sx, sy)))
+        return error.takeIf { abs(it) > COURSE_FIX_DEG }
+    }
+
+    private fun angleDeg(a: Double): Double = ((a % 360.0) + 540.0) % 360.0 - 180.0
 
     /**
      * Korak napolju dok je smer zamrznut: pravcem kojim se GPS pomerio ([GPS_COURSE_NS], bar [GPS_COURSE_MIN_M]); bez toga
@@ -2546,7 +2623,7 @@ class PdrLocator(
      * po strani okreta. Vraća [PlaceReason.STEPENICE] ako je sprat promenjen.
      */
     private fun changeFloorOnStairs(climb: Climb): PlaceReason? {
-        val sense = climb.walk.floorTurn(climb.changes, climb.sense).takeIf { it != 0 } ?: return null
+        val sense = climb.walk.floorTurn(climb.changes, climb.sense, onStair = true).takeIf { it != 0 } ?: return null
         val stair = climb.stair
         // Prva promena i na samom stepeništu traži letove pravcem krakova (kao pored njega, [stairTurnNearby]). Teren
         // 12.10.2026 (posle zabrane grane lifta tačka iz hola NB I sprata stiže do stepeništa): hod hodnikom pa petlja od

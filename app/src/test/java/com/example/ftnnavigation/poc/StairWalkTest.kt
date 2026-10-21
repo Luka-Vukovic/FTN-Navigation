@@ -38,6 +38,26 @@ class StairWalkTest {
     /** Okret na podestu: u hodu, kroz [steps] koraka. */
     private fun turn(from: Float, by: Float, steps: Int = 4) = (1..steps).map { from + by * it / (steps + 1) }
 
+    /**
+     * Teren 21.10.2026 popodne, NB P -> I (desnom stranom oba kraka; smer na planu sa snimka): drugi krak 187° -> 212° - dva
+     * niza po 5 koraka, sprat nije promenjen. Na samom stepeništu smer trenutnog leta sme da klizi.
+     */
+    @Test
+    fun onStair_secondFlightDrifts_beforeFirstChange_counts() {
+        val headings = listOf(14f, 13f, 15f, 17f, 20f, 20f, 11f, 6f, 1f, 359f, 1f, 4f, 7f, 11f, 35f, 75f, 107f, 118f, 121f, 124f,
+            148f, 177f, 187f, 187f, 190f, 197f, 201f, 198f, 198f, 203f, 212f)
+        for (onStair in listOf(false, true)) {
+            val walk = StairWalk()
+            var t = 0L
+            val turns = headings.map { h ->
+                t += stepNs
+                walk.step(h, timeNs = t)
+                walk.floorTurn(0, 0, onStair)
+            }
+            if (onStair) assertEquals(1, turns.first { it != 0 }) else assertTrue("$turns", turns.all { it == 0 })
+        }
+    }
+
     @Test
     fun flightTurnRightFlight_isOneFloorTurningRight() {
         val walk = StairWalk()
