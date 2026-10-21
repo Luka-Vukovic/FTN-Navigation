@@ -47,8 +47,9 @@ class PdrLocatorTest {
     private fun placeOf(node: Node) = if (node.buildingId == CAMPUS_ID) PdrPlace.CAMPUS else PdrPlace(node.buildingId, node.floor)
 
     /** Locator sa pozicijom na čvoru. */
+    /** Lokator sa tačkom na čvoru [id], kao posle starta (ne "Ovde sam" - posle njega GPS izlazak čeka hod). */
     private fun locatorAt(id: String) = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
-        setPosition(placeOf(node(id)), Offset(node(id).x, node(id).y))
+        setPosition(placeOf(node(id)), Offset(node(id).x, node(id).y), measure = false)
     }
 
     /** Staza daleko od svih zgrada (napolju sigurno). */
@@ -838,6 +839,34 @@ class PdrLocatorTest {
         assertTrue("${distance(locator.position(), inside)} m od ulaza, hodao ${walkedIn} m", distance(locator.position(), inside) <= walkedIn + 2.5)
         val point = locator.match!!.point
         assertTrue("na hodniku", listOf(point.from, point.to).none { it.type == NodeType.PROSTORIJA || it.type == NodeType.VRATA })
+    }
+
+    /**
+     * Teren 21.10.2026, AMF −1 i Kula: GPS je unutra odlutao 15+ m van zgrade (tačnost 3,5-10 m) - izlazak odmah posle ulaska,
+     * posle "Ovde sam" u hodniku i dok je korisnik bio na spirali Kule. GPS izlazak tek posle 30 m hoda od "Ovde sam" (ili
+     * ulaska), i nikad sa stepeništa.
+     */
+    @Test
+    fun gpsOutside_rightAfterMarkInside_noExit_afterWalking_exits() {
+        val start = inner("NB-0-ULAZ")
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(placeOf(start), Offset(start.x, start.y))
+        }
+        assertTrue(List(6) { locator.onGps(GpsFix(outdoor, 5f), tracking = true) }.all { it == null })
+        assertEquals(PdrPlace("NB", 0), locator.place)
+        // Tamo-nazad od ulaza (tačka ostaje unutra), pa GPS i dalje napolju.
+        val outward = magneticAzimuth(graph.position(start), graph.position(node("NB-0-ULAZ")))
+        repeat(20) { locator.step(outward + 180f, stepM) }
+        repeat(18) { locator.step(outward, stepM) }
+        assertEquals(PdrPlace("NB", 0), locator.place)
+        assertTrue(PlaceReason.GPS_IZLAZ in List(3) { locator.onGps(GpsFix(outdoor, 5f), tracking = true) })
+
+        // Na spirali Kule (posle starta - hod se ne čeka): nema izlaska.
+        val kula = locatorAt("KULA-0-S")
+        // Prvi krakovi spirale sa snimka 18.10. (kao u kulaSpiralStairs_fullTurnClockwise_goesUp_counterclockwise_goesDown).
+        listOf(263.7, 266.1, 271.2, 269.7, 295.0, 314.5, 328.1, 327.1).forEach { kula.step(it.toFloat(), 0.4f) }
+        assertTrue("nije na spirali", kula.onStairs)
+        assertTrue(List(6) { kula.onGps(GpsFix(outdoor, 3f), tracking = true) }.all { it == null })
     }
 
     /** PDR nije video izlaz (stoji kod ulaza), GPS potvrdi napolju -> kampus, na ulazu. */

@@ -223,8 +223,12 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     /** Poslednji azimut sa senzora - da se smer preračuna kad se PDR premesti na drugi plan. */
     private var lastAzimuthDeg: Float? = null
 
-    var mode by mutableStateOf(MapMode.NB)
+    // Podrazumevano kampus (korisnik, 21.10.2026); plan zgrade tek kad GPS potvrdi da je korisnik u njoj ([onGpsFix]).
+    var mode by mutableStateOf(MapMode.KAMPUS)
         private set
+
+    /** Korisnik (ili ruta, pozicija) je već izabrao šta Mapa prikazuje - GPS je više ne prebacuje. */
+    private var modeChosen = false
 
     /** Auto-rotacija mape (Podešavanja): mapa se okreće za po 90° po smeru korisnika. */
     var autoRotateMap by mutableStateOf(AppSettings.autoRotateMap(application))
@@ -590,6 +594,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     fun showPlace(node: Node) {
         val building = indoorBuilding(node.buildingId)
         mode = MapMode.entries.first { it.building == building }
+        modeChosen = true
         if (building != null) showFloor(building, node.floor)
     }
 
@@ -600,6 +605,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectMode(mode: MapMode) {
         this.mode = mode
+        modeChosen = true
     }
 
     /** Smer za prikaz (azimut iz [walkingDirection]), sa ispravkom iz rekalibracije, u odnosu na "gore" plana. */
@@ -741,6 +747,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     private fun show(place: PdrPlace) {
         val building = place.building
         mode = MapMode.entries.first { it.building == building }
+        modeChosen = true
         if (building != null) showFloor(building, place.floor)
     }
 
@@ -822,6 +829,11 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         if (detector.onFix(fix)) {
             currentBuilding = detector.current
             gpsRecorder?.building(fix.elapsedNs, detector.current?.id)
+            // Dok ništa nije izabrano ni postavljeno: u zgradi sa planom Mapa prikazuje nju, inače ostaje kampus.
+            val building = detector.current?.let { indoorBuilding(it.id) }
+            if (!modeChosen && state.rawPosition == null && building != null) {
+                mode = MapMode.entries.first { it.building == building }
+            }
         }
         val locator = locator ?: return
         learnStepFromGps(locator, fix)

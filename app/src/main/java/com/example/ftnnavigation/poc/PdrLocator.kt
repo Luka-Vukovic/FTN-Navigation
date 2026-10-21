@@ -215,6 +215,13 @@ private const val GPS_EXIT_MAX_ACCURACY_M = 10f
 /** Izlazak po GPS-u: ako je PDR bio ovoliko blizu ulaza, izašao je na tom ulazu. */
 private const val GPS_EXIT_GATE_M = 8.0
 
+/**
+ * Izlazak po GPS-u tek posle ovoliko hoda od ulaska u zgradu ili od "Ovde sam" u njoj. Teren 21.10.2026, AMF −1: GPS je
+ * posle ulaska odlutao ~15 m ka zapadu (tačnost 7-10 m) dok je korisnik išao hodnikom - izlazak 5 s posle ulaska, dvaput,
+ * i 7 s posle "Ovde sam" u hodniku (drugi put posle 16 m hoda). Pravi GPS izlasci na snimcima: 12.10. NTP, 16.10. AMF.
+ */
+private const val GPS_EXIT_MIN_WALK_M = 30.0
+
 // Stepenice (vrednosti su procena; snimci sa terena: letovi od 12-14 koraka, podest stepeništa NTP ~5 x 4 m).
 
 /** Ulazak u stepenište: tačka na grafu na ivici do čvora stepeništa, najviše ovoliko od njega (ili pola ivice). */
@@ -751,6 +758,9 @@ class PdrLocator(
 
     private var stepsSinceChange = MIN_STEPS_BETWEEN_CHANGES
 
+    /** Hod od ulaska u zgradu ili od "Ovde sam" u njoj (beskonačno dok se ne zna - start iz snimka) - [GPS_EXIT_MIN_WALK_M]. */
+    private var walkedInsideM = Double.POSITIVE_INFINITY
+
     // Sidro (poslednje poznato mesto) i zbir PDR koraka od njega, u metrima plana mesta sidra.
     private var anchorPlace: PdrPlace? = null
     private var anchor: PointM? = null
@@ -1180,6 +1190,7 @@ class PdrLocator(
             if (headingErrors.size > SHARED_BIAS_SAMPLES) headingErrors.removeFirst()
         }
         setAnchor(place, point)
+        if (!place.isCampus) walkedInsideM = 0.0
         varianceM2 = KNOWN_VARIANCE_M2
         return check
     }
@@ -1328,6 +1339,7 @@ class PdrLocator(
         if (liftPrompt != null) liftSteps += PendingStep(azimuthDeg, lengthM, redoSteps, timeNs)
         forgetCorridorBias(timeNs)
         walkedPathM += lengthM
+        walkedInsideM += lengthM
         stepsSinceStairChange++
         lastStepM = if (climb != null || spiralWalk != null) STAIR_STEP_M else lengthM
         walkStepM = lengthM
@@ -1425,6 +1437,9 @@ class PdrLocator(
             // Napolje se izlazi samo sa sprata koji ima ulaz sa kampusa. Teren 19.10.2026 uveče, NTP S1 P -> III (uz staklenu
             // fasadu): GPS je za 30 s odlutao 25 m na zapad, sa tačnošću 9 m i bolje - izlazak sa II sprata, penjanje izgubljeno.
             if (gateways[place].orEmpty().none { it.target.type == NodeType.ULAZ && !it.target.isIndoor }) return null
+            // Ni sa stepeništa (teren 21.10.2026, Kula: GPS tačnosti 3,5 m 15 m van zgrade dok je korisnik na spirali), ni
+            // odmah posle ulaska ([GPS_EXIT_MIN_WALK_M]).
+            if (onStairs || walkedInsideM < GPS_EXIT_MIN_WALK_M) return null
             exitByGps(fix)
             return PlaceReason.GPS_IZLAZ
         }
@@ -1488,6 +1503,7 @@ class PdrLocator(
     }
 
     private fun setAnchor(place: PdrPlace, point: Offset) {
+        if (this.place.isCampus && !place.isCampus) walkedInsideM = 0.0
         this.place = place
         if (!place.isCampus) gpsTrack.clear()
         stepsSinceGps = 0

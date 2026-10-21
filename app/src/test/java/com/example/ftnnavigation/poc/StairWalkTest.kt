@@ -135,6 +135,44 @@ class StairWalkTest {
     }
 
     /**
+     * Teren 21.10.2026, NB (smer na planu sa snimka 112511): P -> I -> II i II -> I -> P. U drugom kraku drugog sprata kompas
+     * klizi (182° -> 226°, 206° -> 157°) - niz od 20° je bio kraći od [FLIGHT_STEPS] i drugi sprat nije prepoznat ni gore ni
+     * dole (posle 8 koraka kraka "vratio se"). Posle prve promene let sme da klizi.
+     */
+    @Test
+    fun secondFloor_compassDriftsAlongFlight_stillCounts() {
+        val up = listOf(34f, 31f, 26f, 18f, 10f, 9f, 8f, 8f, 11f, 12f, 13f, 12f, 10f, 11f, 14f, 17f, 41f, 67f, 93f, 114f, 135f,
+            159f, 186f, 201f, 201f, 196f, 189f, 181f, 181f, 192f, 189f, 193f, 197f, 203f, 228f, 257f, 290f, 309f, 331f, 345f,
+            358f, 6f, 14f, 18f, 18f, 17f, 21f, 24f, 27f, 31f, 47f, 69f, 91f, 109f, 128f, 147f, 168f) +
+            listOf(182f, 191f, 190f, 189f, 193f, 204f, 211f, 215f, 216f, 219f, 223f, 226f)
+        val down = listOf(31f, 24f, 20f, 22f, 20f, 16f, 16f, 15f, 15f, 17f, 17f, 15f, 11f, 6f, 5f, 11f, 16f, 9f, 340f, 314f, 289f,
+            279f, 271f, 256f, 232f, 215f, 204f, 199f, 198f, 201f, 206f, 205f, 200f, 195f, 188f, 182f, 177f, 158f, 136f, 112f, 91f,
+            70f, 50f, 32f, 20f, 15f, 12f, 13f, 12f, 9f, 9f, 9f, 8f, 359f, 337f, 313f, 288f, 282f, 271f, 251f) +
+            listOf(220f, 206f, 201f, 196f, 193f, 189f, 184f, 175f, 164f, 157f, 158f)
+        for ((headings, lastFlight) in listOf(up to up.size - 12, down to down.size - 11)) {
+            val walk = StairWalk()
+            var changes = 0
+            var sense = 0
+            val at = mutableListOf<Int>()
+            var t = 0L
+            for ((i, h) in headings.withIndex()) {
+                t += stepNs
+                walk.step(h, timeNs = t)
+                val s = walk.floorTurn(changes, sense)
+                if (s != 0) {
+                    walk.confirmChange()
+                    changes++
+                    sense = s
+                    at += i
+                }
+            }
+            assertEquals("$at", 2, changes)
+            // Pre 8. koraka poslednjeg kraka (tada je bio "vratio se").
+            assertTrue("$at", at[1] < lastFlight + 7)
+        }
+    }
+
+    /**
      * Teren 05.10.2026 (NB I -> III, NTP I -> II): posle prve promene korisnik zastane na podestu (2,2-3,3 s, gleda
      * obaveštenje) - sledeći sprat se i dalje broji. Do tada je svaka pauza od prvog leta odbijala sve sledeće spratove.
      */

@@ -214,12 +214,24 @@ class StairWalk {
     /** Koraka od početka leta pre okreta koji je poslednji [floorTurn] prijavio (sa poslednjim); 0 ako ga nema. */
     fun stepsSinceFlightStart(): Int = pendingAnchor?.let { headings.size - flightFirst(it) } ?: 0
 
-    /** Nizovi uzastopnih koraka istog smera (svaki do [RUN_DEG] od prvog u nizu), bez pauze. */
-    private fun runs(): List<IntRange> {
+    /**
+     * Nizovi uzastopnih koraka istog smera (svaki do [RUN_DEG] od prvog u nizu), bez pauze. Sa [drifting] smer sme da
+     * klizi: korak do [RUN_DEG] od prethodnog i do [FLIGHT_START_DEG] od prvog - posle prve promene sprata u hodu (korisnik
+     * je na stepeništu). Teren 21.10.2026, NB: kompas je u drugom kraku klizio 182° -> 219° (I -> II) i 206° -> 157°
+     * (I -> P) kroz 10 koraka - niz od 20° je bio kraći od [FLIGHT_STEPS], pa je posle 8 koraka "vratio se" (sprat nije
+     * promenjen ni gore ni dole).
+     */
+    private fun runs(drifting: Boolean = false): List<IntRange> {
         val result = mutableListOf<IntRange>()
         var start = 0
         for (i in 1 until headings.size) {
-            if (pauseBefore(i) || abs(angleDiffDeg(headings[i], headings[start])) > RUN_DEG) {
+            val breaks = if (drifting) {
+                abs(angleDiffDeg(headings[i], headings[i - 1])) > RUN_DEG ||
+                    abs(angleDiffDeg(headings[i], headings[start])) > FLIGHT_START_DEG
+            } else {
+                abs(angleDiffDeg(headings[i], headings[start])) > RUN_DEG
+            }
+            if (pauseBefore(i) || breaks) {
                 result += start until i
                 start = i
             }
@@ -240,7 +252,7 @@ class StairWalk {
      * stepenište, NB I -> P) tako ne smeta. Inače 0. Promenu treba potvrditi ([confirmChange]).
      */
     fun floorTurn(changes: Int, sense: Int): Int {
-        val runs = runs()
+        val runs = runs(drifting = anchor != null)
         val current = runs.lastOrNull() ?: return 0
         if (current.count() < FLIGHT_STEPS) return 0
         val from = anchor ?: flightBefore(runs, current) ?: return 0

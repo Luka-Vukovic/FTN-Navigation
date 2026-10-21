@@ -196,6 +196,24 @@ class LiftRideTest {
     }
 
     /**
+     * Teren 21.10.2026, NTP L1 I -> V u ruci: "korak" (trzaj kabine) usred polaska prelomio je impuls na dva dela, a kočenje je
+     * bilo 2,7 puta jače od drugog dela - vožnja nije prepoznata. Korak u tihoj korpi usred impulsa ne prekida impuls.
+     */
+    @Test
+    fun jerkStepInsideStartPulse_stillDetected() {
+        val s = sim()
+        s.run(10.0)
+        s.run(1.0) { 0.5 }
+        s.detector.onStep(s.t)
+        s.run(1.5) { 0.5 }
+        s.run(6.0)
+        s.run(3.0) { -0.45 }
+        s.run(5.0)
+        assertEquals(1, s.rides.size)
+        assertTrue(s.rides.single().up)
+    }
+
+    /**
      * 11.10.2026 kod kuće (telefon u džep stojeći): mali "polazak", par sekundi rukovanja telefonom (koraci u bučnim
      * korpama std 0,67-1,4), pa suprotan impuls - nije vožnja. Koraci uz impuls se zanemaruju samo u tihim korpama.
      */

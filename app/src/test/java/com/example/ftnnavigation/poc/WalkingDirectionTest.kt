@@ -242,6 +242,35 @@ class WalkingDirectionTest {
     }
 
     /**
+     * Teren 21.10.2026 (napolju, ka AMF-u): telefon je iz džepa izvađen sporo (~4 s, nagib < 45° za 1,5 s) - premeštanje nije
+     * prepoznato i ostalo je odstupanje iz džepa (+149°), pokazivač ~150° pogrešno. Uspravan pa smiren u ruci = odstupanje 0.
+     */
+    @Test
+    fun phoneTakenSlowlyFromPocketIntoHand_offsetReset() {
+        fun tilted(yawDeg: Double, pitchDeg: Double): Pose {
+            val th = Math.toRadians(pitchDeg)
+            val f = forward(yawDeg)
+            return Pose(y = f * cos(th) + up * sin(th), z = f * -sin(th) + up * cos(th))
+        }
+        stand(1.0, inHand(30.0))
+        direction.reset()
+        walk(5.0, 30.0) { inHand(30.0) }
+        stand(12.0, inPocket(screenAzimuthDeg = 30.0, walkAzimuthDeg = 30.0))
+        assertTrue(direction.isAnchored)
+        assertNear(180.0, direction.offset.toFloat(), 10.0, "odstupanje u džepu")
+        // Polako iz džepa (uspravno, ekran ka 30°) u ruku nagnutu ka licu (gornja ivica ka 30°) - 4 s, u mestu (kao na snimku).
+        for (i in 0 until 40) {
+            val k = i / 39.0
+            stand(0.1, tilted(210.0 + 180.0 * k, 90.0 - 65.0 * k))
+        }
+        stand(2.0, tilted(30.0, 25.0))
+        assertTrue(direction.isAnchored)
+        assertNear(0.0, direction.offset.toFloat(), 10.0, "odstupanje u ruci")
+        // Hod u ruci sa slabim pravcem iz ubrzanja - smer ne sme da zavisi od njegove ispravke.
+        walk(3.0, 30.0, forwardAmp = 0.3) { tilted(30.0, 25.0) }.forEach { assertNear(30.0, it, 15.0, "u ruci") }
+    }
+
+    /**
      * Teren 12.10.2026 (Kula, NTP III): "Ovde sam", pa telefon u džep, a telo se za to vreme okrene ~90° - smer od pre
      * premeštanja to sakrije, pa ceo hod u džepu ide 90° pogrešno. Pravac iz ubrzanja je po koraku slab, ali usrednjen preko
      * više koraka dosledan - odstupanje se ispravi posle nekoliko koraka, a ti koraci se ponove.

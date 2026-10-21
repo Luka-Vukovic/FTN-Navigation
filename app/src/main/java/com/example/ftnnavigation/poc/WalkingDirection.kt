@@ -124,6 +124,10 @@ class WalkingDirection {
     // Premeštanje je počelo sa telefonom uspravnim (džep).
     private var fromPocket = false
 
+    // Do kada je telefon bio u džepu (uspravan bez prekida bar POCKET_STEADY_NS), i od kada je uspravan - [slowlyOutOfPocket].
+    private var pocketUntilNs: Long? = null
+    private var uprightSinceNs: Long? = null
+
     // Džep: odstupanje iz faze po koraku (sin·jačina, cos·jačina, jačina) - [pocketOffset].
     private val pocketPhases = ArrayDeque<DoubleArray>()
 
@@ -195,6 +199,9 @@ class WalkingDirection {
                 unsettledSinceNs = timestampNs
                 upSlow.copyInto(settleRef)
                 settleRefNs = timestampNs
+            } else if (slowlyOutOfPocket(timestampNs)) {
+                fromPocket = true
+                settle()
             }
             timestampNs - settleRefNs >= SETTLE_CHECK_NS -> {
                 if (angleBetween(upSlow, settleRef) < SETTLE_DEG ||
@@ -207,6 +214,24 @@ class WalkingDirection {
                 }
             }
         }
+    }
+
+    /**
+     * Telefon je sporo izvađen iz džepa u ruku: bio je uspravan, a sada je smiren ekranom nagore u položaju u ruci - i bez
+     * premeštanja ([repositioned]). Teren 21.10.2026: vađenje je trajalo ~4 s (nagib se za 1,5 s okretao < 45°), pa je ostalo
+     * odstupanje iz džepa (+149°) - napolju i u AMF-u pokazivač ~150° pogrešno ("pogrešan smer").
+     */
+    private fun slowlyOutOfPocket(timestampNs: Long): Boolean {
+        // Uspravan bar POCKET_STEADY_NS bez prekida (nagib u ruci od par sekundi nije džep), i to malopre - ne džep od pre više
+        // minuta (18.10.2026, AMF S1: posle džepa i vađenja telefon ~3 s uspravan u ruci, dok je senzor ćutao - lažno vađenje).
+        if (abs(upSlow[2]) < POCKET_UP_Z) {
+            val since = uprightSinceNs ?: timestampNs.also { uprightSinceNs = it }
+            if (timestampNs - since >= POCKET_STEADY_NS) pocketUntilNs = timestampNs
+        } else {
+            uprightSinceNs = null
+        }
+        val pocket = pocketUntilNs ?: return false
+        return timestampNs - pocket <= POCKET_TO_HAND_NS && isGrip(upSlow) && angleBetween(upFast, upSlow) < SETTLE_DEG
     }
 
     /** Da li se "gore" u koordinatama telefona u poslednjih [REPOSITION_WINDOW_NS] okrenulo > [REPOSITION_DEG]. */
@@ -356,6 +381,8 @@ class WalkingDirection {
     fun reset() {
         offsetDeg = 0.0
         anchored = true
+        pocketUntilNs = null
+        uprightSinceNs = null
         nearStairs = false
         onStairs = false
         poseHistory.clear()
@@ -390,6 +417,8 @@ class WalkingDirection {
         }
         walkSteps = 0
         anchored = true
+        pocketUntilNs = null
+        uprightSinceNs = null
         poseHistory.clear()
         forgetTurns()
         // Ubrzanja iz premeštanja ne smeju u osu hoda.
@@ -576,6 +605,12 @@ class WalkingDirection {
          */
         const val POCKET_UP_Z = 0.3
         const val HAND_UP_Z = 0.5
+
+        /** Sporo vađenje iz džepa ([slowlyOutOfPocket]): telefon je pre toga bio uspravan bar ovoliko bez prekida. */
+        const val POCKET_STEADY_NS = 10_000_000_000L
+
+        /** ... i vađenje (smiren u ruci) najkasnije ovoliko posle džepa. */
+        const val POCKET_TO_HAND_NS = 8_000_000_000L
 
         /**
          * Zapamćen položaj u ruci ([rememberGrip]): ekranom nagore ([HAND_UP_Z]) i nagnut bar ovoliko (|x, y| gravitacije) -

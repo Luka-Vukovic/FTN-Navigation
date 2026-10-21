@@ -164,13 +164,17 @@ class LiftRideDetector {
         if (base == null) return null
 
         val a = mean - base
+        val pulse = current
+        // Korak u tihoj korpi usred impulsa je trzaj kabine, ne hod - impuls se nastavlja. Teren 21.10.2026, NTP L1 I -> V: korak
+        // usred polaska (std 0,53) je prelomio impuls na dva dela, a odnos kočenja i drugog dela (2,7) nije prošao - vožnja nije
+        // prepoznata ("prvi put se dešava").
+        val jerkInPulse = pulse != null && bin.steps > 0 && bin.stdMag < JERK_QUIET_STD
         val sign = when {
-            !bin.calm -> 0
+            !bin.calm && !jerkInPulse -> 0
             a > PULSE_THRESHOLD -> 1
             a < -PULSE_THRESHOLD -> -1
             else -> 0
         }
-        val pulse = current
         if (pulse != null && sign == pulse.sign) {
             pulse.add(bin, a)
             return null
