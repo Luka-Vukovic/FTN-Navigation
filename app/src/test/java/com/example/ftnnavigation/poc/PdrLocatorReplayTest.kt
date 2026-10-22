@@ -130,7 +130,7 @@ class PdrLocatorReplayTest {
         locator.clearRedo()
         stepM = 0.8f
         val out = StringBuilder("Snimak ${file.name}\n")
-        val track = StringBuilder("t,vrsta,mesto,sprat,x,y,gps_x,gps_y,tacnost,slobodna_x,slobodna_y,ivica,smer,duzina,znak,stepenice\n")
+        val track = StringBuilder("t,vrsta,mesto,sprat,x,y,gps_x,gps_y,tacnost,slobodna_x,slobodna_y,ivica,smer,duzina,znak,stepenice,ispravka\n")
         val t0 = lines.firstNotNullOf { it.getOrNull(1)?.toLongOrNull() }
         var steps = 0
         // Znak stepenica poslednjeg koraka ([StairGait]) - za `-putanja.csv`.
@@ -153,13 +153,13 @@ class PdrLocatorReplayTest {
             val free = locator.match?.let { placement.toMeters(it.x, it.y) }
             val edge = locator.match?.point?.let { "${it.from.id} ${it.to.id} ${String.format(Locale.ROOT, "%.2f", it.t)}" } ?: ""
             track.appendLine(
-                String.format(Locale.ROOT, "%.2f,%s,%s,%d,%.2f,%.2f,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s", sec(t), kind, locator.place.buildingId, locator.place.floor,
+                String.format(Locale.ROOT, "%.2f,%s,%s,%d,%.2f,%.2f,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%.1f", sec(t), kind, locator.place.buildingId, locator.place.floor,
                     p.x, p.y, gps?.point?.x ?: "", gps?.point?.y ?: "", gps?.accuracyM ?: "",
                     free?.let { String.format(Locale.ROOT, "%.2f", it.x) } ?: "", free?.let { String.format(Locale.ROOT, "%.2f", it.y) } ?: "", edge,
                     azimuthDeg?.let { String.format(Locale.ROOT, "%.0f", locator.headingOnPlan(it)) } ?: "",
                     lengthM?.let { String.format(Locale.ROOT, "%.2f", it) } ?: "",
                     if (kind == "S") lastScore?.let { String.format(Locale.ROOT, "%.2f", it) } ?: "" else "",
-                    locator.onStairs),
+                    locator.onStairs, locator.headingBiasDeg),
             )
         }
         // Vrh koraka (dužina koraka po jačini): iz S reda (od 09.10.2026 uveče), a za starije snimke iz istog detektora
@@ -355,6 +355,8 @@ class PdrLocatorReplayTest {
                     val reason = locator.onGps(fix, tracking = true)
                     if (reason != null) anchorKind = reason.name
                     if (reason != null) log(t, "replay: $reason")
+                    // Ispravka napolju iz GPS-a (PDR_OUTDOOR=0 isključuje; sa koracima telefona položaj telefona se ne zna).
+                    if (System.getenv("PDR_OUTDOOR") != "0") locator.learnOutdoorBias(direction?.poseSinceNs ?: Long.MIN_VALUE)
                     // Ispravka odstupanja iz pravca GPS-a menja smer samo kad smer računa replay ([direction]).
                     if (direction != null) locator.courseError(direction.poseSinceNs)?.let(direction::turnOffset)
                     row(t, "G", fix)

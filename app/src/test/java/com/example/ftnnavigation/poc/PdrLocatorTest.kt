@@ -135,6 +135,30 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("NB", 0), locator.place)
     }
 
+    /**
+     * Teren 22.10.2026, glavni ulaz NTP-a: tačka (GPS + PDR) ~2,5 m u obrisu, ~4 m uz zid od vrata; korisnik ide uz zid i ka
+     * spolja, a u zgradu ulazi tek okretom ka hodniku. Ulazak je čekao samo put do vrata - tačka je "ušla" ~10 koraka ranije.
+     */
+    @Test
+    fun fromCampus_inOutlineWalkingOutwardPastDoor_entersOnlyWhenTurningIn() {
+        val entrance = graph.position(node("K-U-NTP-3"))
+        val inward = inwardOf("NTP-0-ULAZ")
+        val wall = PointM(-inward.y, inward.x)
+        val outline = campus.building("NTP")!!
+        val start = listOf(4.0, -4.0).map { PointM(entrance.x + inward.x * 2.5 + wall.x * it, entrance.y + inward.y * 2.5 + wall.y * it) }
+            .first { outline.contains(it) && outline.distanceToWallM(it) >= 1.5 }
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        // Ka vratima uz zid (i malo ka spolja) - put do vrata pređen, ali korak ide ka spolja.
+        val alongOut = magneticAzimuth(start, PointM(entrance.x - inward.x * 1.5, entrance.y - inward.y * 1.5))
+        val early = (1..7).mapNotNull { locator.step(alongOut, stepM) }
+        assertTrue("$early", PlaceReason.ULAZ !in early)
+        assertEquals(PdrPlace.CAMPUS, locator.place)
+        val turnIn = magneticAzimuth(entrance, PointM(entrance.x + inward.x, entrance.y + inward.y))
+        val entered = (1..3).firstOrNull { locator.step(turnIn, stepM) == PlaceReason.ULAZ }
+        assertNotNull("nije ušao okretom ka hodniku", entered)
+        assertEquals(PdrPlace("NTP", 0), locator.place)
+    }
+
     /** Jedinični pravac od ulaza [insideId] (čvor zgrade) ka hodniku, u metrima kampusa. */
     private fun inwardOf(insideId: String): PointM {
         val from = graph.position(node(insideId))
@@ -1405,6 +1429,34 @@ class PdrLocatorTest {
         assertTrue(places.all { it.buildingId == "KULA" })
     }
 
+    /**
+     * Teren 22.10.2026 (hod-20261022-153344, 476-527 s, kula-down): sa I sprata Kule od prolaza ka NB nazad do stepeništa i
+     * spiralom naniže (suprotno od kazaljke, ~400°) u prizemlje. Tačka je na spiralu ušla tek pri kraju prvog kraka, skretanje
+     * ka drugom kraku je proglašeno prilazom (penjanje), pa "nije na spirali" - a ulazak je obrisao okret od prilaza, pa ni pun
+     * krug nije promenio sprat ("Ovde sam" na P, tačka na I).
+     */
+    @Test
+    fun kulaSpiral_lateEntryOnDescent_fullTurnStillReachesGroundFloor() {
+        val azimuths = listOf(
+            339.8, 342.2, 32.5, 73.9, 106.3, 135.5, 150.5, 155.2, 147.5, 132.9, 112.4, 90.4, 74.9, 57.5, 39.1, 12.3, 355.6,
+            340.8, 338.1, 339.5, 337.4, 331.2, 321.3, 308.8, 286.2, 265.3, 256.9, 246.0, 235.7, 213.5, 188.9, 173.0, 163.4,
+            161.5, 158.6, 153.1, 141.2, 125.7, 105.4, 100.9, 105.2, 121.9, 157.9, 189.3, 204.1, 225.4, 229.5, 235.4, 232.1,
+            209.5, 197.9, 194.5, 208.0, 235.8, 268.1,
+        ).map { it.toFloat() }
+        val lengths = listOf(
+            0.36f, 0.81f, 0.23f, 0.45f, 0.72f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.68f, 0.83f, 0.83f, 0.83f, 0.83f,
+            0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.62f, 0.32f, 0.83f, 0.83f, 0.83f, 0.81f, 0.83f, 0.83f, 0.83f, 0.83f,
+            0.83f, 0.83f, 0.83f, 0.52f, 0.83f, 0.83f, 0.83f, 0.35f, 0.83f, 0.27f, 0.83f, 0.83f, 0.69f, 0.83f, 0.41f, 0.17f, 0.83f,
+            0.83f, 0.67f, 0.54f, 0.37f,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("KULA", 1), Offset(0.6651134f, 0.41730148f), measure = false)
+            restoreBias(-15.842942f, 3.5274303f)
+        }
+        val reasons = azimuths.indices.mapNotNull { i -> locator.step(azimuths[i], lengths[i]) }
+        assertEquals("$reasons", PdrPlace("KULA", 0), locator.place)
+    }
+
     /** Kruženje hodnikom oko jezgra Kule (IV sprat, strane od 10 koraka) nije stepenište. */
     @Test
     fun kulaCorridorLoopAroundCore_noFloorChange() {
@@ -1505,6 +1557,40 @@ class PdrLocatorTest {
                 }
             }
             if (expected == null) assertEquals(null, error) else assertEquals(expected, error!!, 10.0)
+        }
+    }
+
+    /**
+     * Teren 22.10.2026: napolju pokazivač ~20° ulevo - zajednička ispravka (−17°) je naučena u zgradama, a napolju kompas greši
+     * manje. Ispravka napolju se uči iz pravca GPS-a na pravim deonicama (tek posle nekoliko), važi samo napolju.
+     */
+    @Test
+    fun outsideCompassErrorLearnedFromGps_appliedOnlyOutside() {
+        val start = graph.position(node("K-U-NB-1")).let { PointM(it.x + 10.0, it.y + 20.0) }
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace.CAMPUS, campusOffset(start))
+            restoreHeadingErrors(listOf(17f))
+        }
+        assertEquals(-17f, locator.headingBiasDeg, 0.01f)
+        // Korisnik (GPS) ide tamo-amo istok - zapad po 28 m, kompas napolju +5° (sa zajedničkom ispravkom 17° pored).
+        var x = 0.0
+        repeat(320) { i ->
+            val t = (i + 1) * 500_000_000L
+            val east = (i / 40) % 2 == 0
+            locator.step((if (east) 95f else 275f) - declination, 0.7f, timeNs = t)
+            x += if (east) 0.7 else -0.7
+            if (i % 2 == 1) {
+                locator.onGps(GpsFix(PointM(start.x + x, start.y), 4f, elapsedNs = t), tracking = true)
+                locator.learnOutdoorBias(0L)
+                if (i < 30) assertEquals("pre dovoljno deonica", -17f, locator.headingBiasDeg, 0.01f)
+            }
+        }
+        assertEquals(5f, locator.outdoorErrorDeg!!, 1f)
+        assertEquals(-5f, locator.headingBiasDeg, 1f)
+        // U zgradi važi zajednička.
+        locatorAt("NB-0-ULAZ").let { inside ->
+            inside.restoreHeadingErrors(listOf(17f))
+            assertEquals(-17f, inside.headingBiasDeg, 0.01f)
         }
     }
 

@@ -131,6 +131,19 @@ private const val COURSE_FIX_DEG = 40.0
 private const val COURSE_AGREE_DEG = 20.0
 private const val COURSE_HOLD_NS = 10_000_000_000L
 
+/**
+ * Ispravka smera napolju ([PdrLocator.learnOutdoorBias]): greška smera bez ispravke (smer koraka naspram pravca GPS-a na pravoj
+ * deonici, kao [PdrLocator.courseError], do [OUTDOOR_MAX_ERROR_DEG]), medijana poslednjih [OUTDOOR_BIAS_SAMPLES] deonica, važi
+ * od [OUTDOOR_MIN_SAMPLES]. Teren 22.10.2026: ispred NTP-a pokazivač ~20° ulevo - zajednička ispravka (−17°) je iz "Ovde sam"
+ * u zgradama, a napolju kompas greši manje. Svi snimci 03.-22.10. (smer koraka bez ispravke naspram GPS-a, deonice od 10 s):
+ * napolju srednje +6,5° (505 deonica), u zgradama +11,2° (93 "Ovde sam"); od 16.10. napolju ~0..+5°, u zgradama +9..+19°.
+ * Zaboravlja se posle [OUTDOOR_FORGET_NS] bez nove deonice (dan, držanje telefona). PROCENA.
+ */
+private const val OUTDOOR_BIAS_SAMPLES = 9
+private const val OUTDOOR_MIN_SAMPLES = 5
+private const val OUTDOOR_MAX_ERROR_DEG = 30.0
+private const val OUTDOOR_FORGET_NS = 20 * 60 * 1_000_000_000L
+
 // Prelazi.
 
 /** Ulazak: tačka bar ovoliko unutar obrisa zgrade sa planom ... */
@@ -729,7 +742,20 @@ class PdrLocator(
      * Ispravka koja se dodaje azimutu (−naučena greška + ispravka iz pravca hodnika; 0 ako je isključena ili još nije
      * naučena) - ista svuda.
      */
-    val headingBiasDeg: Float get() = if (applyCorrection) -sharedBias + corridorBiasDeg else 0f
+    val headingBiasDeg: Float get() = when {
+        !applyCorrection -> 0f
+        place.isCampus -> -(outdoorErrorDeg ?: sharedBias)
+        else -> -sharedBias + corridorBiasDeg
+    }
+
+    /** Greška smera napolju naučena iz GPS-a ([learnOutdoorBias]); null dok nije naučena - tada važi zajednička. */
+    val outdoorErrorDeg: Float?
+        get() = if (outdoorErrors.size < OUTDOOR_MIN_SAMPLES) null else outdoorErrors.sorted().let { (it[(it.size - 1) / 2] + it[it.size / 2]) / 2 }
+
+    private val outdoorErrors = ArrayDeque<Float>()
+
+    // Vreme GPS lokacije na kraju poslednje naučene deonice napolju (sledeća počinje posle nje).
+    private var outdoorLearnedNs: Long? = null
 
     /**
      * Ispravka naučena iz hoda duž hodnika (vidi [CORRIDOR_GAIN]), preko zajedničke - jedna za sve zgrade (posebno po zgradi je
@@ -771,8 +797,9 @@ class PdrLocator(
     // Skorašnje GPS lokacije napolju - pravac kretanja dok je smer zamrznut ([gpsCourse]).
     private val gpsTrack = ArrayDeque<GpsFix>()
 
-    // Napolju: koraci (vreme, geografski azimut) za poređenje sa pravcem GPS-a, i od kada se razlikuju ([courseError]).
-    private val courseSteps = ArrayDeque<Pair<Long, Double>>()
+    // Napolju: koraci (vreme, geografski azimut sa ispravkom, primenjena ispravka) za poređenje sa pravcem GPS-a, i od kada
+    // se razlikuju ([courseError]).
+    private val courseSteps = ArrayDeque<Triple<Long, Double, Float>>()
     private var courseMismatch: Pair<Long, Double>? = null
 
     /** U zgradi: nov detektor posle svakog sidra, da izlazak potvrde samo lokacije posle ulaska. */
@@ -1045,6 +1072,29 @@ class PdrLocator(
     private fun clearSpiral() {
         spiralWatch = StairWalk()
         spiralPlaces.clear()
+        spiralStash = null
+    }
+
+    /**
+     * Koraci za pun krug od pre ulaska na spiralu ([beginSpiral]) - vraćaju se kad se pokaže da nije bio na spirali
+     * ([replayAsCorridor]). Teren 22.10.2026, Kula I -> P: tačka je na spiralu ušla tek pri kraju prvog kraka naniže, skretanje
+     * ka drugom kraku je proglašeno prilazom (penjanje), pa "nije na spirali" - a ulazak je obrisao ~200° okreta od prilaza, pa
+     * ni pun krug (~400° do prizemlja) nije promenio sprat.
+     */
+    private var spiralStash: Pair<StairWalk, List<PdrPlace>>? = null
+
+    private fun stashSpiral() {
+        if (spiralStash == null) spiralStash = spiralWatch to spiralPlaces.toList()
+        spiralWatch = StairWalk()
+        spiralPlaces.clear()
+    }
+
+    private fun restoreSpiral() {
+        val (walk, places) = spiralStash ?: return clearSpiral()
+        spiralWatch = walk
+        spiralPlaces.clear()
+        spiralPlaces += places
+        spiralStash = null
     }
 
     /** Okret posle sprata iz punog kruga ([SPIRAL_CARRY_DEG]): [turn] u smeru tog kruga, od kraja kruga (360°). */
@@ -1267,6 +1317,8 @@ class PdrLocator(
         learnedCorridorBias = 0f
         corridorLearnedNs = null
         corridorRun = 0
+        outdoorErrors.clear()
+        outdoorLearnedNs = null
         stepStarts.clear()
         climb = null
         spiralWalk = null
@@ -1387,7 +1439,7 @@ class PdrLocator(
         val (dxM, dyM) = if (place.isCampus && headingFrozen) frozenStepVector(lengthM) else stepVector(place, azimuthDeg, lengthM)
         if (place.isCampus && !headingFrozen && timeNs != null && lengthM > 0f) {
             repeat(redo.coerceAtMost(courseSteps.size)) { courseSteps.removeLast() }
-            repeat(redo + 1) { courseSteps.addLast(timeNs to Math.toDegrees(atan2(dxM, -dyM))) }
+            repeat(redo + 1) { courseSteps.addLast(Triple(timeNs, Math.toDegrees(atan2(dxM, -dyM)), headingBiasDeg)) }
             while (timeNs - courseSteps.first().first > 2 * GPS_COURSE_NS) courseSteps.removeFirst()
         } else {
             courseSteps.clear()
@@ -1535,6 +1587,17 @@ class PdrLocator(
 
     /** Razlika pravca GPS-a i koraka na poslednjem prozoru, samo od [poseSinceNs] (telefon tada u istom položaju). */
     private fun courseMismatchNow(poseSinceNs: Long): Double? {
+        val (gpsDeg, steps) = courseWindow(poseSinceNs) ?: return null
+        val stepsDeg = meanDeg(steps.map { it.second }) ?: return null
+        val error = angleDeg(gpsDeg - stepsDeg)
+        return error.takeIf { abs(it) > COURSE_FIX_DEG }
+    }
+
+    /**
+     * Prava deonica napolju na poslednjem prozoru GPS-a, samo od [poseSinceNs]: pravac GPS-a (geografski) i koraci u njoj
+     * ([courseSteps], bar [COURSE_MIN_STEPS] istog pravca); inače null.
+     */
+    private fun courseWindow(poseSinceNs: Long): Pair<Double, List<Triple<Long, Double, Float>>>? {
         if (!place.isCampus || headingFrozen || gpsTrack.size < 3) return null
         if (gpsTrack.any { it.accuracyM > COURSE_MAX_ACCURACY_M }) return null
         val first = gpsTrack.first()
@@ -1547,11 +1610,34 @@ class PdrLocator(
         if (d < COURSE_CHECK_MIN_M || d < COURSE_GPS_STRAIGHT * path) return null
         val steps = courseSteps.filter { it.first in first.elapsedNs..last.elapsedNs }
         if (steps.size < COURSE_MIN_STEPS) return null
-        val sx = steps.sumOf { sin(Math.toRadians(it.second)) }
-        val sy = steps.sumOf { cos(Math.toRadians(it.second)) }
-        if (hypot(sx, sy) < COURSE_STEP_CONSISTENCY * steps.size) return null
-        val error = angleDeg(Math.toDegrees(atan2(dx, -dy)) - Math.toDegrees(atan2(sx, sy)))
-        return error.takeIf { abs(it) > COURSE_FIX_DEG }
+        return Math.toDegrees(atan2(dx, -dy)) to steps
+    }
+
+    /** Srednji pravac (stepeni) ako su pravci dosledni ([COURSE_STEP_CONSISTENCY]), inače null. */
+    private fun meanDeg(headings: List<Double>): Double? {
+        val sx = headings.sumOf { sin(Math.toRadians(it)) }
+        val sy = headings.sumOf { cos(Math.toRadians(it)) }
+        if (hypot(sx, sy) < COURSE_STEP_CONSISTENCY * headings.size) return null
+        return Math.toDegrees(atan2(sx, sy))
+    }
+
+    /**
+     * Napolju (posle GPS lokacije): na pravoj deonici koja počinje posle prethodne naučene greška smera bez ispravke (smer
+     * koraka minus ispravka naspram pravca GPS-a) ulazi u ispravku napolju ([outdoorErrorDeg], vidi [OUTDOOR_BIAS_SAMPLES]).
+     * Veća od [OUTDOOR_MAX_ERROR_DEG] je odstupanje telefona (džep, [courseError]), ne kompas.
+     */
+    fun learnOutdoorBias(poseSinceNs: Long) {
+        val now = gpsTrack.lastOrNull()?.elapsedNs ?: return
+        outdoorLearnedNs?.let { if (now - it > OUTDOOR_FORGET_NS || now < it) { outdoorErrors.clear(); outdoorLearnedNs = null } }
+        val (gpsDeg, steps) = courseWindow(maxOf(poseSinceNs, (outdoorLearnedNs ?: Long.MIN_VALUE) + 1)) ?: return
+        val raw = meanDeg(steps.map { it.second - it.third }) ?: return
+        val error = angleDeg(raw - gpsDeg)
+        if (abs(error) > OUTDOOR_MAX_ERROR_DEG) return
+        outdoorErrors.addLast(error.toFloat())
+        while (outdoorErrors.size > OUTDOOR_BIAS_SAMPLES) outdoorErrors.removeFirst()
+        outdoorLearnedNs = now
+        trace?.invoke(String.format(Locale.ROOT, "greška smera napolju %+.0f° (ispravka napolju %s)", error,
+            outdoorErrorDeg?.let { String.format(Locale.ROOT, "%+.0f°", -it) } ?: "još ne"))
     }
 
     private fun angleDeg(a: Double): Double = ((a % 360.0) + 540.0) % 360.0 - 180.0
@@ -2059,7 +2145,7 @@ class PdrLocator(
         walk.loopWalked = walkedX to walkedY
         spiralWalk = walk
         spiralCarry = null
-        clearSpiral()
+        stashSpiral()
         watch = StairWalk()
         stepStarts.clear()
         trace?.invoke("stepenište $key: spirala ${if (up) "naviše" else "naniže"}")
@@ -2188,6 +2274,7 @@ class PdrLocator(
         }
         place = PdrPlace(w.stair.buildingId, to)
         w.changed = true
+        spiralStash = null
         w.loopSteps.clear()
         w.loopWalked = walkedX to walkedY
         trace?.invoke("stepenište ${w.stair.key}: spirala -> sprat $to")
@@ -2227,7 +2314,7 @@ class PdrLocator(
         }
         walkedX = w.loopWalked.first
         walkedY = w.loopWalked.second
-        clearSpiral()
+        if (w.changed) clearSpiral() else restoreSpiral()
         watch = StairWalk()
         trace?.invoke("stepenište ${w.stair.key}: nije na spirali - ${w.loopSteps.size} koraka hodnikom")
         var reason: PlaceReason? = null
@@ -2825,7 +2912,11 @@ class PdrLocator(
                 stepM
             }
             val slack = if (pending.byDirection) 0.0 else ENTER_SLACK_M
-            if (pending.walkedM >= pending.remainingM - slack) return enter(pending.entrance)
+            // Ne kroz vrata korakom ka spolja: teren 22.10.2026, glavni ulaz NTP-a - GPS i tačka su korisnika uz zid držali
+            // ~3 m u obrisu, ulazak je čekao put do vrata, a korisnik je tada išao uz zid (pa i ka spolja); ušao je ~10 koraka
+            // kasnije, okretom ka hodniku - posle lažnog ulaska tačka je izašla, pa ušla duboko u obrisu, ispred njega.
+            val outward = inward != null && last != null && last.x * inward.x + last.y * inward.y < 0
+            if (pending.walkedM >= pending.remainingM - slack && !outward) return enter(pending.entrance)
             if (distance(graph.position(pending.entrance.outside), p) <= ENTER_CANCEL_M) return null
             pendingEntry = null
         }
