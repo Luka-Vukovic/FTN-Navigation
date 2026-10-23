@@ -46,8 +46,16 @@ import kotlin.math.sqrt
  * potvrđuju hod i vraćaju ih. Replay: lice 5 -> 15, džep 14 -> 22; teren srednji promašaj 3,70 -> 3,53 m, prolaz Kula -> AMF
  * 03.10. sada prolazi. Proban i odbačen veći prag premeštanja u džepu (50°): stavljanje se posle smirivanja nastavi, 3 -> 14.
  *
+ * Sedenje na klupi (teren 21.-23.10.2026, NTP hol): telefon u ruci, bez okreta, a "koraci" od pomeranja na klupi ili ustajanja
+ * prolaze kao hod - 23.10. tri puta za ~5 min (10 koraka, tačka 6,7 m dalje), 22.10. ustajanje 6 "koraka" na 0,26-0,43 s.
+ * Razlikuje ih ritam i dužina: pravi hod ima korake na 0,45-0,9 s ili traje duže, a ovde su razmaci 0,26-1,5 s bez reda u nizovima
+ * od 4-5. Zato posle dugog mirovanja u ruci ([LONG_REST_NS] bez primenjenog koraka) hod se potvrđuje tek po [keepRhythm]; zadržani
+ * koraci odvojeni od tog niza razmakom većim od [RHYTHM_JOIN_NS] se odbacuju (nepravilan ili spor početak koji se nastavlja u hod
+ * ostaje - spor hod 19.10. ima razmake do 0,95 s), a slab polazak se ne pušta ni na pauzi.
+ *
  * Cena: početak hoda kasni dok se ne potvrdi (1,5 s u ruci, pa tačka sustigne), polazak uz premeštanje telefona gubi korake do
- * smirivanja, a 1-2 koraka u mestu pa pauza se ne broje (teren: ~6 % koraka, većinom takvi).
+ * smirivanja, a 1-2 koraka u mestu pa pauza se ne broje (teren: ~6 % koraka, većinom takvi). Posle dugog mirovanja se gube
+ * nepravilni prvi koraci, a hod kraći od [RHYTHM_STEPS] koraka u ritmu se ne broji.
  */
 class HandlingGate {
     class Step(val timeNs: Long, val walk: WalkingDirection.WalkStep, val peak: Float)
@@ -137,6 +145,7 @@ class HandlingGate {
             late += restoredInHand()
             suspended.clear()
             late += held
+            lastWalkNs = held.last().timeNs
             walking = !paused
             afterHandling = false
             if (walking) held.clear() else rest(timestampNs)
@@ -162,13 +171,50 @@ class HandlingGate {
     private fun softWaitNs() = if (afterHandling) POCKET_SOFT_CONFIRM_NS else HAND_SOFT_CONFIRM_NS
 
     private fun softHandWalk(): Boolean =
-        !handling && abs(restUp[2]) >= UPRIGHT_Z && held.size >= CONFIRM_STEPS && held.last().timeNs - held.first().timeNs >= CONFIRM_NS
+        !handling && abs(restUp[2]) >= UPRIGHT_Z && held.size >= CONFIRM_STEPS && held.last().timeNs - held.first().timeNs >= CONFIRM_NS &&
+            (!longRest() || rhythmFound)
+
+    // Vreme poslednjeg primenjenog koraka (0 = još nijedan); posle dugog mirovanja u ruci hod traži ritam.
+    private var lastWalkNs = 0L
+    private var rhythmFound = false
+
+    private fun longRest(): Boolean =
+        lastWalkNs > 0 && held.isNotEmpty() && held.first().timeNs - lastWalkNs >= LONG_REST_NS && abs(restUp[2]) >= UPRIGHT_Z
+
+    /**
+     * Posle dugog mirovanja: hod je niz bez razmaka većeg od [RHYTHM_JOIN_NS] koji se završava sa [RHYTHM_STEPS] koraka u
+     * ritmu, ili ima bar [LONG_REST_STEPS] koraka razmaknutih bar [RHYTHM_MIN_NS] (tih, spor hod - proba 15.10.: razmaci
+     * 0,4-1,3 s, 6 takvih bez prekida; polazak uz stavljanje u džep 16.10.: 5 pre okreta; na klupi 23.10.: 3-4). Zadržano pre
+     * tog niza se odbacuje.
+     */
+    private fun keepRhythm(): Boolean {
+        if (rhythmFound) return true
+        val n = held.size
+        var before = n - 1
+        while (before > 0 && held[before].timeNs - held[before - 1].timeNs <= RHYTHM_JOIN_NS) before--
+        var counted = 1
+        for (i in before + 1 until n) if (held[i].timeNs - held[i - 1].timeNs >= RHYTHM_MIN_NS) counted++
+        val rhythm = n - before >= RHYTHM_STEPS && (n - RHYTHM_STEPS + 1 until n).all { i ->
+            (held[i].timeNs - held[i - 1].timeNs) in RHYTHM_MIN_NS..RHYTHM_MAX_NS
+        }
+        if (!rhythm && counted < LONG_REST_STEPS) return false
+        if (before > 0) {
+            trace?.invoke(held.last().timeNs, "posle dugog mirovanja odbačeno $before (bez ritma)")
+            dropped += before
+            repeat(before) { held.removeAt(0) }
+        }
+        rhythmFound = true
+        return true
+    }
 
     /** Korak: vraća korake koje sada treba primeniti (ovaj, zadržane, ili nijedan). */
-    fun onStep(step: Step): List<Step> {
+    fun onStep(step: Step): List<Step> = onStepInner(step).also { if (it.isNotEmpty()) lastWalkNs = it.last().timeNs }
+
+    private fun onStepInner(step: Step): List<Step> {
         lastStepNs = step.timeNs
         if (walking) return listOf(step)
         held += step
+        if (longRest() && !keepRhythm()) return emptyList()
         // Iz džepa (uspravan u mirovanju) vađenje počinje i ~2 s pre nego što se telefon okrene, a tačku tada niko ne gleda.
         val inPocket = abs(restUp[2]) < UPRIGHT_Z
         if (inPocket && abs(upFast[2]) < UPRIGHT_Z && strongPocketSteps() >= POCKET_STRONG_STEPS) {
@@ -252,6 +298,7 @@ class HandlingGate {
         held.clear()
         handling = false
         afterHandling = false
+        rhythmFound = false
         upFast.copyInto(restUp)
         settleRefNs = timestampNs
     }
@@ -276,6 +323,12 @@ class HandlingGate {
         private const val UPRIGHT_Z = 0.5
         const val HANDLING_DEG = 30.0
         const val POCKET_STRONG_STEPS = 3
+        const val LONG_REST_NS = 20_000_000_000L
+        const val RHYTHM_STEPS = 4
+        const val RHYTHM_MIN_NS = 450_000_000L
+        const val RHYTHM_MAX_NS = 900_000_000L
+        const val RHYTHM_JOIN_NS = 1_200_000_000L
+        const val LONG_REST_STEPS = 5
         private const val STRIDE_MIN_NS = 550_000_000L
         private const val SETTLE_DEG = 12.0
         private const val SETTLE_CHECK_NS = 500_000_000L

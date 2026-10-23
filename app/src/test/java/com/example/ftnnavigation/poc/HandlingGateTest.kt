@@ -138,6 +138,35 @@ class HandlingGateTest {
     }
 
     @Test
+    fun sittingWithPhoneInHand_fidgetAndStandingUp_dropped_walkKept() {
+        // Teren 23.10.2026 (NTP hol, klupa 1118-1441 s): hod, pa ~5 min sedenja sa telefonom u ruci; tri niza "koraka" su
+        // prošla kao hod (1316, 1352, 1434 s - vremena i vrhovi sa snimka). Pa ustajanje sa klupe 22.10. (1590-1592 s: 6 "koraka"
+        // na 0,26-0,43 s) i pravi hod na ~0,65 s.
+        val before = steps(1.0, 0.55, 10)
+        val fidget = listOf(30.0, 31.21, 31.62, 32.93, 45.0, 45.39, 46.37, 47.11, 47.81, 60.0, 60.79, 62.18, 63.71)
+        val fidgetPeaks = listOf(1.32f, 1.20f, 1.66f, 0.72f, 0.73f, 1.39f, 0.98f, 1.62f, 1.04f, 0.62f, 0.76f, 0.70f, 0.82f)
+        val standUp = listOf(75.0, 75.35, 75.78, 76.13, 76.39, 76.65)
+        val standUpPeaks = listOf(1.24f, 0.71f, 0.91f, 1.54f, 1.82f, 2.95f)
+        val after = steps(78.04, 0.65, 12)
+        val applied = run(
+            HandlingGate(), 90.0, before + fidget + standUp + after,
+            peaks = List(before.size) { 1.5f } + fidgetPeaks + standUpPeaks + List(after.size) { 1.8f },
+        ) { 45.0 }
+        assertEquals(before + after, applied)
+    }
+
+    @Test
+    fun quietSlowWalkAfterLongRest_applied() {
+        // Proba 15.10.2026 popodne (54-60 s, "10 tihih koraka"): posle dugog stajanja spor, tih hod u ruci - razmaci 0,26-1,15 s
+        // (dupli koraci detektora), bez ritma, ali 8 koraka bez prekida (na klupi su nizovi od 4-5).
+        val before = steps(1.0, 0.55, 10)
+        val quiet = listOf(34.58, 34.97, 35.82, 36.07, 36.98, 37.97, 39.12, 40.27)
+        val peaks = listOf(1.69f, 0.77f, 2.19f, 1.41f, 1.94f, 0.96f, 1.39f, 1.58f)
+        val applied = run(HandlingGate(), 48.0, before + quiet, peaks = List(before.size) { 1.5f } + peaks) { 20.0 }
+        assertEquals(before + quiet, applied)
+    }
+
+    @Test
     fun weakWalkInHand_appliedAfterWait() {
         // Spor, tih hod u ruci (hod po stanu 15.10.: vrhovi 0,6-1,2) - telefon se ne okreće, pušta se posle 3 s, svi koraci.
         val walk = steps(1.0, 0.85, 14)
