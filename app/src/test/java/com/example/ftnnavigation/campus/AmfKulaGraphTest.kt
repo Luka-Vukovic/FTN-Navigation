@@ -135,7 +135,27 @@ class AmfKulaGraphTest {
     @Test
     fun kulaHall_fromNbPassageStraightToPorch() {
         val route = checkNotNull(graph.route("KULA-0-PROLAZ-NB", "KULA-0-PROLAZ-AMF")).nodes.map { it.id }
-        assertEquals(listOf("KULA-0-PROLAZ-NB", "KULA-0-H320_413", "KULA-0-H236_413", "KULA-0-PROLAZ-AMF"), route)
+        // H274_413: od 27.10.2026 odatle pravo do prstena oko lifta (pravi ugao) - put preko hola je isti.
+        assertEquals(listOf("KULA-0-PROLAZ-NB", "KULA-0-H320_413", "KULA-0-H274_413", "KULA-0-H236_413", "KULA-0-PROLAZ-AMF"), route)
+    }
+
+    /**
+     * Teren 27.10.2026 (korisnik nacrtao): na I spratu Kule od prolaza ka NB-u pravo uz zid do prstena oko lifta, pa do stepeništa -
+     * pod pravim uglovima, ne koso preko stepeništa; vrata 5MX-1 i 5MX-2 na tom hodniku upravno.
+     */
+    @Test
+    fun kulaFirstFloor_nbPassageToStairs_rightAngles() {
+        val route = checkNotNull(graph.route("KULA-1-PROLAZ-NB", "KULA-1-S")).nodes
+        assertEquals(route.map { it.id }.toString(), listOf("KULA-1-PROLAZ-NB", "KULA-1-H326_422"), route.take(2).map { it.id })
+        assertTrue(route.map { it.id }.toString(), "KULA-1-H274_422" in route.map { it.id })
+        for ((a, b) in route.zipWithNext().dropLast(1)) {
+            assertTrue("${a.id} - ${b.id}", a.x == b.x || a.y == b.y)
+        }
+        for (name in listOf("5MX-1", "5MX-2")) {
+            val door = graph.neighbors(room(name).id).single().first
+            val corridor = graph.neighbors(door.id).map { it.first }.single { it.type == NodeType.HODNIK }
+            assertEquals(name, door.x, corridor.x)
+        }
     }
 
     /**

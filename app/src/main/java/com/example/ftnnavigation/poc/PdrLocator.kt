@@ -272,8 +272,12 @@ private const val STAIR_ENTER_DEG = 50f
  */
 private const val STAIR_NEAR_M = 5.0
 
-/** Pun krug na spiralnom stepeništu ([SPIRAL_STAIRS]) počinje najviše ovoliko od čvora stepeništa (stepenište Kule je 4,9 x 3,3 m). */
-private const val SPIRAL_NEAR_M = 4.0
+/**
+ * Pun krug na spiralnom stepeništu ([SPIRAL_STAIRS]) počinje najviše ovoliko od čvora stepeništa (stepenište Kule je 4,9 x 3,3 m).
+ * Bilo 4 m: posle grafa Kule I pod pravim uglovima (27.10.2026: od prolaza iz NB-a uz zid do prstena, ne koso preko stepeništa)
+ * tačka je ~5 m od čvora kad okret počne, pa silazak odmah posle prolaza (18.10.) nije prepoznat.
+ */
+private const val SPIRAL_NEAR_M = 5.0
 
 /** Na spiralu ([PdrLocator.startSpiral]) se ulazi do ovoliko od čvora stepeništa ... */
 private const val SPIRAL_ENTER_M = 2.0
@@ -1418,7 +1422,7 @@ class PdrLocator(
         lastStepM = if (climb != null || spiralWalk != null) STAIR_STEP_M else lengthM
         walkStepM = lengthM
         passage?.let { return passageStep(it, azimuthDeg, lengthM) }
-        spiralWalk?.let { return spiralStep(it, azimuthDeg, lengthM, timeNs) }
+        spiralWalk?.let { return spiralStep(it, azimuthDeg, lengthM, timeNs, stairScore) }
         climb?.let { return climbStep(it, azimuthDeg, redoSteps, timeNs, stairScore) }
         landingClimb?.let { c ->
             turnAtGate(c, azimuthDeg)?.let { return it }
@@ -2053,6 +2057,9 @@ class PdrLocator(
 
         // Koraci od početka kruga (ulaska ili podesta sprata) i PDR put tada - za [replayAsCorridor].
         val loopSteps = ArrayList<PendingStep>()
+
+        // Znak stepenica ([StairGait]) uz [loopSteps] - za [descendedLoop].
+        val loopScores = ArrayList<Float?>()
         var loopWalked: Pair<Double, Double> = 0.0 to 0.0
     }
 
@@ -2153,12 +2160,13 @@ class PdrLocator(
     }
 
     /** Korak na spiralnom stepeništu: krak po okretu, gazište po korak; kraj kruga menja sprat, hod pravo dalje izlazi. */
-    private fun spiralStep(w: SpiralWalk, azimuthDeg: Float, lengthM: Float, timeNs: Long?): PlaceReason? {
+    private fun spiralStep(w: SpiralWalk, azimuthDeg: Float, lengthM: Float, timeNs: Long?, stairScore: Float?): PlaceReason? {
         val heading = headingOnPlan(azimuthDeg)
         w.turn += angleDiffDeg(heading, w.lastHeading) * w.sense
         w.lastHeading = heading
         w.maxTurn = maxOf(w.maxTurn, w.turn)
         w.loopSteps += PendingStep(azimuthDeg, lengthM, 0, timeNs)
+        w.loopScores += stairScore
         val (dx, dy) = stepVector(place, azimuthDeg, STAIR_STEP_M)
         walkedX += dx
         walkedY += dy
@@ -2196,6 +2204,7 @@ class PdrLocator(
                 w.tread = 1
                 w.landed = false
                 w.loopSteps.clear()
+                w.loopScores.clear()
                 w.loopWalked = walkedX to walkedY
                 showSpiral(w)
                 return null
@@ -2216,6 +2225,7 @@ class PdrLocator(
                 return null
             }
             trace?.invoke("stepenište ${w.stair.key}: okret nazad - silazi sa spirale")
+            if (descendedLoop(w)) return leaveSpiralBelow(w)
             return if (w.flight < 2) replayAsCorridor(w) else leaveSpiral(w)
         }
         var reason: PlaceReason? = null
@@ -2257,11 +2267,32 @@ class PdrLocator(
             if (w.tread > w.treads[w.flight] + overrun) {
                 trace?.invoke("stepenište ${w.stair.key}: hod pravo posle kraka - silazi sa spirale")
                 if (w.landed) return leaveSpiral(w) ?: reason
+                if (descendedLoop(w)) return leaveSpiralBelow(w)
                 return (if (w.flight < 2) replayAsCorridor(w) else leaveSpiral(w)) ?: reason
             }
         }
         showSpiral(w)
         return reason
+    }
+
+    /**
+     * Silazak bez punog okreta: krug naniže od bar tri kraka po broju koraka ([SpiralWalk.treads]), a koraci kruga po ubrzanju liče
+     * na stepenice ([DESCENT_STAIR_SCORE], medijana; bar pola koraka sa znakom). Teren 27.10.2026, Kula I -> P: 22 koraka niz
+     * stepenice (znak ~1,2), ali kompas uz okno je izmerio samo ~224° okreta (treći krak se "vukao" 157 -> 224°), pa je okret
+     * nazad pri izlasku u hol bio "silazi sa spirale" na I spratu. Hod hodnikom oko jezgra (kula-ring) nema znak stepenica.
+     */
+    private fun descendedLoop(w: SpiralWalk): Boolean {
+        if (w.up || w.landed || w.flight < 2 || w.loopSteps.size < w.treads.take(3).sum()) return false
+        val scores = w.loopScores.filterNotNull().sorted()
+        if (scores.size * 2 < w.loopScores.size) return false
+        return scores[scores.size / 2] >= DESCENT_STAIR_SCORE
+    }
+
+    /** [descendedLoop]: sprat niže, pa silazak sa spirale na hodnik tog sprata. */
+    private fun leaveSpiralBelow(w: SpiralWalk): PlaceReason? {
+        trace?.invoke("stepenište ${w.stair.key}: krug naniže po koracima (${w.loopSteps.size}, okret ${w.maxTurn.toInt()}°)")
+        val reason = spiralFloor(w)
+        return leaveSpiral(w) ?: reason
     }
 
     /** Kraj kruga: sprat više ili niže (null ako ga nema - silazi sa spirale). */
@@ -2276,6 +2307,7 @@ class PdrLocator(
         w.changed = true
         spiralStash = null
         w.loopSteps.clear()
+        w.loopScores.clear()
         w.loopWalked = walkedX to walkedY
         trace?.invoke("stepenište ${w.stair.key}: spirala -> sprat $to")
         lastStairChange = StairChange(w.stair.key, w.stair.buildingId, from, to, w.sense, guessed = false)
@@ -2525,6 +2557,8 @@ class PdrLocator(
                         gateAhead(c)?.let {
                             c.exitGate = it
                             c.exitAhead = true
+                            // Okret na vratima ([turnAtGate]) se meri od smera kraka: korak izlaska je možda već deo okreta.
+                            c.gateTurned = off
                             return true
                         }
                     }
@@ -3123,6 +3157,9 @@ class PdrLocator(
      * ([resumeOnLanding]). Teren 13.10.2026, AMF S1 sa -1: srednjim krakom na podest, 1-2 koraka ka tremu, okret za ~180°
      * i bočnim krakom u prizemlje - tačka je stajala na vratima trema, pa je map-matching vratio niz srednji krak na -1 i
      * hodnikom do glavnog ulaza (lažan izlazak napolje). Posle [LANDING_GATE_STEPS] koraka bez okreta se ne prati.
+     * Teren 27.10.2026 (isti put): dva koraka ka tremu, pa okret ulevo postepeno - korak izlaska je već bio −41° od kraka, a okret
+     * se merio od njega, pa za 8 koraka nije stigao do [TURN_DONE_DEG] (−102°) i tačka je ostala na vratima trema ("neuspeli
+     * prelazak sprata"). Sada se okret meri od smera kraka ([Climb.gateTurned] počinje okretom koraka izlaska).
      */
     private fun turnAtGate(c: Climb, azimuthDeg: Float): PlaceReason? {
         c.lastHeading?.let { c.gateTurned += angleDiffDeg(azimuthDeg, it) }

@@ -44,8 +44,18 @@ def k(n):
     return f"Kula {n}"
 
 
-def five(y0, y1, numbers):
-    return row(y0, y1, [(a, b, k(n) if n else None) for a, b, n in zip(X5, X5[1:], numbers)])
+# Vrata na delu zida uz hodnik (pravi ugao do prstena, 27.10.2026; PRETPOSTAVKA - mesta vrata nisu na snimcima): druga i četvrta
+# soba reda (x 192-227 i 263-298) su samo delom uz hodnik oko lifta (x 207-287) - vrata naspram prstena (x 215 i 274), ne na sredini
+# zida (do tada koso na ugao prstena). Ugaone sobe i soba iznad stepeništa ne dodiruju hodnik - ostaju koso.
+RING_DOOR_X = {1: 215, 3: 274}
+
+
+def five(y0, y1, numbers, wall=None):
+    rooms = row(y0, y1, [(a, b, k(n) if n else None) for a, b, n in zip(X5, X5[1:], numbers)])
+    if wall is not None:
+        for i, x in RING_DOOR_X.items():
+            rooms[i]["doors"] = [(x, wall)]
+    return rooms
 
 
 def toilets(y0=462, y1=480):
@@ -60,9 +70,9 @@ def typical(f):
         "paths": RING,
         "corridors": [rect_poly(207, 427, 287, 511), rect_poly(287, 427, 333, 462)],
         "rooms": [
-            *five(375, 427, [n + 5, n + 4, n + 3, n + 2, n + 1]),
+            *five(375, 427, [n + 5, n + 4, n + 3, n + 2, n + 1], wall=427),
             *col(155, 207, [(427, 465, k(n + 6)), (465, 511, k(n + 7))]),
-            *five(511, 554, [n + 8, n + 9, n + 10, n + 11, n + 12]),
+            *five(511, 554, [n + 8, n + 9, n + 10, n + 11, n + 12], wall=511),
             R(287, 333, 482, 511, k(n + 15), door=(287, 496)),
             *toilets(),
         ],
@@ -76,8 +86,9 @@ def floor_0():
         "title": "Prizemlje",
         # Levo od lifta je soba, pa hodnik nije prsten. Hol je otvoren: od prolaza iz NB-a pravo preko hola do trema ka
         # Amfiteatrima (korisnik nacrtao, teren 16.10.2026) - do tada samo koso do ugla oko lifta, pa duž hodnika do trema.
+        # 27.10.2026: od hola do prstena pravo (274, 413) -> (274, 437), ne koso od (320, 413) - pravi uglovi.
         "paths": [[(210, 437), (274, 437), (274, 495), (205, 495)],
-                  [(236, 437), (236, 413), (320, 413), (274, 437)]],
+                  [(236, 437), (236, 413), (320, 413)], [(274, 413), (274, 437)]],
         "corridors": [rect_poly(225, 375, 333, 465), rect_poly(224, 465, 285, 511), rect_poly(205, 490, 224, 511),
                       rect_poly(228, 511, 258, 554),
                       rect_poly(205, 300, 280, 375),  # trem ka Amfiteatrima
@@ -86,7 +97,7 @@ def floor_0():
             R(155, 210, 375, 430, k("001A"), door=(182.5, 430)), R(210, 225, 375, 430),
             *col(155, 205, [(432, 472, None), (472, 511, k("003"))]),
             R(205, 224, 447, 490),
-            R(155, 228, 511, 554, k("004")), R(258, 335, 511, 554, k("005")),
+            R(155, 228, 511, 554, k("004"), door=(215, 511)), R(258, 335, 511, 554, k("005"), door=(270, 511)),
             R(285, 333, 465, 482, k("018"), door=(285, 473)), R(297, 333, 482, 511, k("006"), door=(297, 496)),
         ],
         "entrances": [(228, 554, 258, 560)],
@@ -100,14 +111,19 @@ def floor_0():
 def floor_1():
     return {
         "title": "1. sprat",
-        "paths": RING,
+        # Ka prolazu u NB pravim uglovima (korisnik nacrtao, teren 27.10.2026): od prstena pravo do visine prolaza, pa pravo do
+        # prolaza - do tada koso od ugla prstena preko stepeništa, a vrata 5MX-1/5MX-2 takođe koso na ugao.
+        "paths": RING + [[(274, 437), (274, 422), (326, 422)]],
         "corridors": [rect_poly(207, 432, 287, 511), rect_poly(263, 402, 333, 462),
                       rect_poly(335, 404, 420, 440)],  # zastakljen prolaz ka NB-u (teren 01.10.2026)
         "rooms": [
-            *row(375, 432, [(155, 192, k(103)), (192, 227, k(101)), (227, 263, k(102))]),
+            # Vrata na delu zida uz hodnik (pravi ugao do prstena), ne na sredini zida (27.10.2026; PRETPOSTAVKA - mesto vrata nije
+            # na snimcima). 103 ne dodiruje hodnik - ostaje kako je.
+            R(155, 192, 375, 432, k(103)), R(192, 227, 375, 432, k(101), door=(215, 432)), R(227, 263, 375, 432, k(102)),
             *row(375, 402, [(263, 298, "5MX-1"), (298, 333, "5MX-2")]),
             *col(155, 207, [(432, 472, k(104)), (472, 511, k(105))]),
-            *row(511, 554, [(155, 228, k(106)), (228, 263, k(107)), (263, 333, k(108))]),
+            R(155, 228, 511, 554, k(106), door=(217.5, 511)), R(228, 263, 511, 554, k(107)),
+            R(263, 333, 511, 554, k(108), door=(270, 511)),
             R(287, 333, 465, 482, k(110), door=(287, 473)), R(287, 333, 482, 511, k("109A"), door=(287, 496)),
         ],
         "stairs": STAIRS,
@@ -123,9 +139,10 @@ def floor_2():
         "paths": RING,
         "corridors": [rect_poly(207, 427, 287, 511), rect_poly(262, 420, 333, 462)],
         "rooms": [
-            R(155, 225, 375, 427, k("204/205")), R(225, 262, 375, 427, k(203)), R(262, 333, 375, 420, k(202)),
+            R(155, 225, 375, 427, k("204/205"), door=(215, 427)), R(225, 262, 375, 427, k(203)),
+            R(262, 333, 375, 420, k(202), door=(270, 420)),
             *col(155, 207, [(427, 465, k(206)), (465, 511, k(207))]),
-            *five(511, 554, [208, 209, 210, 211, 213]),
+            *five(511, 554, [208, 209, 210, 211, 213], wall=511),
             *toilets(462, 473),
         ],
         "stairs": STAIRS,
@@ -141,7 +158,7 @@ def floor_3():
         "rooms": [
             R(155, 333, 375, 427, k(301)),
             *col(155, 207, [(427, 465, k(302)), (465, 511, k(303))]),
-            *row(511, 554, [(155, 228, k(304)), (228, 263, k(305)), (263, 333, k(306))]),
+            R(155, 228, 511, 554, k(304), door=(215, 511)), R(228, 263, 511, 554, k(305)), R(263, 333, 511, 554, k(306), door=(270, 511)),
             *toilets(462, 475),
         ],
         "stairs": STAIRS,
@@ -151,15 +168,19 @@ def floor_3():
 
 def floor_5():
     plan = typical(5)
+    # Niša iznad prstena (x 263-298) je hodnik: krak u nišu, vrata 502 i 501 sa strane niše pod pravim uglom (27.10.2026; do tada
+    # koso na ugao prstena - 501 preko stepeništa). PRETPOSTAVKA - mesta vrata nisu na snimcima.
+    plan["paths"] = RING + [[(269, 437), (269, 385)]]
     plan["rooms"] = [
-        *five(375, 427, [505, 504, 503, None, 501]),
-        R(275, 297, 407, 427, k(502)),
+        *five(375, 427, [505, 504, 503, None, 501], wall=427),
+        R(275, 297, 407, 427, k(502), door=(275, 417)),
         *col(155, 207, [(427, 465, k(506)), (465, 511, k(507))]),
-        *five(511, 554, [508, 509, 510, 511, 512]),
+        *five(511, 554, [508, 509, 510, 511, 512], wall=511),
         R(287, 333, 482, 511, k(500), door=(287, 496)),
         *toilets(),
     ]
     plan["rooms"] = [r for r in plan["rooms"] if r["rect"] != (263, 375, 298, 427)]
+    plan["rooms"][3]["doors"] = [(298, 391)]  # 501
     plan["corridors"].append(rect_poly(263, 375, 298, 427))
     return plan
 

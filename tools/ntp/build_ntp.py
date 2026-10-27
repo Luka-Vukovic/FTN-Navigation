@@ -38,6 +38,7 @@ ulaza koji je korisnik označio sa strane domova, oba kraja PASAŽA na zidove OS
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -757,6 +758,8 @@ def build():
         toilets(g, f, typical_toilets(f))
     study_tables(g)
     top_floor(g)
+    for f in range(1, 6):
+        square_doors(g, f)
     for f in range(5):
         for s in STAIRS:  # krakom naviše sa sprata f stiže se na dno kraka naniže sprata iznad
             g.edge(f"NTP-{f}-{s}", f"NTP-{f + 1}-{s}-D", "STEPENICE")
@@ -766,6 +769,54 @@ def build():
                 if a < b:
                     g.edge(f"NTP-{a}-{lift}", f"NTP-{b}-{lift}", "LIFT")
     return g
+
+
+def square_doors(g, f):
+    """
+    Vrata koso na čvor hodnika -> upravno na hodnik (korisnik, 27.10.2026: "za grafove treba koristiti što više pravih uglova").
+    Ako podnožje upravne od vrata pada na ivicu hodnika iste prave kao čvor na koji se vrata kače (lanac kroz taj čvor), ivica se
+    deli novim čvorom (Q<x>_<y>) i vrata se kače na njega. Prizemlje se ne dira (kosa fasada, hol); stepeništa i liftovi takođe.
+    """
+    def xy(n):
+        return g.nodes[n][1], g.nodes[n][2]
+
+    def corridor(n):
+        return g.nodes[n][0] == f and g.nodes[n][3] == "HODNIK"
+
+    doors = [(a, b) if g.nodes[a][3] == "VRATA" else (b, a) for (a, b), kind in list(g.edges.items())
+             if kind == "HOD" and {g.nodes[a][3], g.nodes[b][3]} == {"VRATA", "HODNIK"} and g.nodes[a][0] == f]
+    for door, at in doors:
+        d, c = xy(door), xy(at)
+        dist = math.dist(d, c)
+        ang = math.degrees(math.atan2(c[1] - d[1], c[0] - d[0])) % 90
+        if min(ang, 90 - ang) <= 5 or dist <= 5:
+            continue
+        best = None
+        for (u, v), kind in g.edges.items():
+            if kind != "HOD" or not (corridor(u) and corridor(v)):
+                continue
+            a, b = xy(u), xy(v)
+            length = math.dist(a, b)
+            if length == 0:
+                continue
+            # isti pravac kao čvor na koji su vrata kačena (lanac hodnika kroz njega)
+            if abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / length > 1:
+                continue
+            t = ((d[0] - a[0]) * (b[0] - a[0]) + (d[1] - a[1]) * (b[1] - a[1])) / length ** 2
+            if not 0 < t < 1:
+                continue
+            q = (round(a[0] + t * (b[0] - a[0])), round(a[1] + t * (b[1] - a[1])))
+            if math.dist(d, q) < dist and (best is None or math.dist(d, q) < best[0]):
+                best = (math.dist(d, q), u, v, q)
+        if best is None:
+            continue
+        _, u, v, q = best
+        qid = g.node(f, f"Q{q[0]}_{q[1]}", *q)
+        kind = g.edges.pop((u, v))
+        g.edge(u, qid, kind)
+        g.edge(qid, v, kind)
+        g.edges.pop((door, at), None) or g.edges.pop((at, door))
+        g.edge(door, qid)
 
 
 # --- Izlaz ------------------------------------------------------------------------------------

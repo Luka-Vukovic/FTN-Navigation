@@ -112,7 +112,9 @@ def floor_m1():
         # Sredina (ispod amfiteatara) nije deo sprata; Skriptarnica izlazi levo, ka F-bloku.
         "outline": [[(168, -65), (835, -65), (835, 210), (732, 210), (732, 3), (402, 3), (402, 210), (168, 210)],
                     rect_poly(30, -30, 168, 0)],
-        "paths": [[(175, -7), (825, -7)], [(257, -7), (257, 170)]],  # hodnik do dna srednjeg kraka S1
+        # Hodnik do vrata Skriptarnice (x 170), pravi ugao (27.10.2026; do tada vrata koso na kraj linije). Vrata Kioska ostaju koso
+        # na dno kraka do S1: krak ka njima bi privukao i vrata Biblioteke (čvor naspram njih H257_154 je merilo terena).
+        "paths": [[(170, -7), (825, -7)], [(257, -7), (257, 170)]],  # hodnik do dna srednjeg kraka S1
         "corridors": [rect_poly(170, -17, 832, 3), rect_poly(203, -65, 283, -17), rect_poly(230, 3, 285, 207),
                       rect_poly(518, -31, 590, -17)],  # ispod S2
         "rooms": [
@@ -142,7 +144,8 @@ def floor_0():
     return {
         "title": "Prizemlje",
         # Sredinom hodnika do račvanja ka krakovima S1 (S1-D, 0,4 m dalje).
-        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, S1_TOP[1] - 4)], [(555, 188), (690, 188)]],
+        # Hodnik iza amfiteatara do ispod S3 (x 696), da je stepenište ka L1 upravno (27.10.2026; do tada koso sa x 690).
+        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, S1_TOP[1] - 4)], [(555, 188), (696, 188)]],
         "corridors": [rect_poly(170, -28, 832, 7), rect_poly(212, 7, 287, 172),  # hodnik do ograde iznad S1
                       rect_poly(30, -32, 170, 5),  # prolaz ka F-bloku
                       rect_poly(553, 168, 693, 207),  # hodnik iza amfiteatara, iz prolaza iz NB-a
@@ -176,7 +179,7 @@ def floor_1():
         "title": "Nivo 1 (L1, iznad hodnika iza amfiteatara)",
         "roof": rect_poly(*WALL),
         "outline": [rect_poly(553, 168, 711, 207)],
-        "paths": [[(680, 195), (700, 212)]],
+        "paths": [[(670, 195), (696, 195), (696, 215)]],  # od vrata L1 do S3 pod pravim uglom (27.10.2026; bilo koso)
         "corridors": [rect_poly(664, 190, 711, 240)],
         "rooms": [R(553, 664, 168, 207, "L1", door=(664, 195))],
         "stairs": [S3],

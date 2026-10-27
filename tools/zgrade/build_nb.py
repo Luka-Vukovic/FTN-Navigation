@@ -83,7 +83,8 @@ def spine(y, x0, x1):
 def floor_m1():
     return {
         "title": "Sprat -1 (suteren)",
-        "paths": spine(431, 425, 955),
+        # + uz istočni zid hola do vrata P17/P18 - pravi uglovi (27.10.2026; do tada koso sa kraja hodnika, do 10 m)
+        "paths": spine(431, 425, 955) + [[(955, 431), (955, 332)]],
         "corridors": [[(416, 413), (624, 413), (624, 377), (691, 377), (691, 387), (760, 387), (760, 311),
                        (965, 311), (965, 519), (760, 519), (760, 450), (416, 450)]],
         "rooms": [
@@ -107,7 +108,8 @@ def floor_m1():
 def floor_0():
     return {
         "title": "Prizemlje",
-        "paths": spine(420, 425, 1015) + [[(666, 420), (666, 480)]],  # + predvorje ka glavnom ulazu
+        # + predvorje ka glavnom ulazu; do naspram vrata Portirnice i 002 - pravi uglovi (27.10.2026; do tada 1015 i 480, vrata koso)
+        "paths": spine(420, 425, 1021) + [[(666, 420), (666, 488)]],
         "corridors": [
             [(416, 383), (692, 383), (692, 378), (760, 378), (760, 405), (1038, 405), (1038, 456), (688, 456),
              (688, 519), (645, 519), (645, 456), (416, 456)],

@@ -537,7 +537,7 @@ class PdrLocatorTest {
      */
     @Test
     fun corridorWalk_learnsCompassError_forgottenAfterTwentyMinutes() {
-        val azimuth = magneticAzimuth(graph.position(node("NB-0-H744_420")), graph.position(node("NB-0-H1015_420"))) + 10f
+        val azimuth = magneticAzimuth(graph.position(node("NB-0-H744_420")), graph.position(node("NB-0-H1021_420"))) + 10f
         val off = locatorAt("NB-0-H744_420").apply { applyCorrection = false }
         repeat(30) { off.step(azimuth, stepM, timeNs = it * 600_000_000L) }
         assertEquals(0f, off.corridorBiasDeg, 0f)
@@ -559,7 +559,7 @@ class PdrLocatorTest {
     @Test
     fun corridorPointer_alongCorridorInWalkingDirection() {
         val from = graph.position(node("NB-0-H744_420"))
-        val to = graph.position(node("NB-0-H1015_420"))
+        val to = graph.position(node("NB-0-H1021_420"))
         val azimuth = magneticAzimuth(from, to)
         val locator = locatorAt("NB-0-H744_420").apply { applyCorrection = false }
         repeat(6) { locator.step(azimuth + 15f, stepM) }
@@ -1457,6 +1457,53 @@ class PdrLocatorTest {
         assertEquals("$reasons", PdrPlace("KULA", 0), locator.place)
     }
 
+    /**
+     * Teren 27.10.2026 (hod-20261027-111325, 720-744 s, kula-down): "Ovde sam" uz stepenište Kule na I spratu, pa spiralom
+     * naniže u prizemlje i u hol. 22 koraka liče na stepenice (znak ~1,2), ali kompas uz okno je izmerio samo ~224°
+     * okreta - izlazak u hol (okret nazad) je bio "silazi sa spirale" na I spratu. Azimuti, dužine i znak sa snimka.
+     */
+    @Test
+    fun kulaSpiral_descentWithCompressedTurn_stairGaitReachesGroundFloor() {
+        val azimuths = listOf(
+            324.7, 322.9, 329.1, 332.3, 332.5, 328.1, 318.3, 299.4, 275.4, 253.6, 232.1, 213.0, 180.4, 167.5, 161.8, 162.8, 161.0,
+            153.8, 140.5, 125.7, 107.1, 100.9, 112.3, 136.5, 165.1, 202.3, 232.3, 251.4, 260.4, 253.9, 238.0, 223.5, 214.0, 214.4,
+            230.0, 250.1, 258.5, 253.2,
+        ).map { it.toFloat() }
+        val lengths = listOf(
+            0.74f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.54f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f,
+            0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.71f, 0.78f, 0.83f, 0.69f, 0.27f, 0.83f, 0.68f, 0.83f, 0.83f, 0.83f,
+            0.17f, 0.18f, 0.32f, 0.42f,
+        )
+        val gait = listOf(
+            -0.75f, 0.16f, 0.91f, 1.32f, 0.50f, 1.37f, 1.27f, 1.16f, 0.87f, 1.43f, 0.94f, 1.36f, -0.19f, 1.17f, 1.47f, 1.33f, 1.16f,
+            1.74f, 0.35f, 0.33f, 0.97f, 1.68f, 1.35f, 1.35f, -0.05f, -0.42f, 0.58f, 1.15f, -0.53f, -0.12f, -0.49f, 0.43f, -0.32f,
+            0.11f, -0.32f, -0.38f, -0.23f, -0.21f,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("KULA", 1), Offset(0.50215244f, 0.55923605f), measure = false)
+            restoreBias(-11.484823f, 4.9795437f)
+        }
+        val reasons = azimuths.indices.mapNotNull { i -> locator.step(azimuths[i], lengths[i], stairScore = gait[i]) }
+        assertEquals("$reasons", listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("KULA", 0), locator.place)
+    }
+
+    /** Isti krug bez znaka stepenica (hodnik oko jezgra, kompas kao uz okno) ne menja sprat. */
+    @Test
+    fun kulaSpiral_compressedTurnWithoutStairGait_staysOnFloor() {
+        val azimuths = listOf(
+            324.7, 322.9, 329.1, 332.3, 332.5, 328.1, 318.3, 299.4, 275.4, 253.6, 232.1, 213.0, 180.4, 167.5, 161.8, 162.8, 161.0,
+            153.8, 140.5, 125.7, 107.1, 100.9, 112.3, 136.5, 165.1, 202.3, 232.3, 251.4, 260.4,
+        ).map { it.toFloat() }
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("KULA", 1), Offset(0.50215244f, 0.55923605f), measure = false)
+            restoreBias(-11.484823f, 4.9795437f)
+        }
+        val reasons = azimuths.mapNotNull { locator.step(it, 0.8f, stairScore = -0.2f) }
+        assertTrue("$reasons", PlaceReason.STEPENICE !in reasons)
+        assertEquals(PdrPlace("KULA", 1), locator.place)
+    }
+
     /** Kruženje hodnikom oko jezgra Kule (IV sprat, strane od 10 koraka) nije stepenište. */
     @Test
     fun kulaCorridorLoopAroundCore_noFloorChange() {
@@ -1712,6 +1759,30 @@ class PdrLocatorTest {
         val side = stairPath("AMF/S1", 0, 0)
         assertTrue("na kraku", distanceToSegment(pos, side[3], side[2]) < 0.1)
         assertTrue("niz krak ${distance(pos, top)} m", distance(pos, top) > 0.4)
+    }
+
+    /**
+     * Teren 27.10.2026 (hod-20261027-111325, 307-331 s, a-s1top): iz suterena srednjim krakom S1, okret ulevo na međupodestu i
+     * desnim bočnim krakom u prizemlje. Dva koraka ka tremu (64°, 55°) i korak već u okretu (25°) su bili hod pravo dalje, pa
+     * izlazak na vrata trema; okret na vratima se merio od 25° i za 8 koraka nije stigao do 135° - tačka je ostala na vratima
+     * trema, sprat nije promenjen ("neuspeli prelazak sprata"). Azimuti i dužine sa snimka; na telefonu je krak bio pređen
+     * korakom ranije nego u replay-u (ovde: od čvora S1).
+     */
+    @Test
+    fun amfS1_fromBasement_twoStepsTowardPorchThenGradualTurn_upToGroundFloor() {
+        val azimuths = listOf(
+            63.8, 59.5, 62.6, 63.7, 64.3, 71.0, 77.3, 77.6, 77.2, 75.0, 74.1, 72.4, 66.6, 63.8, 63.6, 55.0, 25.2, 3.6, 345.0, 333.4,
+            308.4, 286.4, 282.3, 284.6, 282.8, 276.5, 273.4, 269.5, 256.6, 248.5, 243.6, 242.4, 241.1, 238.6, 246.9, 252.4,
+        ).map { it.toFloat() }
+        val lengths = listOf(
+            0.39f, 0.81f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.56f, 0.83f,
+            0.60f, 0.76f, 0.22f, 0.39f, 0.69f, 0.75f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f, 0.83f,
+            0.83f, 0.83f,
+        )
+        val locator = locatorAt("AMF-m1-S1").apply { restoreBias(-20.413982f, -1.4156921f) }
+        val reasons = azimuths.indices.mapNotNull { i -> locator.step(azimuths[i], lengths[i]) }
+        assertEquals("$reasons", listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("AMF", 0), locator.place)
     }
 
     /** S1: iz suterena srednjim krakom i pravo dalje - takođe u trem ka Kuli. */

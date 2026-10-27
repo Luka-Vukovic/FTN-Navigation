@@ -207,7 +207,8 @@ def floor_2():
 def floor_3():
     return {
         "title": "III sprat",
-        "paths": [poly((3, 90), (374, 90), (390, 98), (597, 98))],
+        # Uži hodnik levo: prelaz na širi pod pravim uglom (27.10.2026; do tada koso 374 -> 390).
+        "paths": [poly((3, 90), (382, 90), (382, 98), (597, 98))],
         "corridors": [
             poly((0, 82), (600, 82), (600, 114), (398, 114), (398, 160), (387, 160), (387, 132), (374, 132),
                  (374, 98), (0, 98)),

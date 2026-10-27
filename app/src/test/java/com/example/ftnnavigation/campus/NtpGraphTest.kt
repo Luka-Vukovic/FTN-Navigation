@@ -258,7 +258,9 @@ class NtpGraphTest {
                 .minBy { hypot((it.x - lift.x).toDouble(), (it.y - lift.y).toDouble()) }
             val door = graph.neighbors(toilet.id).single().first
             assertEquals(NodeType.VRATA, door.type)
-            assertTrue(graph.neighbors(door.id).any { (n, _) -> n.id == "NTP-$floor-U640" })
+            // Upravno na gornji hodnik (od 27.10.2026 čvor naspram vrata, ne koso na U640).
+            val upper = graph.node("NTP-$floor-U640")!!
+            assertTrue(graph.neighbors(door.id).any { (n, _) -> n.type == NodeType.HODNIK && n.y == upper.y && n.x == door.x })
         }
     }
 

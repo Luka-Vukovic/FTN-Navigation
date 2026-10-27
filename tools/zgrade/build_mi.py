@@ -252,7 +252,8 @@ def floor_plan(floor):
         corridors.append([(ENTRANCE_PASSAGE[0], BAR_Y[1]), (421, BAR_Y[1]), (421, -577), (ENTRANCE_PASSAGE[0], -577)])
         corridors.append([(397, -577), (471, -577), (471, -507), (397, -507)])  # predvorje (portirnica desno)
         x_passage = sum(ENTRANCE_PASSAGE) / 2 - 16  # sredina prolaza (388-421), portirnica je desno
-        paths.append([(x_passage, y_bar), (x_passage, -540), ENTRANCE])
+        # Kroz predvorje do ulaza pod pravim uglom (27.10.2026; do tada koso od (x_passage, -540) do ulaza).
+        paths.append([(x_passage, y_bar), (x_passage, -540), (ENTRANCE[0], -540), ENTRANCE])
         points = [("ULAZ", ENTRANCE, "ULAZ")]
         voids = []
     else:
