@@ -801,6 +801,9 @@ class PdrLocator(
     // Skorašnje GPS lokacije napolju - pravac kretanja dok je smer zamrznut ([gpsCourse]).
     private val gpsTrack = ArrayDeque<GpsFix>()
 
+    // Poslednja GPS lokacija napolju koja je ušla u spajanje sa PDR-om - ulazak duboko u obrisu dok je smer zamrznut.
+    private var lastFusedFix: GpsFix? = null
+
     // Napolju: koraci (vreme, geografski azimut sa ispravkom, primenjena ispravka) za poređenje sa pravcem GPS-a, i od kada
     // se razlikuju ([courseError]).
     private val courseSteps = ArrayDeque<Triple<Long, Double, Float>>()
@@ -1530,6 +1533,7 @@ class PdrLocator(
             return PlaceReason.GPS_IZLAZ
         }
         if (fix.accuracyM > MAX_FUSE_ACCURACY_M) return null
+        lastFusedFix = fix
         if (fix.accuracyM <= GPS_COURSE_MAX_ACCURACY_M) {
             gpsTrack.addLast(fix)
             while (gpsTrack.size > 1 && (gpsTrack.size > GPS_TRACK_MAX ||
@@ -1672,7 +1676,10 @@ class PdrLocator(
     private fun setAnchor(place: PdrPlace, point: Offset) {
         if (this.place.isCampus && !place.isCampus) walkedInsideM = 0.0
         this.place = place
-        if (!place.isCampus) gpsTrack.clear()
+        if (!place.isCampus) {
+            gpsTrack.clear()
+            lastFusedFix = null
+        }
         stepsSinceGps = 0
         raw = point
         match = matcherFor(place)?.start(point.x, point.y)
@@ -2986,8 +2993,16 @@ class PdrLocator(
 
     /** Tačka napolju nesumnjivo duboko u zgradi ([DEEP_INSIDE_M]) -> na najbliži hodnik sprata ulaza te zgrade. */
     private fun enterFromDeepInside(p: PointM): PlaceReason? {
+        // Dok je smer zamrznut, koraci idu pravcem GPS-a i nose tačku dalje od same lokacije - duboko mora biti i GPS. Teren
+        // 27.10.2026, NTP: korisnik spolja uz istočni zid (telefon u džepu, oba senzora smera ćute), GPS 11-12 m u obrisu, a
+        // tačka 14-15 m -> lažan ulazak kroz PASAŽ, pa izlazak na drugom kraju i GPS skok do glavnog ulaza.
+        val fix = lastFusedFix
+        if (headingFrozen && fix == null) return null
         val (buildingId, list) = entrances.entries.firstOrNull { (id, _) ->
-            campus.building(id)?.let { it.contains(p) && it.distanceToWallM(p) >= DEEP_INSIDE_M } == true
+            campus.building(id)?.let { b ->
+                b.contains(p) && b.distanceToWallM(p) >= DEEP_INSIDE_M &&
+                    (!headingFrozen || b.contains(fix!!.point) && b.distanceToWallM(fix.point) >= DEEP_INSIDE_M)
+            } == true
         } ?: run {
             deepSteps = 0
             return null

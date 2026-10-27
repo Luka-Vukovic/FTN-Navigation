@@ -336,6 +336,22 @@ SPLIT_SHAPES = {
          [(1822, 1360), (2055, 1360), (2075, 1378), (2081, 1556), (1822, 1556)]],
     18: [[(699, 1389), (812, 1389), (812, 1556), (699, 1556)], [(812, 1389), (930, 1389), (930, 1556), (812, 1556)]],
 }
+# III sprat, soba 16 (teren 27.10.2026, korisnik nacrtao na snimku ekrana): 320 je deo uz srednji hodnik (pravougaonik, ivice
+# PRETPOSTAVKA sa snimka), a 321 je ostatak sobe ka fasadi zajedno sa sobom desno od nje ("isto deo 321") - jedna sala, bez
+# pregrade na x 1612. Vrata obe ostaju gde su bila.
+SPLIT_SHAPES_3 = {
+    16: [[(1402, 1146), (1570, 1146), (1570, 1280), (1402, 1280)],
+         [(1402, 834), (1747, 1090), (1822, 1146), (1822, 1280), (1570, 1280), (1570, 1146), (1402, 1146)]],
+}
+SPLIT_DOORS_3 = {16: [((1486, 1213), (1500, 1280), "C1494"), ((1690, 1180), (1720, 1280), "C1795")]}
+
+
+def split_shapes(f):
+    return {**SPLIT_SHAPES, **(SPLIT_SHAPES_3 if f == 3 else {})}
+
+
+def split_doors(f):
+    return {**SPLIT_DOORS, **(SPLIT_DOORS_3 if f == 3 else {})}
 # Soba 17 na II i III spratu: u drugu polovinu (224, 323) se ulazi kroz prvu (223, 322) - prva je prolaz (čvor hodnika
 # P17 u njoj; sala nije usputni čvor grafa), druga ima vrata u pregradi. Gornja polovina je uzan trougao pod fasadom.
 VIA_FIRST = {2, 3}
@@ -505,7 +521,7 @@ def typical_plan(f):
         rooms[room] = west_shape(room, *spec[:2]) if spec else None
     for room in SPLIT.get(f, ()):
         rooms[room] = None
-        rooms += SPLIT_SHAPES[room]
+        rooms += split_shapes(f)[room]
     tables = [STUDY_TABLES[f][0]] if f in STUDY_TABLES else []
     for x0, y0, x1, y1 in tables:
         # Niša za sto u donjem zidu sobe 13.
@@ -579,7 +595,7 @@ def typical_floor(g, f):
             g.room(f, f"NTP-{numbers[1]}", VIA_17["second"], VIA_17["door"], "P17")
             continue
         if room in SPLIT.get(f, ()):
-            for number, (center, door, attach) in zip(numbers, SPLIT_DOORS[room]):
+            for number, (center, door, attach) in zip(numbers, split_doors(f)[room]):
                 g.room(f, f"NTP-{number}", center, door, attach)
             continue
         if room == "above":

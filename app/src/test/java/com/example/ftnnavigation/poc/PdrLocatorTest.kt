@@ -272,6 +272,28 @@ class PdrLocatorTest {
     }
 
     /**
+     * Teren 27.10.2026, NTP: korisnik spolja uz istočni zid, telefon u džepu (oba senzora smera ćute), GPS 11-12 m u obrisu, a
+     * tačka 14-15 m - lažan ulazak kroz PASAŽ. Dok je smer zamrznut, duboko u obrisu mora biti i GPS.
+     */
+    @Test
+    fun headingFrozen_deepInsideOutline_entersOnlyWhenGpsIsDeepToo() {
+        val outline = campus.building("NTP")!!
+        val grid = (0..450).flatMap { x -> (0..345).map { y -> PointM(x.toDouble(), y.toDouble()) } }.filter { outline.contains(it) }
+        val deep = grid.first { outline.distanceToWallM(it) >= 20 }
+        val shallow = grid.filter { outline.distanceToWallM(it) in 10.0..12.0 }.minBy { distance(it, deep) }
+        val deeper = grid.filter { outline.distanceToWallM(it) >= 18 }.minBy { distance(it, deep) }
+        for ((gps, expected) in listOf(shallow to emptyList(), deeper to listOf(PlaceReason.ULAZ))) {
+            val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+                setPosition(PdrPlace.CAMPUS, campusOffset(deep))
+            }
+            locator.headingFrozen = true
+            locator.onGps(GpsFix(gps, 7f, elapsedNs = 1_000_000_000L), tracking = true)
+            val reasons = (1..6).mapNotNull { locator.step(it * 90f, 0.3f, timeNs = (it + 1) * 600_000_000L) }
+            assertEquals("GPS ${"%.1f".format(outline.distanceToWallM(gps))} m u obrisu", expected, reasons)
+        }
+    }
+
+    /**
      * Teren 09.10.2026, NTP prizemlje: tačka na slepom kraju hodnika, korisnik se ~10 m vrti u holu - izvlačenje zaglavljene
      * tačke ju je stavilo na 15 m udaljen "ULAZ - FTN" i sledeći korak je bio izlazak na kampus.
      */
