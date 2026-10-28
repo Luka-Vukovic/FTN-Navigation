@@ -119,9 +119,11 @@ class NtpGraphTest {
         assertEquals(rooms.sortedBy { it.y }, rooms)
         val doors = rooms.map { room -> graph.neighbors(room.id).map { it.first }.single { it.type == NodeType.VRATA } }
         assertEquals(4, doors.map { it.id }.distinct().size)
-        for (door in doors) {
+        for ((room, door) in rooms.zip(doors)) {
             val corridor = graph.neighbors(door.id).map { it.first }.single { it.type == NodeType.HODNIK }
             assertEquals(door.id, door.y, corridor.y, 1e-4f)
+            // Teren 28.10.2026 popodne: vrata "kod leve strane" (iz hodnika ka sobi) = ispod sredine sobe na planu.
+            assertTrue(door.id, door.y > room.y)
         }
     }
 

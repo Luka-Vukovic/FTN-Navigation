@@ -264,19 +264,26 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** GPS lokacija za učenje dužine koraka; naučena dužina odmah važi i čuva se kao podešena. */
+    /**
+     * GPS lokacija za učenje dužine koraka. Deonice se čuvaju odmah, a naučena dužina važi tek od sledećeg Start-a
+     * ([applyLearnedStep]) - korisnik (teren 28.10.2026 popodne): "čudni ovi skokovi u dužini koraka" (0,76 -> 0,89 za 4 min).
+     */
     private fun learnStepFromGps(locator: PdrLocator, fix: GpsFix) {
         if (!state.isTracking || !locator.place.isCampus || locator.headingFrozen) {
             stepLearner.reset()
             return
         }
         val before = stepLearner.samples
-        val learned = stepLearner.onGps(fix)
+        stepLearner.onGps(fix)
         if (stepLearner.samples != before) AppSettings.setStepLengthSamples(getApplication(), stepLearner.samples)
-        if (learned == null || roundStepLength(learned) == stepLengthM) return
-        stepLengthM = roundStepLength(learned)
+    }
+
+    /** Na Start: dužina naučena napolju (do sada) postaje podešena - za vreme obilaska se ne menja. */
+    private fun applyLearnedStep() {
+        val learned = stepLearner.learned?.let(::roundStepLength) ?: return
+        if (learned == stepLengthM) return
+        stepLengthM = learned
         AppSettings.setStepLengthM(getApplication(), stepLengthM)
-        recorder?.stepLength(SystemClock.elapsedRealtimeNanos(), stepLengthM)
     }
 
     /** Promena sprata na ruti (Podešavanja): najbrže, bez stepenica ili bez lifta. */
@@ -631,7 +638,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         if (locator.raw == null) return
         val before = locator.place
         updateDestination(locator)
-        val lengthM = stepLengthM * AccelStepDetector.stepLengthFactor(peak)
+        val lengthM = locator.baseStepM(stepLengthM) * AccelStepDetector.stepLengthFactor(peak)
         learnStep(locator, step.headingDeg, peak)
         // Vreme koraka (senzor, isti sat kao elapsedRealtimeNanos) - zadržani koraci ([HandlingGate]) stižu kasnije.
         val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs, stairGait.score(timeNs))
@@ -858,6 +865,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         // Start se pritiska sa telefonom u ruci - odstupanje od pravca hoda se uči iznova.
         walkingDirection.reset()
         locator.clearRedo()
+        applyLearnedStep()
         val app = getApplication<Application>()
         if (BuildConfig.DEBUG) recorder = SensorRecorder.start(app.filesDir)
         // Gde je tačka (na grafu, ako je zalepljena) - replay odatle kreće.

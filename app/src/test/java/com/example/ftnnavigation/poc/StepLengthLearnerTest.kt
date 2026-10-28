@@ -50,7 +50,9 @@ class StepLengthLearnerTest {
         val learner = StepLengthLearner(listOf(0.78f, 0.80f))
         val learned = walkEast(learner, 80, 0.82)
         assertEquals("treća deonica (posle dve sačuvane)", 0.80f, learned!!, 0.001f)
+        assertEquals(learned, learner.learned)
         learner.clear()
         assertTrue(learner.samples.isEmpty())
+        assertNull(learner.learned)
     }
 }

@@ -103,6 +103,17 @@ class PdrLocatorTest {
         assertNotNull(locator.match)
     }
 
+    /** Teren 28.10.2026 popodne: napolju naučeno 0,87 m, a u zgradi je hod sporiji - tamo najviše 0,82 m. */
+    @Test
+    fun stepLength_learnedOutdoors_cappedIndoors() {
+        val outside = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
+            .apply { setPosition(PdrPlace.CAMPUS, campusOffset(graph.position(node("K-U-NB-1")))) }
+        assertEquals(0.87f, outside.baseStepM(0.87f))
+        val inside = locatorAt("NB-0-ULAZ")
+        assertEquals(0.82f, inside.baseStepM(0.87f))
+        assertEquals(0.76f, inside.baseStepM(0.76f))
+    }
+
     /** Pravac (jedinični) spoljnog zida zgrade [id] najbližeg tački [p]. */
     private fun wallDirection(id: String, p: PointM): PointM {
         val ring = campus.building(id)!!.outline.map { (x, y) -> PointM(x.toDouble(), y.toDouble()) }

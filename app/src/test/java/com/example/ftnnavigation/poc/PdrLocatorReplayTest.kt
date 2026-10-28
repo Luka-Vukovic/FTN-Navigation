@@ -51,7 +51,7 @@ class PdrLocatorReplayTest {
     // Dužina koraka iz GPS-a napolju (kao na telefonu, kroz ceo folder) - ispisuje se, a primenjuje uz PDR_LEARN_STEP=1.
     private val stepLearner = StepLengthLearner()
 
-    // PDR_LEARN_STEP=1: naučena dužina se i primenjuje (kao na telefonu) - posle prve naučene K redovi se ne slušaju.
+    // PDR_LEARN_STEP=1: naučena dužina se i primenjuje (kao na telefonu, od sledećeg Start-a) - posle prve naučene K redovi se ne slušaju.
     private val applyLearnedStep = System.getenv("PDR_LEARN_STEP") == "1"
     private var learnedStepM: Float? = null
 
@@ -189,7 +189,8 @@ class PdrLocatorReplayTest {
         locator.trace = { m -> log(traceT, "locator: $m") }
         var confirm: Confirm? = null
         fun apply(s: HandlingGate.Step) {
-            val lengthM = if (fullSteps) stepM else stepM * AccelStepDetector.stepLengthFactor(s.peak)
+            val baseM = locator.baseStepM(stepM)
+            val lengthM = if (fullSteps) baseM else baseM * AccelStepDetector.stepLengthFactor(s.peak)
             if (locator.place.isCampus && !locator.headingFrozen) {
                 stepLearner.onStep(locator.headingOnPlan(s.walk.headingDeg), AccelStepDetector.stepLengthFactor(s.peak))
             } else {
@@ -341,10 +342,6 @@ class PdrLocatorReplayTest {
                     if (locator.place.isCampus && !locator.headingFrozen) {
                         val before = stepLearner.samples
                         val learned = stepLearner.onGps(fix)
-                        if (learned != null && applyLearnedStep) {
-                            learnedStepM = learned
-                            stepM = learned
-                        }
                         if (stepLearner.samples != before) {
                             log(t, String.format(Locale.ROOT, "dužina koraka iz GPS-a: deonica %.2f m, naučeno %s (podešeno %.2f)",
                                 stepLearner.samples.last(), learned?.let { String.format(Locale.ROOT, "%.2f", it) } ?: "-", stepM))
@@ -389,6 +386,8 @@ class PdrLocatorReplayTest {
                         // Kao [PocViewModel.setPosition]: smer hoda odmah zna da je tačka uz stepenište.
                         direction?.nearStairs = locator.nearStairs
                         direction?.onStairs = locator.onStairs
+                        // Kao [PocViewModel.applyLearnedStep]: naučena dužina važi od Start-a (od 28.10.2026 uveče).
+                        if (applyLearnedStep) stepLearner.learned?.let { learnedStepM = it; stepM = it }
                         steps = 0
                         anchorKind = "START"
                         row(t, "L")

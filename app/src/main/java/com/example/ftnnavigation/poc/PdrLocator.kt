@@ -117,6 +117,13 @@ private const val INDOOR_GPS_ENTRY_M = 40.0
 /** ... i samo lokacije tačnosti do ovoliko (28.10.2026, hol NTP-a uz staklenu fasadu: 5-9 m). */
 private const val INDOOR_GPS_MAX_ACCURACY_M = 10f
 
+/**
+ * Dužina koraka u zgradi najviše ovoliko ([PdrLocator.baseStepM]). Teren 28.10.2026 popodne: napolju naučeno 0,87-0,89 m (brz hod,
+ * kadenca 0,53 s), a u zgradi je hod sporiji (0,57 s) - hodnik III NTP-a 32 m za 45 koraka (0,71 m), put u zgradama 108-147 %.
+ * Replay svih snimaka: 0,82 najbolje (0,80 i niže kvare prelaze - tačka kasni do stepeništa i ugla hodnika; vidi CLAUDE.md).
+ */
+private const val INDOOR_MAX_STEP_M = 0.82f
+
 /** Korak bez poznatog smera je nesigurniji ([STEP_VARIANCE_M2]): GPS jače povlači tačku. */
 private const val FROZEN_STEP_VARIANCE_M2 = 1.5
 
@@ -1441,6 +1448,9 @@ class PdrLocator(
         liftPrompt = null
         liftSteps.clear()
     }
+
+    /** Dužina punog koraka za sledeći korak: podešena ([setM]; napolju se uči iz GPS-a), u zgradi najviše [INDOOR_MAX_STEP_M]. */
+    fun baseStepM(setM: Float): Float = if (place.isCampus) setM else minOf(setM, INDOOR_MAX_STEP_M)
 
     /**
      * Jedan korak u pravcu [azimuthDeg] (magnetski, sa senzora). Ako [redoSteps] > 0, toliko prethodnih

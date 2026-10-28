@@ -27,6 +27,9 @@ class StepLengthLearner(samples: List<Float> = emptyList()) {
     /** Dužine koraka sa poslednjih deonica (za čuvanje). */
     val samples: List<Float> get() = recent.toList()
 
+    /** Naučena dužina punog koraka (medijana poslednjih deonica) ili null ako ih je manje od [MIN_SAMPLES]. */
+    val learned: Float? get() = if (recent.size < MIN_SAMPLES) null else recent.sorted()[recent.size / 2]
+
     /** Prekid deonice (u zgradi, smer nepoznat, kraj praćenja); naučeno ostaje. */
     fun reset() {
         start = null
@@ -68,8 +71,7 @@ class StepLengthLearner(samples: List<Float> = emptyList()) {
         if (stepM !in MIN_STEP_M..MAX_STEP_M) return null
         recent.addLast(stepM)
         if (recent.size > SAMPLES) recent.removeFirst()
-        if (recent.size < MIN_SAMPLES) return null
-        return recent.sorted()[recent.size / 2]
+        return learned
     }
 
     companion object {

@@ -150,13 +150,16 @@ TYPICAL = {
 # 115-118 (teren 28.10.2026, korisnik nacrtao na snimku ekrana): 115 = soba 14 do fasade (sa sobom iznad nje), 116 = soba 15 i
 # gornja polovina 16 zajedno, 117 = donja polovina 16 (do 28.10. 115-118 su bile četiri četvrtine 817-1280), 118 = soba iznad
 # toaleta (FIRST_MID_ROOMS). Vrata na desni hodnik sa snimka (ivice soba i vrata PRETPOSTAVKA, ~0,5 m).
+# Teren 28.10.2026 popodne (korisnik): vrata 116 "malo bliže 117 ... neka bude dva metra", "generalno za sve te prostorije 115-118
+# treba da bude kod leve strane vrata" (gledano iz desnog hodnika ka sobama = donji zid sobe, +y): sva četiri 20 px (~0,6 m) od
+# donjeg zida sobe; 116 je tako baš 2 m niže (1072 -> 1140). Do tada 844, 1072, 1193, 1307 (sa zelenih krugova 28.10. ujutru).
 FIRST_RIGHT_ROOMS = [
     [(1073, 591), (1100, 610), (1301, 759), (1301, 929), (1073, 929)],  # 115
     [(1073, 929), (1301, 929), (1301, 1160), (1073, 1160)],  # 116
     [(1073, 1160), (1301, 1160), (1301, 1280), (1073, 1280)],  # 117
 ]
-FIRST_RIGHT = {"115": ((1187, 790), (1301, 844), "R844"), "116": ((1187, 1045), (1301, 1072), "R1072"),
-               "117": ((1187, 1220), (1301, 1193), "R1193"), "118": ((1158, 1340), (1301, 1307), "R1307")}
+FIRST_RIGHT = {"115": ((1187, 790), (1301, 909), "R909"), "116": ((1187, 1045), (1301, 1140), "R1140"),
+               "117": ((1187, 1220), (1301, 1260), "R1260"), "118": ((1158, 1340), (1301, 1380), "R1380")}
 FIRST_MID_ROOMS = [
     [(451, 1280), (699, 1280), (699, 1397), (451, 1397)],  # iznad S2, vrata na glavni hodnik
     [(699, 1280), (865, 1280), (865, 1556), (699, 1556)],  # 18 (139)
@@ -576,7 +579,8 @@ def typical_floor(g, f):
     })
     g.chain(f, [f"M{y}" for y in main])
     g.chain(f, ["M595", "U486", "U513", "U541", "U640", *sorted(top, key=lambda k: top[k][0])])
-    g.chain(f, [*[f"R{y}" for y in right], "C1350", "K1350", "B1343"])
+    # Po visini: vrata 118 (I sprat) su ispod raskrsnice C1350.
+    g.chain(f, [*sorted([*[f"R{y}" for y in right], "C1350", "K1350"], key=lambda k: g.nodes[f"{BUILDING}-{f}-{k}"][2]), "B1343"])
     if f == 1:
         # I sprat: hol 119 se završava vratima T3 (x 1785), a sa kraja srednjeg hodnika nema prolaza u donji (sobe 122, 124).
         # Srednjeg hodnika zapadno od desnog nema (teren 17.10.2026, FIRST_MID_ROOMS).
