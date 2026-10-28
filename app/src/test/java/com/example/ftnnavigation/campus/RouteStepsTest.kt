@@ -162,4 +162,21 @@ class RouteStepsTest {
         val steps = steps(roomId("204"), "204")
         assertEquals(listOf(StepKind.CILJ), steps.kinds())
     }
+
+    /** Kartica rute: posle "kreni" sledeći manevar u daljini prvog hoda; iz sale i na cilju - prvi korak, sada. */
+    @Test
+    fun nextManeuver_afterStartWalk() {
+        val fromEntrance = steps(NbPlan.ENTRANCE_ID, "204")
+        val next = nextManeuver(fromEntrance)!!
+        assertEquals(StepKind.KRENI, fromEntrance[0].kind)
+        assertEquals(fromEntrance[1], next.step)
+        assertEquals(fromEntrance[0].walkM, next.walkM, 0.0)
+
+        val fromRoom = steps(roomId("204"), "A1")
+        assertEquals(NextManeuver(fromRoom[0], 0.0), nextManeuver(fromRoom))
+        assertEquals(StepKind.IZADJI_IZ_SALE, fromRoom[0].kind)
+
+        assertEquals(StepKind.CILJ, nextManeuver(steps(roomId("204"), "204"))!!.step.kind)
+        assertEquals(null, nextManeuver(emptyList()))
+    }
 }

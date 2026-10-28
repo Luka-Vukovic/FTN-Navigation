@@ -116,7 +116,7 @@ private fun Density.placeLabels(
  * zgrade i studentske službe (toplim tonom) sa natpisima, spojni prolazi, ulazi i ruta. [position] je pozicija relativno na
  * plan zgrade [pdrBuildingId] (ili na mapu kampusa, [CAMPUS_ID]) - preslikava se u kampus preko smeštaja plana; [headingDeg] je smer u
  * odnosu na "gore" tog plana. [gps] je GPS lokacija sa krugom tačnosti; kad postoji i PDR pozicija,
- * GPS je samo tačka (smer pripada PDR oznaci). Ruta se crta od mesta odakle kreće ([routeStart]). Uz [autoRotate]
+ * GPS se crta samo uz [showGpsBesidePosition], kao tačka (smer pripada PDR oznaci). Ruta se crta od mesta odakle kreće ([routeStart]). Uz [autoRotate]
  * mapa se okreće po smeru korisnika [mapHeadingDeg] (u odnosu na sever; null = ne zna se).
  */
 @Composable
@@ -132,6 +132,8 @@ fun CampusMap(
     autoRotate: Boolean,
     mapHeadingDeg: Float?,
     isPickingPosition: Boolean,
+    /** GPS (tačka i krug tačnosti) i uz PDR poziciju - za poređenje u režimu za razvoj; inače samo dok pozicije nema. */
+    showGpsBesidePosition: Boolean,
     onTap: (Offset) -> Unit,
     onBuildingLongPress: (CampusBuilding) -> Unit,
     modifier: Modifier = Modifier,
@@ -259,7 +261,7 @@ fun CampusMap(
                         drawPath(path, colors.primary, style = Stroke(5.dp.toPx() * k, cap = StrokeCap.Round, join = StrokeJoin.Round))
                         drawTargetMarker(points.last(), colors.primary, colors.secondary, k)
                     }
-                    if (gps != null) {
+                    if (gps != null && (position == null || showGpsBesidePosition)) {
                         val center = gps.point.toPx()
                         // Krug tačnosti je u metrima - raste sa zumom.
                         val radius = gps.accuracyM.coerceAtMost(MAX_DRAWN_ACCURACY_M) * m

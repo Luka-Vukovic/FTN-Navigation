@@ -1,6 +1,7 @@
 package com.example.ftnnavigation.poc
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -98,6 +98,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
@@ -113,6 +114,7 @@ import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.campus.quickDestinations
 import com.example.ftnnavigation.campus.roomBuildingNames
+import com.example.ftnnavigation.campus.nextManeuver
 import com.example.ftnnavigation.campus.routeSteps
 import com.example.ftnnavigation.campus.searchDestinations
 import com.example.ftnnavigation.graph.BuildingGraph
@@ -197,6 +199,7 @@ fun PocRoute(
         onToggleFavorite = viewModel::toggleFavorite,
         plan = viewModel.plan,
         onPlanStep = viewModel::stepPlan,
+        developerMode = viewModel.developerMode,
     )
 }
 
@@ -239,9 +242,15 @@ fun PocScreen(
     /** Plan dana: prikazana ruta i strelice za prethodnu/sledeću ([onPlanStep] −1/+1); null - obična ruta. */
     plan: ShownPlan? = null,
     onPlanStep: (Int) -> Unit = {},
+    /** Režim za razvoj (Podešavanja): graf, brojači, prekidači za teren, čista PDR tačka, GPS uz poziciju. */
+    developerMode: Boolean = false,
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     var showSteps by rememberSaveable { mutableStateOf(false) }
+    // Ruta se menja sa svakim korakom (PDR) - uputstvo i sledeći manevar na kartici uvek kreću od trenutne pozicije.
+    val steps = remember(route, graph, campus) {
+        if (route != null && graph != null && campus != null) routeSteps(route, graph, campus) else emptyList()
+    }
     // Zgrada čiji je natpis držan na mapi kampusa - pop-up sa opisom.
     var infoBuildingId by rememberSaveable { mutableStateOf<String?>(null) }
     // Sala čiji je natpis držan na planu zgrade - pop-up sa radnim vremenom / zauzetošću.
@@ -280,6 +289,7 @@ fun PocScreen(
                         autoRotate = autoRotateMap,
                         mapHeadingDeg = mapHeadingDeg,
                         isPickingPosition = state.isPickingStart,
+                        showGpsBesidePosition = developerMode,
                         onTap = onMapTap,
                         onBuildingLongPress = { infoBuildingId = it.id },
                         modifier = Modifier.fillMaxSize(),
@@ -292,7 +302,8 @@ fun PocScreen(
                             graph = graph,
                             route = route,
                             position = state.position.takeIf { pdrHere },
-                            rawPosition = state.rawPosition.takeIf { pdrHere },
+                            rawPosition = state.rawPosition.takeIf { pdrHere && developerMode },
+                            showGraph = developerMode,
                             headingDeg = state.headingDeg,
                             autoRotate = autoRotateMap,
                             mapHeadingDeg = mapHeadingDeg,
@@ -321,28 +332,9 @@ fun PocScreen(
                     } ?: stringResource(R.string.poc_hint_position_outside)
                     else -> null
                 }
-                Column(
-                    Modifier.align(Alignment.TopCenter).padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    if (destination != null) {
-                        RouteBanner(
-                            destination = destination,
-                            target = target,
-                            route = route,
-                            routeStart = routeStart,
-                            plan = plan,
-                            onPlanStep = onPlanStep,
-                            floorChange = floorChange,
-                            crowdPercent = crowdPercent,
-                            onShowSteps = { showSteps = true },
-                            onClear = { onDestinationChange(null) },
-                        )
-                    }
-                    if (hint != null) HintBanner(hint)
-                }
-                if (mode.building != null) {
+                // Ruta je u donjem panelu - gore je samo kratka napomena, da mapa ostane slobodna.
+                if (hint != null) HintBanner(hint, Modifier.align(Alignment.TopCenter).padding(12.dp))
+                if (mode.building != null && developerMode) {
                     // Prekidači za teren, jedan iznad drugog (u redu ne staju pored birača sprata). Ispravka smera
                     // tek kad postoji pozicija - pre toga nema šta da ispravi.
                     val chipColors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -372,14 +364,37 @@ fun PocScreen(
             }
             ControlPanel(
                 state = state,
-                hasDestination = destination != null,
+                developerMode = developerMode,
                 canPickPosition = graph != null,
                 canStartTracking = canStartTracking,
-                onChooseDestination = { showDestinations = true },
                 onPickStartToggle = onPickStartToggle,
                 onTrackingToggle = onTrackingToggle,
                 onReset = onReset,
-            )
+            ) {
+                if (destination != null) {
+                    RouteCard(
+                        destination = destination,
+                        target = target,
+                        route = route,
+                        nextStep = campus?.let { c -> nextManeuver(steps)?.let { nextManeuverText(it, c) } },
+                        routeStart = routeStart,
+                        plan = plan,
+                        onPlanStep = onPlanStep,
+                        floorChange = floorChange,
+                        crowdPercent = crowdPercent,
+                        developerMode = developerMode,
+                        onChange = { showDestinations = true },
+                        onShowSteps = { showSteps = true },
+                        onClear = { onDestinationChange(null) },
+                    )
+                } else {
+                    OutlinedButton(onClick = { showDestinations = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(painterResource(R.drawable.ic_place), contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.route_choose_destination))
+                    }
+                }
+            }
         }
     }
     if (showDestinations && graph != null && campus != null) {
@@ -400,9 +415,7 @@ fun PocScreen(
             onDismiss = { showDestinations = false },
         )
     }
-    if (showSteps && route != null && graph != null && campus != null) {
-        // Ruta se menja sa svakim korakom (PDR) - uputstvo uvek kreće od trenutne pozicije.
-        val steps = remember(route, graph, campus) { routeSteps(route, graph, campus) }
+    if (showSteps && route != null && campus != null) {
         RouteStepsSheet(
             steps = steps,
             campus = campus,
@@ -451,7 +464,8 @@ fun PocScreen(
 /**
  * Slika sprata [floor] zgrade [building] sa pan/zoom gestovima, grafom tog sprata, rutom i
  * markerom korisnika. [position] je pozicija na grafu; [rawPosition] (čist PDR, bez
- * map-matching-a) je bleda tačka za poređenje. Zum ostaje pri promeni sprata iste zgrade.
+ * map-matching-a) je bleda tačka za poređenje. Graf (hodnici, vrata, tačke sala) samo uz [showGraph] - natpisi sala uvek.
+ * Zum ostaje pri promeni sprata iste zgrade.
  * Uz [autoRotate] plan se okreće po smeru korisnika [mapHeadingDeg] (u odnosu na "gore" ovog plana; null = ne zna se).
  */
 @Composable
@@ -462,6 +476,7 @@ private fun FloorPlan(
     route: Route?,
     position: Offset?,
     rawPosition: Offset?,
+    showGraph: Boolean,
     headingDeg: Float,
     autoRotate: Boolean,
     mapHeadingDeg: Float?,
@@ -531,7 +546,7 @@ private fun FloorPlan(
             if (graph != null) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawGraph(
-                        graph, building, floor, rooms, colors.primary, colors.secondary, textMeasurer, labelStyle,
+                        graph, building, floor, rooms, showGraph, colors.primary, colors.secondary, textMeasurer, labelStyle,
                         1f / zoom.scale, zoom.rotationDeg,
                     )
                 }
@@ -654,12 +669,16 @@ private fun Density.placeRoomLabels(
     }
 }
 
-/** Ivice i čvorovi jednog sprata zgrade; sale ([rooms]) imaju natpis sa nazivom iz rasporeda. */
+/**
+ * Natpisi sala ([rooms], naziv iz rasporeda) jednog sprata zgrade; uz [showGraph] (režim za razvoj) i ivice i čvorovi grafa -
+ * običnom korisniku su samo šum preko plana.
+ */
 private fun DrawScope.drawGraph(
     graph: BuildingGraph,
     building: IndoorBuilding,
     floor: Int,
     rooms: List<Node>,
+    showGraph: Boolean,
     edgeColor: Color,
     roomColor: Color,
     textMeasurer: TextMeasurer,
@@ -668,20 +687,22 @@ private fun DrawScope.drawGraph(
     rotationDeg: Float,
 ) {
     fun Node.toOffset() = Offset(x * size.width, y * size.height)
-    val nodes = graph.nodes.filter { it.buildingId == building.buildingId && it.floor == floor }.associateBy { it.id }
-    for (edge in graph.edges) {
-        val a = nodes[edge.fromId] ?: continue
-        val b = nodes[edge.toId] ?: continue
-        drawLine(edgeColor.copy(alpha = 0.35f), a.toOffset(), b.toOffset(), strokeWidth = 2.dp.toPx() * k)
-    }
-    for (node in nodes.values) {
-        val center = node.toOffset()
-        when (node.type) {
-            NodeType.HODNIK, NodeType.VRATA -> drawCircle(edgeColor.copy(alpha = 0.5f), radius = 3.dp.toPx() * k, center = center)
-            NodeType.PROSTORIJA -> drawCircle(roomColor, radius = ROOM_DOT_RADIUS.toPx() * k, center = center)
-            NodeType.STEPENISTE, NodeType.LIFT, NodeType.ULAZ, NodeType.PROLAZ ->
-                drawCircle(edgeColor, radius = 5.dp.toPx() * k, center = center)
-            NodeType.STAZA, NodeType.ZGRADA -> Unit // ne postoje na planu zgrade
+    if (showGraph) {
+        val nodes = graph.nodes.filter { it.buildingId == building.buildingId && it.floor == floor }.associateBy { it.id }
+        for (edge in graph.edges) {
+            val a = nodes[edge.fromId] ?: continue
+            val b = nodes[edge.toId] ?: continue
+            drawLine(edgeColor.copy(alpha = 0.35f), a.toOffset(), b.toOffset(), strokeWidth = 2.dp.toPx() * k)
+        }
+        for (node in nodes.values) {
+            val center = node.toOffset()
+            when (node.type) {
+                NodeType.HODNIK, NodeType.VRATA -> drawCircle(edgeColor.copy(alpha = 0.5f), radius = 3.dp.toPx() * k, center = center)
+                NodeType.PROSTORIJA -> drawCircle(roomColor, radius = ROOM_DOT_RADIUS.toPx() * k, center = center)
+                NodeType.STEPENISTE, NodeType.LIFT, NodeType.ULAZ, NodeType.PROLAZ ->
+                    drawCircle(edgeColor, radius = 5.dp.toPx() * k, center = center)
+                NodeType.STAZA, NodeType.ZGRADA -> Unit // ne postoje na planu zgrade
+            }
         }
     }
     for (label in placeRoomLabels(rooms, building, size, textMeasurer, labelStyle, rotationDeg)) {
@@ -794,111 +815,102 @@ internal fun DrawScope.drawUserMarker(center: Offset, headingDeg: Float, color: 
 }
 
 /**
- * Odredište i procena rute; ako sala nije na mapi, to piše umesto procene. Ispod piše zgrada
- * sale - ako sala nije ucrtana, ruta vodi samo do zgrade. [onShowSteps] otvara uputstvo korak po korak.
- * Uz [plan] (plan dana): gore strelice za prethodnu/sledeću rutu, ruta je sa mesta prethodne stavke, ispod pauza.
+ * Odredište i procena rute u donjem panelu (ne pokriva mapu): naziv, sledeći manevar uputstva ([nextStep], istaknut - "Za ~10 m:
+ * Skreni levo"), pa u jednom redu trajanje, dužina i zgrada · sprat sale. Ispod samo ono što menja rutu: sala nije ucrtana (ruta do zgrade), podešavanje sprata nije moguće, pauza u planu dana. Dodir
+ * menja odredište ([onChange]), "Uputstvo" otvara uputstvo korak po korak. Odakle ruta kreće piše samo kad nije od korisnika
+ * (glavni ulaz, plan dana) - u [developerMode] uvek, uz gužvu.
  */
 @Composable
-private fun RouteBanner(
+private fun RouteCard(
     destination: String,
     target: RouteTarget?,
     route: Route?,
+    nextStep: String?,
     routeStart: RouteStart,
     plan: ShownPlan?,
     onPlanStep: (Int) -> Unit,
     floorChange: FloorChange,
     crowdPercent: Int?,
+    developerMode: Boolean,
+    onChange: () -> Unit,
     onShowSteps: () -> Unit,
     onClear: () -> Unit,
 ) {
+    val colors = MaterialTheme.colorScheme
     Surface(
         shape = MaterialTheme.shapes.medium,
-        shadowElevation = 3.dp,
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
             if (plan != null) PlanHeader(plan, onPlanStep)
-            Row(Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painterResource(R.drawable.ic_place),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
-                )
+            Row(
+                Modifier
+                    .clickable(onClickLabel = stringResource(R.string.route_change_destination), onClick = onChange)
+                    .padding(start = 12.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(painterResource(R.drawable.ic_place), contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(destination, style = MaterialTheme.typography.titleMedium)
+                    Text(destination, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (route != null && nextStep != null) {
+                        Text(
+                            nextStep,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.primary,
+                            modifier = Modifier.padding(vertical = 2.dp),
+                        )
+                    }
                     val leg = plan?.leg
                     val details = when {
                         route == null && leg != null -> planNoRouteText(leg)
                         route == null -> stringResource(R.string.route_not_on_map)
                         else -> {
-                            val from = if (leg != null) {
-                                planFromText(leg)
-                            } else {
-                                stringResource(
-                                    when (routeStart) {
-                                        RouteStart.PDR -> R.string.route_from_position
-                                        RouteStart.GPS -> R.string.route_from_gps
-                                        RouteStart.ENTRANCE -> R.string.route_from_entrance
-                                    },
-                                )
+                            val building = target?.building?.name
+                            // Sala u zgradi sa spratovima: i sprat. Ako sala nije ucrtana, to piše ispod.
+                            val where = when {
+                                building == null || building == destination || target.approximate -> null
+                                indoorBuilding(target.node.buildingId) != null ->
+                                    stringResource(R.string.building_with_floor, building, floorName(target.node.floor))
+                                else -> building
                             }
-                            stringResource(R.string.route_summary, route.minutes, route.lengthM.toInt()) + " · " + from
+                            val from = when {
+                                leg != null -> planFromText(leg)
+                                routeStart == RouteStart.ENTRANCE -> stringResource(R.string.route_from_entrance)
+                                !developerMode -> null
+                                routeStart == RouteStart.PDR -> stringResource(R.string.route_from_position)
+                                else -> stringResource(R.string.route_from_gps)
+                            }
+                            listOfNotNull(stringResource(R.string.route_summary, route.minutes, route.lengthM.toInt()), where, from)
+                                .joinToString(" · ")
                         }
                     }
-                    Text(
-                        details,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    // Plan dana: pauza pred stavkom (ili do kad se kreće); gužva "sada" tu ne važi - ruta je za vreme dolaska.
-                    val timing = leg?.let { planTimingText(it) }
-                    if (timing != null) {
-                        Text(
-                            timing.replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (leg.tooTight) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (route != null && crowdPercent != null && plan == null) {
-                        Text(
-                            stringResource(R.string.route_crowd, crowdPercent),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    RouteCardLine(details, colors.onSurfaceVariant)
+                    if (route != null && target?.approximate == true) {
+                        target.building?.name?.let { RouteCardLine(stringResource(R.string.route_to_building, it), colors.primary) }
                     }
                     // Podešavanje "Bez stepenica" / "Bez lifta" na ovoj ruti nije moguće.
                     if (route?.fallback == true) {
-                        Text(
+                        RouteCardLine(
                             stringResource(
                                 if (floorChange == FloorChange.BEZ_LIFTA) R.string.route_fallback_lift else R.string.route_fallback_stairs,
                             ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                            colors.error,
                         )
                     }
-                    val building = target?.building?.name
-                    if (route != null && building != null && building != destination) {
-                        // Sala u zgradi sa spratovima: i sprat.
-                        val where = if (!target.approximate && indoorBuilding(target.node.buildingId) != null) {
-                            stringResource(R.string.building_with_floor, building, floorName(target.node.floor))
-                        } else {
-                            building
-                        }
-                        Text(
-                            stringResource(if (target.approximate) R.string.route_to_building else R.string.route_in_building, where),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                    // Plan dana: pauza pred stavkom (ili do kad se kreće); gužva "sada" tu ne važi - ruta je za vreme dolaska.
+                    leg?.let { planTimingText(it) }?.let { timing ->
+                        RouteCardLine(timing.replaceFirstChar { it.uppercase() }, if (leg.tooTight) colors.error else colors.onSurfaceVariant)
                     }
-                    if (route != null) {
-                        TextButton(
-                            onClick = onShowSteps,
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                            modifier = Modifier.heightIn(min = 32.dp),
-                        ) {
-                            Text(stringResource(R.string.route_steps_open), style = MaterialTheme.typography.labelLarge)
-                        }
+                    if (developerMode && route != null && crowdPercent != null && plan == null) {
+                        RouteCardLine(stringResource(R.string.route_crowd, crowdPercent), colors.onSurfaceVariant)
+                    }
+                }
+                if (route != null) {
+                    TextButton(onClick = onShowSteps, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Text(stringResource(R.string.route_steps_title))
                     }
                 }
                 IconButton(onClick = onClear) {
@@ -909,7 +921,12 @@ private fun RouteBanner(
     }
 }
 
-/** Gornji red banera u planu dana: ‹ "Plan dana · 2/3" › (strelice samo gde postoji prethodna/sledeća ruta). */
+@Composable
+private fun RouteCardLine(text: String, color: Color) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = color)
+}
+
+/** Gornji red kartice rute u planu dana: ‹ "Plan dana · 2/3" › (strelice samo gde postoji prethodna/sledeća ruta). */
 @Composable
 private fun PlanHeader(plan: ShownPlan, onStep: (Int) -> Unit) {
     Row(
@@ -1242,49 +1259,47 @@ private fun HintBanner(text: String, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Donji panel Mape: odredište ili ruta ([destination] - dugme za izbor ili kartica rute), "Ovde sam" i Start/Stop. U
+ * [developerMode] i brojači PDR-a (koraci, smer, odstupanje telefona, pređeno) i Reset.
+ */
 @Composable
 private fun ControlPanel(
     state: PocUiState,
-    hasDestination: Boolean,
+    developerMode: Boolean,
     canPickPosition: Boolean,
     canStartTracking: Boolean,
-    onChooseDestination: () -> Unit,
     onPickStartToggle: () -> Unit,
     onTrackingToggle: () -> Unit,
     onReset: () -> Unit,
+    destination: @Composable () -> Unit,
 ) {
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Column(
             Modifier
                 .navigationBarsPadding()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                StatItem(stringResource(R.string.poc_stat_steps), state.steps.toString())
-                StatItem(
-                    stringResource(R.string.poc_stat_heading),
-                    stringResource(R.string.poc_heading_value, state.headingDeg.toInt()),
-                )
-                StatItem(
-                    stringResource(R.string.poc_stat_phone_offset),
-                    state.phoneOffsetDeg?.let { stringResource(R.string.poc_phone_offset_value, it.roundToInt()) }
-                        ?: stringResource(R.string.poc_phone_offset_settling),
-                )
-                StatItem(
-                    stringResource(R.string.poc_stat_distance),
-                    stringResource(R.string.poc_distance_value, state.distanceM),
-                )
+            if (developerMode) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    StatItem(stringResource(R.string.poc_stat_steps), state.steps.toString())
+                    StatItem(
+                        stringResource(R.string.poc_stat_heading),
+                        stringResource(R.string.poc_heading_value, state.headingDeg.toInt()),
+                    )
+                    StatItem(
+                        stringResource(R.string.poc_stat_phone_offset),
+                        state.phoneOffsetDeg?.let { stringResource(R.string.poc_phone_offset_value, it.roundToInt()) }
+                            ?: stringResource(R.string.poc_phone_offset_settling),
+                    )
+                    StatItem(
+                        stringResource(R.string.poc_stat_distance),
+                        stringResource(R.string.poc_distance_value, state.distanceM),
+                    )
+                }
             }
-            OutlinedButton(onClick = onChooseDestination, modifier = Modifier.fillMaxWidth()) {
-                Icon(painterResource(R.drawable.ic_place), contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    stringResource(
-                        if (hasDestination) R.string.route_change_destination else R.string.route_choose_destination,
-                    ),
-                )
-            }
+            destination()
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1309,8 +1324,10 @@ private fun ControlPanel(
                 ) {
                     Text(stringResource(if (state.isTracking) R.string.poc_stop else R.string.poc_start))
                 }
-                TextButton(onClick = onReset) {
-                    Text(stringResource(R.string.poc_reset))
+                if (developerMode) {
+                    TextButton(onClick = onReset) {
+                        Text(stringResource(R.string.poc_reset))
+                    }
                 }
             }
         }

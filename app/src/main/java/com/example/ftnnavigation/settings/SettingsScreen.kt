@@ -44,8 +44,8 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Podešavanja aplikacije (podekran sa Početne): mapa (auto-rotacija, dužina koraka), ruta (stepenice / lift) i obaveštenja o polasku
- * ([DepartureSettings]).
+ * Podešavanja aplikacije (podekran sa Početne): mapa (auto-rotacija, dužina koraka), ruta (stepenice / lift), obaveštenja o polasku
+ * ([DepartureSettings]) i režim za razvoj.
  */
 @Composable
 fun SettingsScreen(
@@ -57,6 +57,8 @@ fun SettingsScreen(
     onFloorChangeChange: (FloorChange) -> Unit,
     crowdRouting: Boolean,
     onCrowdRoutingChange: (Boolean) -> Unit,
+    developerMode: Boolean,
+    onDeveloperModeChange: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -97,6 +99,13 @@ fun SettingsScreen(
             )
             SectionHeader(stringResource(R.string.notifications_title))
             DepartureSettings()
+            SectionHeader(stringResource(R.string.settings_section_developer))
+            SettingsSwitchCard(
+                title = stringResource(R.string.settings_developer_title),
+                body = stringResource(R.string.settings_developer_body),
+                checked = developerMode,
+                onCheckedChange = onDeveloperModeChange,
+            )
         }
     }
 }

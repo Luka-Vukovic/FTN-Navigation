@@ -45,6 +45,15 @@ object AppSettings {
     private const val KEY_RECENTS = "recent_destinations"
     private const val KEY_STEP_LENGTH = "step_length_m"
     private const val KEY_STEP_SAMPLES = "step_length_samples"
+    private const val KEY_DEVELOPER_MODE = "developer_mode"
+
+    /**
+     * Režim za razvoj: Mapa prikazuje i ono što služi samo za teren i razvoj (graf, brojače PDR-a, prekidače ispravke smera i
+     * lepljenja, Reset, grešku smera posle "Ovde sam"). Podrazumevano isključeno - običan korisnik vidi samo navigaciju.
+     */
+    fun developerMode(context: Context): Boolean = prefs(context).getBoolean(KEY_DEVELOPER_MODE, false)
+
+    fun setDeveloperMode(context: Context, enabled: Boolean) = prefs(context).edit { putBoolean(KEY_DEVELOPER_MODE, enabled) }
 
     /** Mapa se okreće za po 90° po smeru korisnika; podrazumevano isključeno. */
     fun autoRotateMap(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_ROTATE_MAP, false)

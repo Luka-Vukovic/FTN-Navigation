@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.campus.CampusData
+import com.example.ftnnavigation.campus.NextManeuver
 import com.example.ftnnavigation.campus.RouteStep
 import com.example.ftnnavigation.campus.Side
 import com.example.ftnnavigation.campus.StepKind
@@ -144,4 +145,12 @@ private fun stepDetail(step: RouteStep): String? = when (step.kind) {
         null -> step.floor?.let { floorName(it) }?.takeIf { step.name == null }
     }
     else -> null
+}
+
+/** Sledeći manevar na kartici rute: "Za ~10 m: Skreni levo" (sada - bez daljine), uz drugi red uputstva ("vrata su levo"). */
+@Composable
+internal fun nextManeuverText(next: NextManeuver, campus: CampusData): String {
+    val title = stepTitle(next.step, campus)
+    val text = if (next.walkM >= 1.0) stringResource(R.string.route_next_in, roundedMeters(next.walkM), title) else title
+    return listOfNotNull(text, stepDetail(next.step)).joinToString(" · ")
 }

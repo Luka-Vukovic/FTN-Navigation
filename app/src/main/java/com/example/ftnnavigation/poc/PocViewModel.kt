@@ -239,6 +239,15 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         AppSettings.setAutoRotateMap(getApplication(), enabled)
     }
 
+    /** Režim za razvoj (Podešavanja): graf, brojači, prekidači za teren i greška smera na Mapi. */
+    var developerMode by mutableStateOf(AppSettings.developerMode(application))
+        private set
+
+    fun updateDeveloperMode(enabled: Boolean) {
+        developerMode = enabled
+        AppSettings.setDeveloperMode(getApplication(), enabled)
+    }
+
     /** Dužina koraka (Podešavanja): koliko tačka pređe po koraku. Važi od sledećeg koraka, i usred praćenja. */
     var stepLengthM by mutableStateOf(AppSettings.stepLengthM(application))
         private set
@@ -790,8 +799,11 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         updatePosition(before, PlaceReason.RUCNO)
         if (check != null) {
             recorder?.headingCheck(SystemClock.elapsedRealtimeNanos(), place, check)
-            val app = getApplication<Application>()
-            Toast.makeText(app, headingCheckText(app, check), Toast.LENGTH_LONG).show()
+            // Greška smera je merilo za teren - ispravka radi i bez poruke.
+            if (developerMode) {
+                val app = getApplication<Application>()
+                Toast.makeText(app, headingCheckText(app, check), Toast.LENGTH_LONG).show()
+            }
         }
     }
 

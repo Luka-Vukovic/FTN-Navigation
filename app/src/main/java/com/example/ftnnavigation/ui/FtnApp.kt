@@ -230,6 +230,8 @@ fun FtnApp() {
                     onFloorChangeChange = mapViewModel::updateFloorChange,
                     crowdRouting = mapViewModel.crowdRouting,
                     onCrowdRoutingChange = mapViewModel::updateCrowdRouting,
+                    developerMode = mapViewModel.developerMode,
+                    onDeveloperModeChange = mapViewModel::updateDeveloperMode,
                     onBack = { navController.popBackStack() },
                 )
             }

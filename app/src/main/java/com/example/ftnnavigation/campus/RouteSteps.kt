@@ -402,3 +402,17 @@ private fun distanceToSegment(p: PointM, a: PointM, b: PointM): Double {
     val t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).coerceIn(0.0, 1.0)
     return distance(p, PointM(a.x + t * dx, a.y + t * dy))
 }
+
+/** Sledeći manevar uputstva ([step]) i hod do njega ([walkM]; 0 = sada) - za karticu rute na Mapi. */
+data class NextManeuver(val step: RouteStep, val walkM: Double)
+
+/**
+ * Sledeći manevar iz uputstva [steps]: posle početnog hoda (KRENI - od pozicije, ulaza ili lokacije) drugi korak, u daljini
+ * tog hoda; inače prvi korak, sada (izlazak iz sale, već na cilju). Za vreme praćenja ruta kreće od pozicije, pa se
+ * manevar sa svakim korakom približava. null - nema koraka, ili samo "kreni".
+ */
+fun nextManeuver(steps: List<RouteStep>): NextManeuver? {
+    val first = steps.firstOrNull() ?: return null
+    if (first.kind != StepKind.KRENI) return NextManeuver(first, 0.0)
+    return steps.getOrNull(1)?.let { NextManeuver(it, first.walkM) }
+}
