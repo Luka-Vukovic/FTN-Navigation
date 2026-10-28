@@ -108,6 +108,23 @@ class NtpGraphTest {
         assertTrue(a.id != b.id && a.floor == 1 && b.floor == 1)
     }
 
+    /**
+     * Teren 28.10.2026 (korisnik nacrtao na snimku ekrana I sprata): duž desnog hodnika od fasade redom 115, 116, 117, 118; svaka
+     * soba svoja vrata na hodnik, upravno.
+     */
+    @Test
+    fun firstFloor_115to118_inOrderAlongRightCorridor() {
+        val rooms = (115..118).map { checkNotNull(graph.room("NTP-$it")) { "NTP-$it" } }
+        assertTrue(rooms.all { it.floor == 1 })
+        assertEquals(rooms.sortedBy { it.y }, rooms)
+        val doors = rooms.map { room -> graph.neighbors(room.id).map { it.first }.single { it.type == NodeType.VRATA } }
+        assertEquals(4, doors.map { it.id }.distinct().size)
+        for (door in doors) {
+            val corridor = graph.neighbors(door.id).map { it.first }.single { it.type == NodeType.HODNIK }
+            assertEquals(door.id, door.y, corridor.y, 1e-4f)
+        }
+    }
+
     @Test
     fun routeToThirdFloor_changesFloorsOnce() {
         val route = checkNotNull(graph.route(NtpPlan.ENTRANCE_ID, graph.room("NTP-307")!!.id))

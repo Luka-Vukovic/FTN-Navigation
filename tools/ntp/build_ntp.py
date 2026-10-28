@@ -141,12 +141,22 @@ TYPICAL = {
 # hodnika (na II-IV jedna soba, 16) ima pregrade na x 1575 i 1785: T1 i T2 (dvokrilna vrata dole, na pregradi) i T3
 # (desno, ulaz sa kraja srednjeg hodnika, koji se završava vratima na x 1785). Soba 17 je samo donji deo
 # (1825-2083 x 1400-1590), ulazi se iz T3 odozgo. Donji hodnik se završava dvokrilnim vratima (x 1765).
-# Polovine 14 i 15 (115-118) su ovde nacrtane.
+# Polovine 14 i 15 (115-118) su ovde nacrtane (do 28.10.2026; sada FIRST_RIGHT).
 # Teren 17.10.2026 (korisnik: "izmišljeni hodnik na I spratu ... između S2 stepenica i 114 - uporedi sa planom"): na I spratu
 # srednji hodnik zapadno od desnog hodnika ne postoji (na II-IV postoji). Sa fotografije (w1.png): iznad S2 soba sa vratima na
 # glavni hodnik; dve sobe pune dubine (1280-1556; pregrade x 865, 1015) sa vratima ka donjem hodniku (x 830 i 900); iznad
 # toaleta soba sa vratima na desni hodnik; blok toaleta sa ulazom odozdo (x 1130). Koja je 139, a koja 140 - redom kao ranije
 # (sleva), PRETPOSTAVKA.
+# 115-118 (teren 28.10.2026, korisnik nacrtao na snimku ekrana): 115 = soba 14 do fasade (sa sobom iznad nje), 116 = soba 15 i
+# gornja polovina 16 zajedno, 117 = donja polovina 16 (do 28.10. 115-118 su bile četiri četvrtine 817-1280), 118 = soba iznad
+# toaleta (FIRST_MID_ROOMS). Vrata na desni hodnik sa snimka (ivice soba i vrata PRETPOSTAVKA, ~0,5 m).
+FIRST_RIGHT_ROOMS = [
+    [(1073, 591), (1100, 610), (1301, 759), (1301, 929), (1073, 929)],  # 115
+    [(1073, 929), (1301, 929), (1301, 1160), (1073, 1160)],  # 116
+    [(1073, 1160), (1301, 1160), (1301, 1280), (1073, 1280)],  # 117
+]
+FIRST_RIGHT = {"115": ((1187, 790), (1301, 844), "R844"), "116": ((1187, 1045), (1301, 1072), "R1072"),
+               "117": ((1187, 1220), (1301, 1193), "R1193"), "118": ((1158, 1340), (1301, 1307), "R1307")}
 FIRST_MID_ROOMS = [
     [(451, 1280), (699, 1280), (699, 1397), (451, 1397)],  # iznad S2, vrata na glavni hodnik
     [(699, 1280), (865, 1280), (865, 1556), (699, 1556)],  # 18 (139)
@@ -180,7 +190,7 @@ FIRST = {
         [(710, 335), (933, 491), (933, 591), (710, 591)],  # iznad gornjeg hodnika, do fasade
         *[[(a, 680), (b, 680), (b, 827), (a, 827)] for a, b in ((767, 867), (867, 967), (967, 1073))],
         *TYPICAL["rooms"][10:14],  # srednji red, velika sala
-        *[[(1073, a), (1301, a), (1301, b), (1073, b)] for a, b in ((817, 929), (929, 1040), (1040, 1160), (1160, 1280))],
+        *FIRST_RIGHT_ROOMS,  # 115-117 (teren 28.10.2026)
         [(1402, 834), (1575, 962), (1575, 1280), (1402, 1280)],  # T1 (120)
         [(1575, 962), (1747, 1090), (1785, 1123), (1785, 1280), (1575, 1280)],  # T2 (121)
         [(1785, 1123), (2075, 1378), (2076, 1400), (1785, 1400)],  # T3 (122)
@@ -189,7 +199,7 @@ FIRST = {
         [(1765, 1400), (1825, 1400), (1825, 1590), (1765, 1590)],  # prolaz iz T3 nadole (nije u grafu)
         [(1765, 1590), (2083, 1590), (2081, 1660), (1765, 1660)],  # 124
         *FIRST_MID_ROOMS,  # umesto srednjeg hodnika i donjeg srednjeg reda (teren 17.10.2026)
-        *TYPICAL["rooms"][21:],  # kancelarije, toalet uz liftove, soba iznad 14
+        *TYPICAL["rooms"][21:36],  # kancelarije, toalet uz liftove (soba iznad 14 je deo 115)
     ],
     "stairs": TYPICAL["stairs"],
     "shafts": TYPICAL["shafts"],
@@ -303,8 +313,6 @@ TYPICAL_DOORS = {
 # potvrđuje redosled: "115 je najbliže zidu zgrade, pa redom do hodnika 115, 116, 117, 118"; "320 je bliže 317-319, onda
 # ide 321"; "322 je bliže 321, a 323 je bliže 324. U 323 se ulazi preko 322"; "223 i 224 analogno 322 i 323" (VIA_FIRST).
 SPLIT_DOORS = {
-    14: [((1187, 873), (1301, 873), "R930"), ((1187, 985), (1301, 985), "R930")],
-    15: [((1187, 1100), (1301, 1100), "R1160"), ((1187, 1220), (1301, 1220), "R1160")],
     16: [((1500, 1057), (1500, 1280), "C1494"), ((1720, 1057), (1720, 1280), "C1795")],
     17: [((1952, 1260), (1822, 1334), "C1795"), ((1952, 1460), (1822, 1470), "K1795")],
     18: [((755, 1473), (755, 1389), "C815"), ((871, 1473), (871, 1389), "C870")],  # III: 313 | 314 (pregrada x 812)
@@ -315,7 +323,7 @@ ABOVE_RIGHT = ((1170, 765), (1301, 805), "R830")  # iznad sobe 14, levo od poče
 # Destinations.kt), osim podeljenih soba (SPLIT_DOORS). 111 (I sprat, "između 112 i lifta") nije ucrtan.
 TYPICAL_LABELS = {
     1: [(1, 106), (2, 107), (3, 108), (4, 109), ("110", 110), (10, 111), (11, 112), (12, 113), ("above_s2", 114),
-        (14, (115, 116)), (15, (117, 118)), (18, 139), (19, 140),  # 119-124: first_suite
+        ("115", 115), ("116", 116), ("117", 117), ("118", 118), (18, 139), (19, 140),  # 119-124: first_suite
         *[(21 + i, 138 - i) for i in range(14)]],
     2: [(1, 208), (2, 209), (3, 210), (4, 211), (6, 202), (10, 212), (11, 213), (12, 214), (14, 218), (15, 217),
         (16, (221, 222)), (17, (223, 224)), (18, 215), (19, 216), ("above", 219), *[(21 + i, 238 - i) for i in range(14)]],
@@ -327,7 +335,7 @@ TYPICAL_LABELS = {
         (14, 416), (15, 415), (16, 417), (17, 418), (18, 413), (19, 414), ("corner", 419),
         *[(21 + i, 433 - i) for i in range(14)]],
 }
-SPLIT = {1: {14, 15}, 2: {17}, 3: {16, 17, 18}}
+SPLIT = {2: {17}, 3: {16, 17, 18}}
 # Pregrade podeljenih soba na crtežu II-IV (I sprat ima svoje, FIRST): sredina između vrata polovina, do fasade.
 SPLIT_SHAPES = {
     16: [[(1402, 834), (1612, 990), (1612, 1280), (1402, 1280)],
@@ -343,7 +351,9 @@ SPLIT_SHAPES_3 = {
     16: [[(1402, 1146), (1570, 1146), (1570, 1280), (1402, 1280)],
          [(1402, 834), (1747, 1090), (1822, 1146), (1822, 1280), (1570, 1280), (1570, 1146), (1402, 1146)]],
 }
-SPLIT_DOORS_3 = {16: [((1486, 1213), (1500, 1280), "C1494"), ((1690, 1180), (1720, 1280), "C1795")]}
+# Teren 28.10.2026 (korisnik: "Bliže su vrata, do 320", "Vrata su bliže nego što je nacrtano"): vrata 321 odmah desno od 320 (do
+# tada x 1720, na C1795) - x 1600, na čvor C1600 naspram njih (mesto PRETPOSTAVKA).
+SPLIT_DOORS_3 = {16: [((1486, 1213), (1500, 1280), "C1494"), ((1690, 1180), (1600, 1280), "C1600")]}
 
 
 def split_shapes(f):
@@ -554,17 +564,19 @@ def typical_floor(g, f):
     # Glavni hodnik: čvorovi naspram vrata soba uz njega (WEST_ROOMS) i stalni (stepeništa, raskrsnice).
     main = sorted({380, 450, 508, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608} |
                   {spec[2] for spec in WEST_ROOMS.get(f, {}).values() if spec} | ({1365} if f == 1 else set()))
+    # Desni hodnik: I sprat ima čvorove naspram vrata 115-118 (FIRST_RIGHT).
+    right = sorted({830, 930, 1160} | ({int(a[1:]) for _, _, a in FIRST_RIGHT.values()} if f == 1 else set()))
     points(g, f, {
         **{f"M{y}": (400, y) for y in main},
         "U513": LIFT_EXIT, "U640": (640, 595), **top, **{f"U{x}": (x, LIFT_EXIT[1]) for x in L1_CABIN_EXITS},
-        **{f"R{y}": (1350, y) for y in (830, 930, 1160)},
+        **{f"R{y}": (1350, y) for y in right},
         **{f"C{x}": (x, 1334) for x in (560, 815, 870, 983, 1170, 1350, 1494, 1600, 1795)},
         "K1350": (1350, 1470), "K1795": (1795, 1470),
         **{f"B{x}": (x, 1608) for x in OFFICES[1:]},
     })
     g.chain(f, [f"M{y}" for y in main])
     g.chain(f, ["M595", "U486", "U513", "U541", "U640", *sorted(top, key=lambda k: top[k][0])])
-    g.chain(f, ["R830", "R930", "R1160", "C1350", "K1350", "B1343"])
+    g.chain(f, [*[f"R{y}" for y in right], "C1350", "K1350", "B1343"])
     if f == 1:
         # I sprat: hol 119 se završava vratima T3 (x 1785), a sa kraja srednjeg hodnika nema prolaza u donji (sobe 122, 124).
         # Srednjeg hodnika zapadno od desnog nema (teren 17.10.2026, FIRST_MID_ROOMS).
@@ -602,6 +614,8 @@ def typical_floor(g, f):
             spec = ABOVE_RIGHT
         elif room == "corner":
             spec = CORNER_419
+        elif f == 1 and room in FIRST_RIGHT:
+            spec = FIRST_RIGHT[room]
         elif f == 1 and room in FIRST_MID_DOORS:
             spec = FIRST_MID_DOORS[room]
         elif f == 1 and room == "110":

@@ -1526,6 +1526,80 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("KULA", 1), locator.place)
     }
 
+    /** Smer na planu zgrade [buildingId] (0 = gore, sa snimka - kolona "smer" replay-a) u magnetski azimut. */
+    private fun planAzimuth(buildingId: String, onPlan: Float): Float =
+        onPlan + graph.placement(buildingId).rotationDeg.toFloat() - declination
+
+    /** (smer na planu, dužina, znak stepenica) sa snimka, "smer|dužina|znak" razdvojeno razmakom. */
+    private fun steps(recorded: String): List<Triple<Float, Float, Float>> =
+        recorded.trim().split(Regex("\\s+")).map { s -> s.split("|").map { it.toFloat() }.let { Triple(it[0], it[1], it[2]) } }
+
+    /**
+     * Teren 28.10.2026 (hod-20261028-100906, 513-564 s): na II spratu Kule šetao hodnikom uz jezgro i okretao se (znak stepenica
+     * −0,95..0,46), pa spiralom na I (znak 0,6-1,6). Okret ~350° na II je bio "pun krug" -> I sprat 15 s pre pravog silaska.
+     */
+    @Test
+    fun kulaSecondFloor_turningWithoutStairGait_floorChangesOnlyOnStairs() {
+        val recorded = steps(
+            """
+            227|0.46|0.25 211|0.44|0.40 201|0.25|0.32 201|0.76|-0.19 199|0.22|0.33 203|0.32|-0.08 213|0.72|0.16 224|0.74|0.46
+            235|0.42|-0.01 250|0.76|0.03 263|0.76|0.32 275|0.76|0.69 287|0.76|0.41 293|0.73|0.46 303|0.70|-0.22 15|0.76|-0.95
+            64|0.76|0.03 108|0.65|0.02 109|0.75|0.11 95|0.35|-0.40 76|0.31|-0.78 52|0.32|-0.02 34|0.24|-0.44 26|0.64|-0.13
+            20|0.50|-0.05 17|0.76|-0.38 19|0.36|-0.22 20|0.16|-0.19 29|0.30|-0.48 18|0.16|-0.10 318|0.45|-0.95 263|0.36|-0.54
+            165|0.59|-0.03 147|0.18|0.07 137|0.24|-0.58 129|0.23|-0.20 122|0.23|-0.15 119|0.76|0.62 125|0.76|0.70 130|0.76|0.24
+            129|0.76|1.36 124|0.76|1.40 117|0.76|1.06 100|0.76|0.91 76|0.76|0.75 43|0.76|0.50 29|0.76|1.65 10|0.76|1.09
+            349|0.20|0.47 324|0.76|0.52 311|0.76|1.13 303|0.76|1.16 299|0.76|1.51 299|0.76|0.98 294|0.76|0.93 279|0.76|0.22
+            259|0.76|0.32 250|0.76|0.92 259|0.76|0.61 277|0.76|1.00 312|0.76|-0.31 10|0.19|-0.58 54|0.16|-0.73
+            """,
+        )
+        val firstStair = 37
+        // Šetanje po II: ni od čvora stepeništa, ni posle okreta - sprat ostaje.
+        val walking = locatorAt("KULA-2-S")
+        val reasons = recorded.take(firstStair).mapNotNull { (h, len, gait) -> walking.step(planAzimuth("KULA", h), len, stairScore = gait) }
+        assertTrue("$reasons", PlaceReason.STEPENICE !in reasons)
+        assertEquals(PdrPlace("KULA", 2), walking.place)
+        // Silazak sa početka stepeništa (gde je korisnik tada bio).
+        val descent = locatorAt("KULA-2-S")
+        val down = recorded.drop(firstStair).mapNotNull { (h, len, gait) -> descent.step(planAzimuth("KULA", h), len, stairScore = gait) }
+        assertEquals("$down", listOf(PlaceReason.STEPENICE), down)
+        assertEquals(PdrPlace("KULA", 1), descent.place)
+    }
+
+    /**
+     * Teren 28.10.2026 (hod-20261028-100906, 576-598 s, kula-down): "Ovde sam" ~3 m pre prvog stepenika na I spratu Kule, 5 koraka
+     * po podestu (znak −0,65..0,04), pa spiralom u prizemlje. Koraci po podestu su brojani kao gazišta, prvi krak je "završen"
+     * pre skretanja, a tačka je sišla sa spirale u prolaz ka NB-u (korisnik: "Nije uspelo iz nekog razloga").
+     */
+    @Test
+    fun kulaSpiral_landingStepsBeforeFirstTread_descentReachesGroundFloor() {
+        val recorded = steps(
+            """
+            91|0.63|-0.65 91|0.76|0.04 87|0.24|-0.48 88|0.76|-0.09 99|0.63|-0.02 110|0.76|0.67 116|0.76|1.03 119|0.76|0.97
+            119|0.76|0.45 117|0.76|0.88 113|0.76|0.52 99|0.76|0.51 65|0.76|1.10 39|0.76|1.12 11|0.76|1.36 349|0.76|0.87
+            324|0.76|0.36 312|0.76|0.95 301|0.76|0.62 299|0.76|0.85 294|0.76|0.78 284|0.76|1.26 271|0.76|0.75 260|0.25|0.25
+            242|0.76|-0.27 237|0.76|0.73 243|0.76|0.60 258|0.76|0.56 287|0.35|-0.79 315|0.37|-0.74 345|0.76|-0.78
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("KULA", 1), Offset(0.49695125f, 0.564943f), measure = false)
+        }
+        val reasons = recorded.mapNotNull { (h, len, gait) -> locator.step(planAzimuth("KULA", h), len, stairScore = gait) }
+        assertEquals("$reasons", listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("KULA", 0), locator.place)
+    }
+
+    /** Hod pored stepeništa pravcem prvog kraka naniže (bez znaka stepenica) nije silazak - sprat ostaje. */
+    @Test
+    fun kulaSpiral_corridorPastStairsWithoutStairGait_staysOnFloor() {
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("KULA", 1), Offset(0.49695125f, 0.564943f), measure = false)
+        }
+        // Istok sa stepeništa je i prolaz ka NB-u (isti sprat).
+        val reasons = (1..14).mapNotNull { locator.step(planAzimuth("KULA", 90f), stepM, stairScore = -0.2f) }
+        assertTrue("$reasons", PlaceReason.STEPENICE !in reasons)
+        assertEquals(1, locator.place.floor)
+    }
+
     /** Kruženje hodnikom oko jezgra Kule (IV sprat, strane od 10 koraka) nije stepenište. */
     @Test
     fun kulaCorridorLoopAroundCore_noFloorChange() {
@@ -1601,6 +1675,40 @@ class PdrLocatorTest {
         val end = PointM(start.x + 0.75 * 30, start.y)
         assertEquals(PdrPlace.CAMPUS, locator.place)
         assertTrue("${distance(locator.position(), end)} m od GPS-a", distance(locator.position(), end) < 3.0)
+    }
+
+    /**
+     * Teren 28.10.2026 (NB -> NTP u džepu, ekran ugašen ~5 min): ulazak na glavni ulaz FTN-a dobar, pa ~25 m kroz hol ka zapadu
+     * - koraci zamrznutim smerom su tačku vodili na drugu stranu ("Ovde sam" 21,9 m), a GPS (tačnost 5-9 m) je pratio hod. U
+     * prizemlju, dok je smer zamrznut, korak ide pravcem GPS-a.
+     */
+    @Test
+    fun headingFrozenIndoors_groundFloor_stepsFollowGpsCourse() {
+        val start = graph.position(node("NTP-0-ULAZ"))
+        // "Ovde sam" na snimku (1543,9 s) - gde je korisnik stvarno bio.
+        val end = PointM(49.9, 267.6)
+        val n = 32
+        val misses = listOf(true, false).map { gps ->
+            // Spolja na ulaz (pravac GPS-a u zgradi važi samo posle ulaska).
+            val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+                setPosition(PdrPlace.CAMPUS, campusOffset(graph.position(node("K-U-NTP-3"))), measure = false)
+                setPosition(PdrPlace("NTP", 0), Offset(node("NTP-0-ULAZ").x, node("NTP-0-ULAZ").y), measure = false)
+            }
+            locator.headingFrozen = true
+            repeat(n) { i ->
+                val t = (i + 1) * 600_000_000L
+                val k = (i + 1).toDouble() / n
+                val at = PointM(start.x + (end.x - start.x) * k, start.y + (end.y - start.y) * k)
+                if (gps) locator.onGps(GpsFix(at, 6f, elapsedNs = t), tracking = true)
+                // Smer zamrznut pravcem ulaska (ka jugu, uz zid), korisnik ide kroz hol.
+                locator.step(magneticAzimuth(start, PointM(start.x + 2.0, start.y + 10.0)), 0.75f, timeNs = t)
+            }
+            assertEquals(PdrPlace("NTP", 0), locator.place)
+            distance(locator.position(), end)
+        }
+        // Tačka prati hodnike (prava linija GPS-a ide kroz zidove), pa ne stiže sasvim; zamrznutim smerom je ~25 m daleko.
+        val (withGps, frozen) = misses
+        assertTrue("$misses", withGps < 12.5 && withGps < frozen - 10)
     }
 
     /**

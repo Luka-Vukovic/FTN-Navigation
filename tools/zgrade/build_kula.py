@@ -133,12 +133,19 @@ def floor_1():
     }
 
 
+# II sprat (teren 28.10.2026, korisnik nacrtao pravougaonik na snimku ekrana: "nije moguć krug oko lifta"): zapadno od lifta, uz
+# ceo lift, nema prolaza - hodnik oko lifta je otvoren prsten; vrata 206 i 207 se kače na krajeve zapadne strane. Šta je u
+# pravougaoniku (zid, ostava) nije poznato - crta se kao soba bez naziva.
+RING_2 = [[(215, 447), (215, 437), (274, 437), (274, 495), (215, 495), (215, 478)]]
+
+
 def floor_2():
     return {
         "title": "2. sprat",
-        "paths": RING,
+        "paths": RING_2,
         "corridors": [rect_poly(207, 427, 287, 511), rect_poly(262, 420, 333, 462)],
         "rooms": [
+            R(207, 224, 447, 478),
             R(155, 225, 375, 427, k("204/205"), door=(215, 427)), R(225, 262, 375, 427, k(203)),
             R(262, 333, 375, 420, k(202), door=(270, 420)),
             *col(155, 207, [(427, 465, k(206)), (465, 511, k(207))]),
