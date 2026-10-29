@@ -509,7 +509,7 @@ private fun FloorPlan(
             Modifier
                 .zoomPanLayer(zoom, aspect = painter.intrinsicSize.width / painter.intrinsicSize.height)
                 // Posle zoomPanLayer (graphicsLayer): dodir stiže u koordinatama plana (zum, rotacija i pomeraj već skinuti).
-                .pointerInput(isPickingStart, onTap, rooms, building) {
+                .pointerInput(isPickingStart, onTap, rooms, building, showGraph) {
                     if (isPickingStart) {
                         detectTapGestures { tap ->
                             onTap(Offset(tap.x / size.width, tap.y / size.height))
@@ -520,7 +520,7 @@ private fun FloorPlan(
                                 val k = 1f / zoom.scale
                                 val slop = LABEL_TOUCH_SLOP.toPx() * k
                                 val rotation = zoom.rotationDeg
-                                val hit = placeRoomLabels(rooms, building, size.toSize(), textMeasurer, labelStyle, rotation)
+                                val hit = placeRoomLabels(rooms, building, size.toSize(), textMeasurer, labelStyle, rotation, centered = !showGraph)
                                     .filter {
                                         Rect(it.topLeft, it.layout.size.toSize()).inflate(slop).contains(it.inLabelFrame(at, rotation)) ||
                                             (it.dot - at).getDistance() <= ROOM_DOT_RADIUS.toPx() * k + slop
@@ -643,8 +643,9 @@ private fun Node.planLabel(building: IndoorBuilding): String =
 
 /**
  * Natpisi sala na planu veličine [size]. Natpis je deo plana (raste sa zumom, kao tekst na pravom planu) da bi
- * stao u sobu, i na strani sobe dalje od hodnika, da ga ivica ka hodniku ne preseca. Na zarotiranoj mapi
- * ([rotationDeg]) natpis ostaje uspravan, na istoj strani sobe.
+ * stao u sobu. [centered]: u sredini sobe (čvor sale je u sredini; teren 29.10.2026: "da budu u sredini prostorije,
+ * vidljivije"); inače (režim za razvoj, graf na planu) na strani sobe dalje od hodnika, da ga ivica ka hodniku ne
+ * preseca. Na zarotiranoj mapi ([rotationDeg]) natpis ostaje uspravan, na istoj strani sobe.
  */
 private fun Density.placeRoomLabels(
     rooms: List<Node>,
@@ -653,6 +654,7 @@ private fun Density.placeRoomLabels(
     textMeasurer: TextMeasurer,
     labelStyle: TextStyle,
     rotationDeg: Float,
+    centered: Boolean,
 ): List<PlacedRoomLabel> {
     val labelHeight = building.labelHeight
     val style = labelStyle.copy(fontSize = (size.height * labelHeight).toSp())
@@ -664,7 +666,7 @@ private fun Density.placeRoomLabels(
         val height = label.size.height.toFloat()
         // Gore ili dole na planu - na ekranu (u ravni natpisa) taj pravac je zarotiran sa mapom.
         val away = Offset(0f, if (node.y < 0.5f) -1f else 1f).rotated(rotationDeg)
-        val center = dot + away * (gap + (abs(away.x) * width + abs(away.y) * height) / 2)
+        val center = if (centered) dot else dot + away * (gap + (abs(away.x) * width + abs(away.y) * height) / 2)
         PlacedRoomLabel(node, label, center - Offset(width / 2, height / 2), dot)
     }
 }
@@ -705,7 +707,7 @@ private fun DrawScope.drawGraph(
             }
         }
     }
-    for (label in placeRoomLabels(rooms, building, size, textMeasurer, labelStyle, rotationDeg)) {
+    for (label in placeRoomLabels(rooms, building, size, textMeasurer, labelStyle, rotationDeg, centered = !showGraph)) {
         rotate(-rotationDeg, pivot = label.dot) { drawText(label.layout, topLeft = label.topLeft) }
     }
 }

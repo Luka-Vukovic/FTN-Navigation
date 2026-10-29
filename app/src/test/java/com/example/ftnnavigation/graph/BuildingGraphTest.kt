@@ -156,7 +156,9 @@ class BuildingGraphTest {
         val profiles = listOf(
             RoutingProfile(), RoutingProfile(avoidStairs = true), RoutingProfile(avoidLift = true), RoutingProfile(crowdFactor = 1.7),
             RoutingProfile(buildingCrowd = mapOf("T" to 1.3, "NB" to 1.25)),
-        )
+            RoutingProfile(liftOnlyAvoidingStairs = emptySet()),
+        ).map { it.copy(stairwellChangeSec = 0.0) } // Dijkstra ispod ne pamti stepenište - kazna ima svoj test
+
         for ((g, step) in listOf(graph to 1, nbGraph to 5)) {
             for (profile in profiles) {
                 for (from in g.nodes.filterIndexed { i, _ -> i % step == 0 }) {
@@ -194,6 +196,50 @@ class BuildingGraphTest {
         val crowdedBoth = g.route("S", "T", RoutingProfile(buildingCrowd = mapOf("X" to 1.3, "Y" to 1.2)))!!
         assertTrue(crowdedBoth.uses("Y"))
         assertEquals(plain.durationSec * 1.2, crowdedBoth.durationSec, 1e-5)
+    }
+
+    /**
+     * Zgrade A i B spojene u prizemlju i na I spratu; cilj na II spratu B. Kroz stepenište A do I, prolaz i stepenište B je
+     * pola sekunde brže od prolaza u prizemlju i jednog stepeništa - ali ruta ide jednim stepeništem (teren 29.10.2026,
+     * AMF -> NB 307 kroz I sprat Kule). Kazna nije u trajanju rute.
+     */
+    @Test
+    fun secondStairwell_avoidedUnlessMuchFaster() {
+        val nodes = listOf(
+            Node("A-0-H", "A", 0, 0.1f, 0.5f, NodeType.HODNIK),
+            Node("A-0-S", "A", 0, 0.2f, 0.5f, NodeType.STEPENISTE),
+            Node("A-1-S", "A", 1, 0.2f, 0.5f, NodeType.STEPENISTE),
+            Node("A-1-H", "A", 1, 0.3f, 0.5f, NodeType.HODNIK),
+            Node("B-0-H", "B", 0, 0.4f, 0.6f, NodeType.HODNIK),
+            Node("B-1-H", "B", 1, 0.4f, 0.5f, NodeType.HODNIK),
+            Node("B-0-S", "B", 0, 0.5f, 0.5f, NodeType.STEPENISTE),
+            Node("B-1-S", "B", 1, 0.5f, 0.5f, NodeType.STEPENISTE),
+            Node("B-2-S", "B", 2, 0.5f, 0.5f, NodeType.STEPENISTE),
+            Node("B-2-R", "B", 2, 0.6f, 0.5f, NodeType.PROSTORIJA, "R"),
+        )
+        val walk = listOf("A-0-H" to "A-0-S", "A-1-S" to "A-1-H", "A-1-H" to "B-1-H", "B-1-H" to "B-1-S", "A-0-H" to "B-0-H",
+            "B-0-H" to "B-0-S", "B-2-S" to "B-2-R")
+        val stairs = listOf("A-0-S" to "A-1-S", "B-0-S" to "B-1-S", "B-1-S" to "B-2-S")
+        val g = BuildingGraph(nodes, walk.map { (a, b) -> Edge(a, b, EdgeType.HOD) } + stairs.map { (a, b) -> Edge(a, b, EdgeType.STEPENICE) }, scale)
+
+        val noPenalty = g.route("A-0-H", "B-2-R", RoutingProfile(stairwellChangeSec = 0.0))!!
+        assertTrue(noPenalty.uses("A-1-S"))
+        val route = g.route("A-0-H", "B-2-R")!!
+        assertFalse(route.uses("A-1-S"))
+        assertTrue(route.uses("B-0-S"))
+        // Trajanje je stvarno vreme puta (bez kazne), samo malo duže od puta kroz dva stepeništa.
+        assertTrue(route.durationSec - noPenalty.durationSec in 0.0..1.0)
+    }
+
+    /** Lift u NB-u se po podrazumevanom ne koristi (ni do V sprata, gde ga nema); uz "bez stepenica" se koristi. */
+    @Test
+    fun nbLift_onlyWhenAvoidingStairs() {
+        val nb = IndoorPlan.parse(File("src/main/assets/nb.json").readText())
+        val ids = nb.nodes.map { it.id }.toSet()
+        val g = BuildingGraph(nb.graphNodes(), nb.graphEdges().filter { it.fromId in ids && it.toId in ids }, FloorScale(76f, 27.9f))
+        val toFourth = g.room("AH2")!!.id
+        assertTrue(g.route(NbPlan.ENTRANCE_ID, toFourth)!!.nodes.none { it.type == NodeType.LIFT })
+        assertTrue(g.route(NbPlan.ENTRANCE_ID, toFourth, RoutingProfile(avoidStairs = true))!!.nodes.any { it.type == NodeType.LIFT })
     }
 
     @Test(expected = IllegalArgumentException::class)

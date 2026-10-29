@@ -43,13 +43,15 @@ BUILDING = "NB"
 FLOORS = [-1, 0, 1, 2, 3, 4, 5]
 TOP_SLAB = (413, 368, 1038, 455)  # V sprat (prepare_screens.nb_top_slab, zaokruženo)
 
-STAIRS = [("S", (624, 318, 642, 377), (633, 382))]  # krak glavnog stepeništa (levo od lifta)
-LIFTS = [("L", (643, 330, 664, 372), (653, 382))]
+STAIRS = [("S", (624, 318, 647, 377), (633, 382))]  # krak glavnog stepeništa (levo od lifta)
+LIFTS = [("L", (647, 330, 668, 372), (653, 382))]
 # Glavno stepenište obilazi lift (teren 05.10.2026, crtež korisnika na snimku ekrana + virtuelna tura "nb stepenice.png"):
 # sa podesta sprata levo od lifta krak naviše, iza lifta (uz zapadni zid) međupodest, desno od lifta krak naniže.
 # Penje se levim krakom, okret udesno iza lifta, pa desnim krakom ka sledećem spratu - stiže se desno od lifta.
 # Na najnižem nivou (-1) krak naniže ne postoji (ne crta se, nema čvora S-D); V sprat ima drugi crtež (bez krakova).
-FLIGHTS = Flights(up=(624, 330, 643, 377), down=(664, 330, 691, 377), landing=(624, 311, 691, 330),
+# Krakovi su iste širine (teren 29.10.2026, korisnik; ranije levi 19 px, desni 27 px), lift između njih - samo crtež: čvorovi
+# i putanja ostaju (pomeranje za 2-3 px je u replay-u 17.10. promenilo map-matching kod dna kraka, sprat je ostao pogrešan).
+FLIGHTS = Flights(up=(624, 330, 647, 377), down=(668, 330, 691, 377), landing=(624, 311, 691, 330),
                   path=[(633, 382), (633, 320), (677, 320), (677, 382)])
 FLIGHTS_LOWEST = {**FLIGHTS, "draw_down": False}
 SPIRAL = ("S2", (908, 424, 928, 440), (918, 432))  # spiralno stepenište IV -> V sprat

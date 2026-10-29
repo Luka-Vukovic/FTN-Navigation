@@ -108,6 +108,16 @@ class CampusGraphTest {
         assertEquals(route.lengthM / 1.3, route.durationSec, 1e-6)
     }
 
+    /** Ručne dijagonale "romba" staza severozapadno od ITC-a (teren 29.10.2026): suprotna temena pravom linijom, preko ukrštanja. */
+    @Test
+    fun extraPathsNearItc_crossDiamond() {
+        for ((a, b) in listOf("K-2317759579" to "K-2317759548", "K-2317759554" to "K-2317759571")) {
+            val route = checkNotNull(graph.route(a, b))
+            assertEquals(listOf(a, "K-R1", b), route.nodes.map { it.id })
+            assertEquals(distance(position(a), position(b)), route.lengthM, 0.2)
+        }
+    }
+
     @Test
     fun buildingOfRoom_rules() {
         mapOf(

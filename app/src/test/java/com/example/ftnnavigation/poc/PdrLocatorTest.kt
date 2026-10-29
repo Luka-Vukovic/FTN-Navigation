@@ -200,6 +200,27 @@ class PdrLocatorTest {
     }
 
     /**
+     * Teren 29.10.2026, NB (zadatak do 204): korisnik "pravo prema ulazu", koraci kroz glavni ulaz, a GPS tačnosti ~3 m uz fasadu
+     * vuče tačku 7 m u stranu (dalje od vrata nego što traži ulazak po pravcu koraka) - trag samo po koracima prolazi kroz vrata.
+     */
+    @Test
+    fun fromCampus_gpsDragsFarAlongWall_stepTrailThroughDoor_enters() {
+        val entrance = graph.position(node("K-U-NB-1"))
+        val inward = inwardOf("NB-0-ULAZ")
+        val wall = wallDirection("NB", entrance)
+        val start = PointM(entrance.x - inward.x * 12, entrance.y - inward.y * 12)
+        val gps = PointM(entrance.x - inward.x * 2 + wall.x * 7, entrance.y - inward.y * 2 + wall.y * 7)
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(start)) }
+        val azimuth = magneticAzimuth(entrance, PointM(entrance.x + inward.x, entrance.y + inward.y))
+        val entered = (1..24).firstOrNull {
+            if (it > 5) locator.onGps(GpsFix(gps, 3f), tracking = true)
+            locator.step(azimuth, stepM) == PlaceReason.ULAZ
+        }
+        assertNotNull("nije ušao (tačka ${locator.position()})", entered)
+        assertEquals(PdrPlace("NB", 0), locator.place)
+    }
+
+    /**
      * Teren 17.10.2026, AMF: "Ovde sam" ~5 m ispred glavnog ulaza, pa pravo kroz vrata - tačka je ušla metar pred vratima
      * (korisnik: "skoro 10 koraka prerano"). Ulazak po pravcu koraka sada čeka ceo put do vrata.
      */
@@ -1544,6 +1565,137 @@ class PdrLocatorTest {
     /** (smer na planu, dužina, znak stepenica) sa snimka, "smer|dužina|znak" razdvojeno razmakom. */
     private fun steps(recorded: String): List<Triple<Float, Float, Float>> =
         recorded.trim().split(Regex("\\s+")).map { s -> s.split("|").map { it.toFloat() }.let { Triple(it[0], it[1], it[2]) } }
+
+    private data class TimedStep(val onPlan: Float, val lengthM: Float, val gait: Float, val timeS: Double)
+
+    /** Kao [steps], sa vremenom koraka u sekundama snimka: "smer|dužina|znak|vreme". */
+    private fun timedSteps(recorded: String): List<TimedStep> =
+        recorded.trim().split(Regex("\\s+")).map { s ->
+            s.split("|").let { TimedStep(it[0].toFloat(), it[1].toFloat(), it[2].toFloat(), it[3].toDouble()) }
+        }
+
+    private fun PdrLocator.walk(buildingId: String, step: TimedStep): PlaceReason? =
+        step(planAzimuth(buildingId, step.onPlan), step.lengthM, timeNs = (step.timeS * 1e9).toLong(), stairScore = step.gait)
+
+    /**
+     * Teren 29.10.2026 (hod-20261029-160807, 323-383 s, zadatak 204 -> A1): silazak NB II -> I -> P. Na međupodestu II -> I
+     * okret 165° kroz 5 koraka, pa 2,7 s stajanja - pauza pre prve promene je poništavala okret ("vratio se", sprat II).
+     * Na međupodestu I -> P okret je proglašen završenim posle 139°, a nastavio se još ~60° na prvim koracima kraka - tačka
+     * je to uzela za podest sprata i izašla na I. Korisnik je ručno označio P.
+     */
+    @Test
+    fun nbStairs_pauseOnLandingAndTurnIntoSecondFlight_bothFloorsCounted() {
+        val recorded = timedSteps(
+            """
+            346|0.72|-1.21|323.02 350|0.82|-0.07|323.76 356|0.82|-0.34|324.42 354|0.82|0.27|325.03 353|0.82|0.14|325.59
+            353|0.75|0.35|326.20 351|0.82|0.01|326.78 348|0.78|-0.42|327.31 351|0.82|0.05|327.95 354|0.82|0.50|328.71
+            351|0.82|0.76|329.29 345|0.82|0.72|329.95 344|0.82|0.30|330.61 343|0.82|0.39|331.25 341|0.82|0.75|331.86
+            342|0.82|0.70|332.47 343|0.82|1.15|333.08 331|0.82|1.09|333.64 318|0.82|1.51|334.18 309|0.39|0.83|334.63
+            293|0.82|-0.04|335.08 279|0.82|-0.29|335.61 260|0.82|0.31|336.19 249|0.82|0.32|336.81 240|0.82|0.11|337.35
+            227|0.52|0.08|338.02 207|0.67|-0.59|338.63 186|0.39|-0.65|339.43 166|0.46|-0.63|342.09 163|0.82|0.30|342.62
+            165|0.82|0.41|343.36 166|0.82|0.10|343.99 166|0.82|0.81|344.60 169|0.82|0.51|345.18 176|0.82|0.67|345.80
+            178|0.82|0.68|346.33 177|0.82|0.80|346.90 174|0.82|0.83|347.43 170|0.82|0.41|347.97 168|0.82|0.78|348.56
+            164|0.22|-0.77|349.01 154|0.82|-0.19|349.57 136|0.82|-0.45|350.18 104|0.82|0.35|350.76 83|0.82|-0.03|351.43
+            69|0.19|-0.43|351.69 66|0.82|-0.27|352.09 59|0.76|-0.02|352.69 46|0.82|-0.14|353.30 34|0.82|-0.13|353.93
+            30|0.31|-0.42|354.67 31|0.39|-0.92|355.28 23|0.82|-0.52|355.98 5|0.82|-0.55|357.75 358|0.82|0.63|358.31
+            355|0.82|0.61|358.97 359|0.82|-0.21|359.65 360|0.82|0.14|360.28 356|0.82|0.35|360.88 350|0.82|0.74|361.52
+            349|0.82|0.85|362.15 348|0.82|0.92|362.82 344|0.82|0.26|363.42 331|0.82|0.66|364.03 313|0.82|0.12|364.29
+            284|0.82|0.06|365.03 272|0.77|-0.62|365.55 254|0.82|0.02|366.18 249|0.82|0.39|366.78 249|0.82|0.05|367.38
+            245|0.82|-0.15|367.99 232|0.82|0.44|368.62 213|0.26|-0.68|369.30 186|0.82|-0.80|370.04 177|0.82|0.95|370.68
+            172|0.82|0.40|371.38 175|0.82|0.33|372.02 180|0.82|0.53|372.65 180|0.82|0.57|373.27 179|0.82|0.50|373.90
+            178|0.82|0.77|374.55 177|0.82|0.51|375.19 175|0.82|0.57|375.84 169|0.34|0.87|376.39 161|0.82|0.17|377.05
+            160|0.82|0.27|377.53 171|0.54|0.50|378.30 180|0.82|-0.48|378.74 190|0.32|-0.89|378.99 192|0.71|-0.63|379.66
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("NB", 2), Offset(0.501154f, 0.38216054f), measure = false)
+        }
+        var routeStartOnFlight: String? = null
+        val reasons = recorded.mapNotNull { s ->
+            locator.walk("NB", s).also { if (s.timeS == 331.25) routeStartOnFlight = locator.stairRouteStart()?.id }
+        }
+        assertEquals("$reasons", listOf(PlaceReason.STEPENICE, PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("NB", 0), locator.place)
+        // Na prvom kraku naniže (još II sprat) ruta kreće od dna stepeništa na I, ne od čvora iza korisnika na II.
+        assertEquals("NB-1-S", routeStartOnFlight)
+        assertNull(locator.stairRouteStart()) // sišao sa stepeništa
+    }
+
+    /**
+     * Teren 29.10.2026 (836-900 s, zadatak Biblioteka -> F 208): pasarelom na podest F-a, pa I -> II. Hodnik II se nastavlja
+     * pravcem poslednjeg kraka - izlazak je tražio niz duži od kraka za 3 koraka, tačka je 12 koraka stajala na stepeništu
+     * dok je korisnik hodao ka 208. Posle promene sprata ravan hod (znak) je izlazak.
+     */
+    @Test
+    fun fBlockStairs_flatWalkAlongLastFlight_leavesStairsSoon() {
+        val recorded = timedSteps(
+            """
+            341|0.82|-0.55|847.14 338|0.82|-0.10|847.74 326|0.82|-0.38|848.28 302|0.82|-0.05|848.81 283|0.82|-0.32|849.56
+            270|0.82|0.17|850.13 267|0.82|0.18|850.72 267|0.82|0.23|851.36 268|0.82|0.33|852.02 270|0.82|0.66|852.58
+            271|0.82|0.11|853.22 273|0.82|0.87|853.76 275|0.82|0.16|854.36 274|0.82|1.10|854.90 273|0.82|-0.05|855.62
+            270|0.82|0.52|856.39 258|0.82|-0.19|857.22 232|0.82|-0.29|857.75 195|0.56|-0.95|858.53 160|0.82|-0.30|859.09
+            134|0.82|-0.96|859.70 114|0.82|0.18|860.36 100|0.82|-0.13|860.95 93|0.82|0.27|861.59 92|0.82|0.07|862.23
+            94|0.82|0.59|862.82 96|0.82|-0.06|863.46 96|0.82|0.65|864.06 96|0.82|0.36|864.71 95|0.82|0.35|865.31
+            93|0.82|0.31|865.97 90|0.82|0.37|866.62 85|0.82|0.32|867.30 75|0.82|0.40|868.09 54|0.79|-1.42|868.80
+            21|0.82|-0.63|869.36 352|0.82|-1.29|869.99 315|0.82|-0.60|870.51 292|0.82|-0.31|871.14 280|0.82|-0.02|871.72
+            275|0.82|0.14|872.33 277|0.82|0.75|872.92 278|0.82|0.45|873.54 280|0.82|0.94|874.13 279|0.82|0.48|874.77
+            277|0.82|0.77|875.35 279|0.82|0.54|875.94 283|0.82|0.66|876.52 285|0.82|0.41|877.18 288|0.82|0.51|877.84
+            297|0.82|-0.05|878.62 309|0.82|-0.10|879.21 315|0.82|-0.23|879.83 302|0.82|-0.05|880.48 293|0.39|-0.08|881.13
+            288|0.39|-1.72|881.39 289|0.82|-0.70|881.70 288|0.82|-0.15|882.32 288|0.82|-0.25|882.93 288|0.82|-0.28|883.54
+            288|0.82|-0.33|884.12 286|0.82|-0.54|884.74 282|0.82|-0.16|885.31 281|0.82|-0.32|885.88 281|0.82|-0.13|886.46
+            """,
+        )
+        val locator = locatorAt("F-1-PROLAZ-AMF")
+        var leftAt: Double? = null
+        val reasons = recorded.mapNotNull { s ->
+            locator.walk("F", s).also { if (locator.place.floor == 2 && !locator.onStairs && leftAt == null) leftAt = s.timeS }
+        }
+        assertEquals("$reasons", listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("F", 2), locator.place)
+        // Ranije tek u 890,5 s (posle 12 koraka hodnikom).
+        assertTrue("$leftAt", leftAt != null && leftAt!! <= 885.0)
+    }
+
+    /**
+     * Teren 29.10.2026 (984-1062 s, zadatak F 208 -> Skriptarnica): hodnikom II do stepeništa, II -> I, pa sa podesta pasarelom
+     * u AMF. Pasarela je na suprotnu stranu od hodnika I sprata, pa hod niz nju nije bio "ka hodniku": tačka je 30 s stajala
+     * na stepeništu F-a (promašaj u AMF-u 26 m).
+     */
+    @Test
+    fun fBlockStairs_downToLandingThenPasarela_entersAmf() {
+        val recorded = timedSteps(
+            """
+            82|0.82|-1.55|996.04 87|0.82|0.08|996.70 94|0.82|-0.10|997.36 93|0.82|0.27|997.92 89|0.82|-0.05|998.54
+            85|0.82|-0.02|999.09 83|0.82|0.33|999.70 82|0.82|0.07|1000.27 81|0.82|0.37|1000.84 81|0.82|0.05|1001.41
+            84|0.82|0.31|1002.02 85|0.82|-0.32|1002.59 87|0.82|0.41|1003.18 88|0.82|-0.19|1003.73 87|0.82|0.21|1004.32
+            86|0.82|0.07|1004.87 86|0.82|0.01|1005.47 85|0.82|0.01|1006.02 85|0.82|0.17|1006.64 85|0.82|-0.09|1007.19
+            85|0.82|-0.02|1007.80 91|0.82|-0.19|1008.39 93|0.82|-0.02|1008.98 95|0.82|-0.12|1009.59 94|0.82|0.01|1010.16
+            90|0.82|-0.15|1010.73 90|0.82|0.16|1011.32 92|0.82|-0.06|1011.91 90|0.82|0.09|1012.50 88|0.82|0.10|1013.11
+            85|0.82|0.02|1013.67 85|0.82|-0.32|1014.26 83|0.82|0.31|1014.85 82|0.82|0.09|1015.45 86|0.82|0.27|1016.03
+            89|0.82|-0.04|1016.62 94|0.82|-0.10|1017.23 99|0.82|-0.23|1017.84 113|0.82|0.28|1018.50 128|0.82|-0.37|1019.10
+            138|0.82|-0.35|1019.73 149|0.82|0.01|1020.31 155|0.82|-0.02|1020.99 151|0.82|-0.26|1021.58 140|0.20|-0.91|1022.23
+            121|0.82|0.02|1023.01 115|0.82|0.77|1023.69 114|0.82|0.54|1024.33 114|0.82|0.48|1024.98 114|0.82|0.40|1025.60
+            115|0.82|0.28|1026.27 116|0.82|0.54|1026.89 119|0.82|0.28|1027.55 122|0.82|0.35|1028.21 123|0.82|0.45|1028.86
+            124|0.82|0.29|1029.49 131|0.82|0.48|1030.15 142|0.82|0.73|1030.74 159|0.82|0.34|1031.31 185|0.18|-0.89|1031.92
+            210|0.82|-0.92|1032.58 235|0.43|-0.99|1033.18 261|0.82|-1.05|1034.01 278|0.82|-0.32|1034.58 290|0.82|0.12|1035.28
+            292|0.82|0.07|1035.90 292|0.82|0.41|1036.50 294|0.82|0.62|1037.09 296|0.82|0.83|1037.66 299|0.82|0.25|1038.27
+            305|0.82|-0.01|1038.91 307|0.82|0.60|1039.51 306|0.82|0.30|1040.10 307|0.82|0.63|1040.68 310|0.82|0.87|1041.30
+            319|0.82|1.19|1041.89 333|0.80|0.33|1042.36 357|0.82|-0.77|1043.01 19|0.82|-0.73|1043.61 42|0.51|-1.02|1044.21
+            69|0.78|-1.09|1044.95 85|0.64|-0.73|1045.61 102|0.38|-1.26|1046.16 112|0.82|-0.30|1046.88 118|0.82|0.75|1047.53
+            120|0.82|0.35|1048.11 121|0.82|0.12|1048.82 120|0.82|0.45|1049.41 119|0.82|0.61|1050.05 118|0.82|0.70|1050.63
+            119|0.82|0.74|1051.29 119|0.82|0.46|1051.87 119|0.82|0.49|1052.50 122|0.82|0.19|1053.11 131|0.82|0.19|1053.80
+            142|0.82|0.24|1054.40 152|0.82|-0.17|1054.84 165|0.82|0.02|1055.38 176|0.82|0.02|1055.98 189|0.82|-0.07|1056.52
+            201|0.82|0.10|1057.13 205|0.82|-0.15|1057.67 205|0.82|-0.31|1058.26 204|0.82|-0.45|1058.81 203|0.82|0.12|1059.37
+            204|0.82|0.01|1059.93 110|0.82|-0.17|1060.49 107|0.82|0.24|1061.07 106|0.82|-0.11|1061.61
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("F", 2), Offset(0.101794146f, 0.49434122f), measure = false)
+        }
+        val reasons = recorded.mapNotNull { locator.walk("F", it) }
+        assertTrue("$reasons", reasons.first() == PlaceReason.STEPENICE && PlaceReason.PROLAZ in reasons)
+        assertEquals(PdrPlace("AMF", 0), locator.place)
+    }
 
     /**
      * Teren 28.10.2026 (hod-20261028-100906, 513-564 s): na II spratu Kule šetao hodnikom uz jezgro i okretao se (znak stepenica

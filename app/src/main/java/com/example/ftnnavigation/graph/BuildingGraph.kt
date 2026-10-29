@@ -64,9 +64,21 @@ data class RoutingProfile(
      * zgrade veći od dva. Procena iz rasporeda ([com.example.ftnnavigation.campus.crowdFactors]).
      */
     val buildingCrowd: Map<String, Double> = emptyMap(),
+    /**
+     * Zgrade u kojima se lift ne koristi osim uz [avoidStairs]. NB: lift je "uglavnom samo kad neko baš ne može da ide
+     * stepenicama" (korisnik, 08.10.2026), a teren 29.10.2026: "kod NB po defaultu treba preferirati stepenice".
+     */
+    val liftOnlyAvoidingStairs: Set<String> = setOf(NbPlan.BUILDING_ID),
+    /**
+     * Kazna (s) za svako sledeće stepenište ili lift na ruti - samo za izbor rute, ne ulazi u [Route.durationSec]. Teren
+     * 29.10.2026, AMF -> NB 307: "ne treba da se neko penje na prvi sprat Kule, pa pređe u NB ... gledati da se stepenice
+     * koriste u jednom cugu". Sa 30 s je ruta AMF −1 -> ITC III išla napolje (umesto prolazom: S2 u AMF-u, pa stepenište ITC-a).
+     */
+    val stairwellChangeSec: Double = 20.0,
 ) {
     init {
         require(walkingSpeedMps > 0) { "walkingSpeedMps mora biti > 0" }
+        require(stairwellChangeSec >= 0) { "stairwellChangeSec mora biti >= 0" }
         require(crowdFactor >= 1.0) { "crowdFactor mora biti >= 1" }
         require(buildingCrowd.values.all { it >= 1.0 }) { "gužva po zgradi mora biti >= 1" }
         require(!(avoidStairs && avoidLift)) { "bez stepenica i bez lifta - nema promene sprata" }
@@ -167,34 +179,61 @@ class BuildingGraph(
     fun route(fromId: String, toId: String, profile: RoutingProfile = RoutingProfile()): Route? {
         val start = byId[fromId] ?: return null
         val goal = byId[toId] ?: return null
-        val best = hashMapOf(fromId to 0.0)
-        val cameFrom = HashMap<String, String>()
-        // (f, g, čvor). Heuristika je dopustiva ali ne i konzistentna (menja oblik pri promeni
-        // sprata), pa čvor može ponovo da se otvori - zato nema zatvorenog skupa.
-        val open = PriorityQueue<Triple<Double, Double, String>>(compareBy { it.first })
-        open += Triple(heuristic(start, goal, profile), 0.0, fromId)
+        // Stanje pretrage: čvor i poslednje stepenište/lift na putu do njega ([verticalOf]) - zbog
+        // [RoutingProfile.stairwellChangeSec] ista tačka sa različitim stepeništem iza sebe nije isto stanje.
+        val startState = SearchState(fromId, null)
+        val best = hashMapOf(startState to 0.0)
+        val seconds = hashMapOf(startState to 0.0)
+        val cameFrom = HashMap<SearchState, SearchState>()
+        // (f, g, stanje). Heuristika je dopustiva ali ne i konzistentna (menja oblik pri promeni
+        // sprata), pa stanje može ponovo da se otvori - zato nema zatvorenog skupa.
+        val open = PriorityQueue<Triple<Double, Double, SearchState>>(compareBy { it.first })
+        open += Triple(heuristic(start, goal, profile), 0.0, startState)
 
         while (open.isNotEmpty()) {
-            val (_, g, id) = open.poll()!!
-            if (g > best.getValue(id)) continue // zastareo unos
+            val (_, g, state) = open.poll()!!
+            if (g > best.getValue(state)) continue // zastareo unos
+            val id = state.nodeId
             if (id == toId) {
-                val nodes = path(cameFrom, toId)
+                val nodes = generateSequence(state) { cameFrom[it] }.map { byId.getValue(it.nodeId) }.toList().asReversed()
                 val lengthM = nodes.zipWithNext { a, b -> if (a.floor == b.floor || a.buildingId != b.buildingId) distanceM(a, b) else 0.0 }.sum()
-                return Route(nodes, g, lengthM)
+                return Route(nodes, seconds.getValue(state), lengthM)
             }
             val node = byId.getValue(id)
             // Sala nije usputni čvor (ni sala sa dva ulaza, npr. 205, ni amfiteatar sa zadnjim vratima).
             if (node.type == NodeType.PROSTORIJA && id != fromId) continue
+            // Spojnim prolazom (čvor kampusa između dve zgrade) se ne vraća u zgradu iz koje je došao: trem Kule vodi na
+            // oba nivoa AMF-a, a pasarela na oba nivoa F-a - to bi bila promena sprata bez stepenica, sa obilaskom do
+            // težišta prolaza (sa kaznom za drugo stepenište ruta AMF −1 -> F 208 je tako išla kroz trem).
+            val cameFromBuilding = cameFrom[state]?.let { byId.getValue(it.nodeId).buildingId }
+                ?.takeIf { node.type == NodeType.PROLAZ && it != node.buildingId }
             for ((next, type) in neighbors(id)) {
-                val nextG = g + (cost(node, next, type, profile) ?: continue)
-                if (nextG < (best[next.id] ?: Double.POSITIVE_INFINITY)) {
-                    best[next.id] = nextG
-                    cameFrom[next.id] = id
-                    open += Triple(nextG + heuristic(next, goal, profile), nextG, next.id)
+                if (next.buildingId == cameFromBuilding) continue
+                val step = cost(node, next, type, profile) ?: continue
+                val vertical = if (type == EdgeType.HOD) state.vertical else verticalOf(next)
+                val penalty = if (state.vertical != null && vertical != state.vertical) profile.stairwellChangeSec else 0.0
+                val nextState = SearchState(next.id, vertical)
+                val nextG = g + step + penalty
+                if (nextG < (best[nextState] ?: Double.POSITIVE_INFINITY)) {
+                    best[nextState] = nextG
+                    seconds[nextState] = seconds.getValue(state) + step
+                    cameFrom[nextState] = state
+                    open += Triple(nextG + heuristic(next, goal, profile), nextG, nextState)
                 }
             }
         }
         return null
+    }
+
+    private data class SearchState(val nodeId: String, val vertical: String?)
+
+    /**
+     * Stepenište ili lift kome pripada čvor [node] (kraj STEPENICE/LIFT ivice): zgrada i ključ iz id-ja bez sprata i bez
+     * sufiksa dna kraka naniže - NB-1-S-D i NB-2-S su isto stepenište "NB/S", NTP-0-L2 lift "NTP/L2".
+     */
+    private fun verticalOf(node: Node): String {
+        val key = node.id.split('-').drop(2).joinToString("-").removeSuffix("-D")
+        return "${node.buildingId}/$key"
     }
 
     /**
@@ -289,7 +328,9 @@ class BuildingGraph(
             val perFloor = if (floors > 0) profile.stairsUpSecPerFloor else profile.stairsDownSecPerFloor
             abs(floors) * perFloor * profile.crowdBetween(from, to)
         }
-        EdgeType.LIFT -> if (profile.avoidLift) null else profile.liftWaitSec + abs(to.floor - from.floor) * profile.liftSecPerFloor
+        EdgeType.LIFT -> if (profile.avoidLift || (!profile.avoidStairs && from.buildingId in profile.liftOnlyAvoidingStairs)) null else {
+            profile.liftWaitSec + abs(to.floor - from.floor) * profile.liftSecPerFloor
+        }
     }
 
     /**
@@ -308,7 +349,4 @@ class BuildingGraph(
     private fun distanceM(a: Node, b: Node): Double = distanceM(position(a), position(b))
 
     private fun distanceM(a: PointM, b: PointM): Double = hypot(a.x - b.x, a.y - b.y)
-
-    private fun path(cameFrom: Map<String, String>, toId: String): List<Node> =
-        generateSequence(toId) { cameFrom[it] }.map(byId::getValue).toList().asReversed()
 }

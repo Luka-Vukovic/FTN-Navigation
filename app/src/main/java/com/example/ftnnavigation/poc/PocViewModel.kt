@@ -464,8 +464,11 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val raw = state.rawPosition
         val gps = routeGps
         val place = state.pdrPlace
+        // Na stepeništu ruta kreće od čvora ka kome korisnik ide (ne vraća ga nazad niz krak).
+        val stairStart = locator?.stairRouteStart()?.takeIf { raw != null }
         return routeOrFallback(floorChange.profile.copy(buildingCrowd = crowdNow)) { profile ->
             when {
+                stairStart != null -> graph.route(stairStart.id, nodeId, profile)
                 match != null -> graph.routeFrom(match.point, nodeId, profile)
                 raw != null -> graph.routeFrom(
                     place.buildingId, place.floor, raw.x, raw.y, nodeId, profile,
@@ -595,7 +598,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             recents = recents.withRecent(room)
             AppSettings.setRecents(getApplication(), recents)
         }
-        showPlace(target?.node ?: return)
+        showRouteStart()
     }
 
     /** Odredište je čvor [node] (najbliže mesto - i toalet bez naziva), u baneru [label]. */
@@ -603,7 +606,16 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         plan = null
         destinationNodeId = node.id
         destination = label
-        showPlace(node)
+        showRouteStart()
+    }
+
+    /**
+     * Posle izbora odredišta Mapa ostaje kod korisnika: plan i sprat odakle ruta kreće (teren 29.10.2026: "ne treba
+     * prebacivati odmah na krajnji ekran"). Bez pozicije (ruta od glavnog ulaza) - mesto odredišta, kao ranije.
+     */
+    private fun showRouteStart() {
+        val start = route?.nodes?.firstOrNull()?.takeIf { routeStart != RouteStart.ENTRANCE }
+        showPlace(start ?: target?.node ?: return)
     }
 
     /** Mapa prikazuje mesto čvora: plan njegove zgrade na njegovom spratu, ili kampus (napolju, zgrada bez plana). */

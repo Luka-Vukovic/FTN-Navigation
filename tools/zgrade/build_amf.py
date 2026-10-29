@@ -159,8 +159,9 @@ def floor_0():
                             (587, 665, "AR4"), (665, 735, "AR5"), (735, 832, "AR6")]),
             *col(170, 212, [(7, 48, None), (48, 89, None), (89, 130, None), (130, 207, None)]),
             R(287, 402, 7, 207, "Čitaonica", door=(287, 50)),  # FtnGO "Čitaonica (A0)"
-            R(402, 545, 7, 207, "A1", doors=[(470, 7), (545, 188)]),  # Amfiteatar "Nikola Tesla"
-            R(545, 693, 7, 168, "A2", doors=[(620, 7), (650, 168)]),  # Amfiteatar "Milutin Milanković"
+            # A1 i A2: leva i desna vrata na hodnik (teren 29.10.2026; ranije jedna, na sredini zida) + zadnja vrata
+            R(402, 545, 7, 207, "A1", doors=[(418, 7), (529, 7), (545, 188)]),  # Amfiteatar "Nikola Tesla"
+            R(545, 693, 7, 168, "A2", doors=[(561, 7), (677, 7), (650, 168)]),  # Amfiteatar "Milutin Milanković"
             R(693, 832, 7, 110, "A3"),
             R(693, 832, 110, 207, "A4", door=(693, 188)),
         ],

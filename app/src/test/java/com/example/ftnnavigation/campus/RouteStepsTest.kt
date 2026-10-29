@@ -139,7 +139,18 @@ class RouteStepsTest {
                 val q = graph.position(route.nodes[b])
                 kotlin.math.hypot(p.x - q.x, p.y - q.y)
             }
-            assertEquals("$to: $walked / ${route.lengthM}", route.lengthM - roomLeg, walked, 0.5)
+            // Hod po podestu sprata između dva kraka je deo koraka "Stepenicama" (do AH9 od 29.10.2026 stepenicama, NB lift
+            // samo uz "bez stepenica").
+            val types = route.nodes.zipWithNext { a, b -> graph.edge(a.id, b.id)!!.type }
+            val landings = types.indices.filter { i ->
+                types[i] == EdgeType.HOD && types.take(i).lastOrNull { it != EdgeType.HOD } == EdgeType.STEPENICE &&
+                    types.drop(i + 1).firstOrNull { it != EdgeType.HOD } == EdgeType.STEPENICE
+            }.sumOf { i ->
+                val p = graph.position(route.nodes[i])
+                val q = graph.position(route.nodes[i + 1])
+                kotlin.math.hypot(p.x - q.x, p.y - q.y)
+            }
+            assertEquals("$to: $walked / ${route.lengthM}", route.lengthM - roomLeg - landings, walked, 0.5)
         }
     }
 

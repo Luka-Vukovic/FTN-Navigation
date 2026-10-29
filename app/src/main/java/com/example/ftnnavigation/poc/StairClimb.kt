@@ -64,6 +64,12 @@ private const val MAX_LANDING_SPAN_STEPS = 16
 /** Pauza duža od ovoga prekida let (NB 04.10.: "koraci" dok korisnik stoji, na 4-42 s). */
 private const val PAUSE_NS = 2_000_000_000L
 
+/** Pauza pre prve promene sprata na samom stepeništu je dozvoljena posle bar ovolikog dela okreta odhodanog pre nje. */
+private const val PAUSED_TURN_SHARE = 0.75f
+
+/** ... a pauza nije duža od ovoga. */
+private const val MAX_LANDING_PAUSE_NS = 4_000_000_000L
+
 /** Izlazak sa stepeništa: bar ovoliko koraka istog smera (za vreme okreta na podestu nizovi su 1-3 koraka). */
 private const val EXIT_RUN_STEPS = 4
 
@@ -240,6 +246,9 @@ class StairWalk {
         return result
     }
 
+    /** Trenutni niz koraka istog smera: (broj koraka, srednji smer - magnetski azimut), ili null pre prvog koraka. */
+    fun currentRun(): Pair<Int, Float>? = runs().lastOrNull()?.let { it.count() to meanHeading(it) }
+
     /** Kraj leta pre prve promene sprata: od njega se meri okret (i za sledeće spratove u istom hodu). */
     private var anchor: Int? = null
 
@@ -270,10 +279,19 @@ class StairWalk {
         // Okret u mestu, za vreme pauze - samo pre prve promene. Posle nje je korisnik na stepeništu, a na podestu sme da
         // zastane (teren 05.10.2026: NB I -> III i NTP I -> II, zastao 2,2-3,3 s - pa ovo pravilo, dok je važilo za ceo
         // hod, nijedan sledeći sprat više nije prihvatalo).
-        if (anchor == null && (from + 1..current.first).any(::pauseBefore)) return 0
         val sums = FloatArray(headings.size)
         for (i in 1 until headings.size) sums[i] = sums[i - 1] + angleDiffDeg(headings[i], headings[i - 1])
         val need = STAIR_TURN_DEG + STAIR_TURN_PER_FLOOR_DEG * changes
+        if (anchor == null) {
+            val pause = (from + 1..current.first).firstOrNull(::pauseBefore)
+            // Na samom stepeništu sme da zastane na međupodestu kad je okret već uglavnom odhodan (teren 29.10.2026, NB
+            // II -> I: 165° kroz 5 koraka, pa 2,7 s stajanja pred drugim krakom - "vratio se", sprat kasnio dva sprata).
+            // Duže stajanje nije zastajanje na podestu (teren 22.10.2026, NB II: okret u mestu posle penjanja, 10 s stajanja,
+            // pa silazak - bio bi "III sprat").
+            if (pause != null && !(onStair && abs(sums[pause - 1] - sums[from]) >= need * PAUSED_TURN_SHARE &&
+                    times[pause]!! - times[pause - 1]!! <= MAX_LANDING_PAUSE_NS)
+            ) return 0
+        }
         // Ukupan okret: od srednjeg smera leta pre okreta do srednjeg smera trenutnog leta. Poslednji korak leta je već
         // deo okreta (teren 05.10.2026, NTP II -> I: od njega 133°, od srednjeg smera leta 149°; pravi okret 180°).
         val fromRun = runs.first { from in it }
@@ -372,8 +390,9 @@ class StairWalk {
      * paralelan letu, ali duži od najdužeg leta - hodnik se nastavlja pravcem leta. Niz duži od [MAX_FLIGHT_STEPS] nije
      * let nego hodnik (teren 12.10.2026, Kula: posle ~40 koraka hodnikom NB-a do stepeništa Kule korisnik se okrenuo i
      * vratio - povratak je paralelan tom hodniku, pa je izlazak tražio 43 koraka; tačka je 25 koraka stajala na stepeništu).
+     * [flat]: koraci po ubrzanju nisu stepenice - niz paralelan letu je izlazak već posle [EXIT_RUN_STEPS] koraka.
      */
-    fun leaves(towardCorridorM: Double, exitM: Double): Boolean {
+    fun leaves(towardCorridorM: Double, exitM: Double, flat: Boolean = false): Boolean {
         val runs = runs()
         val current = runs.lastOrNull() ?: return false
         if (current.count() < EXIT_RUN_STEPS) return false
@@ -382,7 +401,7 @@ class StairWalk {
             f.count() in FLIGHT_STEPS..MAX_FLIGHT_STEPS &&
                 abs(angleDiffDeg(heading, headings[f.first])).let { it <= PARALLEL_DEG || it >= 180 - PARALLEL_DEG }
         }
-        return if (parallel.isEmpty()) towardCorridorM >= exitM else current.count() > parallel.maxOf { it.count() } + EXTRA_FLIGHT_STEPS
+        return if (parallel.isEmpty()) towardCorridorM >= exitM else flat || current.count() > parallel.maxOf { it.count() } + EXTRA_FLIGHT_STEPS
     }
 }
 

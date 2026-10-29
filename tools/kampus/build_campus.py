@@ -145,6 +145,12 @@ WALKABLE = {
 ROADS = {"residential", "service", "living_street", "unclassified", "tertiary", "secondary", "secondary_link", "primary"}
 FOOTPATHS = {"footway", "path", "pedestrian", "steps", "cycleway", "track"}
 
+# Ručne staze kojih nema u OSM-u: parovi OSM čvorova staza, spojeni pravom linijom (u grafu i na crtežu); gde se dve
+# seku, nov čvor K-R<n>. Teren 29.10.2026 (korisnik, snimak ekrana sa krstom): dijagonale "romba" staza severozapadno
+# od ITC-a - "potpuno normalno da se tu kreću ljudi u tim smerovima"; bez njih je ruta preko otvorenog prostora vodila
+# okolo, a sa tačke u sredini i unazad.
+EXTRA_PATHS = [(2317759579, 2317759548), (2317759554, 2317759571)]
+
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 USER_AGENT = "FTNNavigation-diplomski/0.1 (tools/kampus/build_campus.py)"
 
@@ -278,6 +284,20 @@ def project(px, py, ax, ay, bx, by):
     dx, dy = bx - ax, by - ay
     t = 0.0 if dx == dy == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
     return ax + t * dx, ay + t * dy, t
+
+
+def segment_crossing(a, b, c, d):
+    """Tačka u kojoj se seku duži AB i CD (unutar obe, ne na krajevima), ili None."""
+    rx, ry = b[0] - a[0], b[1] - a[1]
+    sx, sy = d[0] - c[0], d[1] - c[1]
+    den = rx * sy - ry * sx
+    if den == 0:
+        return None
+    t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den
+    u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den
+    if not (0 < t < 1 and 0 < u < 1):
+        return None
+    return a[0] + t * rx, a[1] + t * ry
 
 
 def snap_to_wall(ring, x, y):
@@ -552,6 +572,28 @@ def main():
                 graph.add_node(f"K-{i2}", *p2)
                 graph.add_edge(f"K-{i1}", f"K-{i2}")
 
+    extra_lines = []
+    for i1, i2 in EXTRA_PATHS:
+        n1, n2 = f"K-{i1}", f"K-{i2}"
+        if n1 not in graph.nodes or n2 not in graph.nodes:
+            warnings.append(f"ručna staza {n1} - {n2}: čvor nije u mreži staza")
+            continue
+        graph.add_edge(n1, n2)
+        extra_lines.append((n1, n2))
+    crossings = 0
+    for k, (a1, b1) in enumerate(extra_lines):
+        for a2, b2 in extra_lines[k + 1:]:
+            hit = segment_crossing(graph.xy(a1), graph.xy(b1), graph.xy(a2), graph.xy(b2))
+            if hit is None:
+                continue
+            crossings += 1
+            node = f"K-R{crossings}"
+            graph.add_node(node, *hit)
+            for a, b in ((a1, b1), (a2, b2)):
+                graph.remove_edge(a, b)
+                graph.add_edge(a, node)
+                graph.add_edge(node, b)
+
     # --- Ulazi, zgrade, prolazi ---
     checks = {}
     special = set()
@@ -647,6 +689,7 @@ def main():
             streets.append(line)
         elif highway in FOOTPATHS:
             paths.append(line)
+    paths += [[[r1(v) for v in graph.xy(a)], [r1(v) for v in graph.xy(b)]] for a, b in extra_lines]
 
     data = {
         "attribution": "© OpenStreetMap contributors",
