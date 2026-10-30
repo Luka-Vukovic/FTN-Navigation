@@ -299,7 +299,33 @@ def floor_plan(floor):
     }
 
 
-PLANS = {f: floor_plan(f) for f in FLOORS}
+# Vrata po evakuacionim planovima (30.10.2026, korisnik: "vrata i za F-blok i MI"; lukovi otvaranja na ispravljenim fotografijama
+# mi0/mi1.jpg sa stranice "MI i F prostorije", postavljene na x -170..1050, y -1160..-470): samo vrata koja jasno izlaze na hodnik.
+# Mnoge sobe se na planu ulaze kroz susednu prostoriju (A1 i A1-1 kroz tehnički pregled, A3-5 kroz A4) ili iz malih holova kod
+# stepeništa (krila V i G na I spratu) - te ostaju kako su (sredina zida ka hodniku). Oznake soba su i dalje PRETPOSTAVKA (redom po
+# krilu), pa su i vrata "soba na tom mestu".
+DOORS = {
+    0: {"MI 16": [(830, -632)], "MI A4": [(-33, -1019)], "MI A3-1": [(-33, -815)], "MI B2": [(-2, -877)], "MI G2": [(455, -777)],
+        "MI D4": [(880, -1004)], "MI D3": [(880, -854)], "MI D0": [(880, -778)]},
+    1: {"MI A3Gal./2": [(-33, -1045)], "MI A3-4": [(-33, -1035)], "MI A2-4": [(-33, -900)], "MI A2-3": [(-33, -888)],
+        "MI A2-2": [(-33, -853)], "MI B4-A": [(-2, -836)], "MI B4-2": [(-2, -787)], "MI B4-1": [(-2, -757)],
+        "MI B4-3": [(35, -935)], "MI V4-4": [(384, -925)],  # B4-4/B4-5: vrata sa plana bi bila koso do hodnika - ostaju
+        "MI V3-5": [(383, -755)], "MI G3-1A": [(470, -1028)], "MI Đ1-1": [(912, -787)], "MI Đ3-1": [(950, -950)],
+        "MI Đ4-1": [(950, -962)], "MI Đ4-2": [(950, -996)], "MI Đ5-1": [(965, -995)], "MI Đ3-2": [(965, -984)]},
+}
+
+
+def with_doors(f, plan):
+    """Vrata iz [DOORS] za sale sprata f."""
+    doors = DOORS.get(f, {})
+    for room in plan["rooms"]:
+        if room["name"] in doors:
+            room["doors"] = doors[room["name"]]
+    assert set(doors) <= {r["name"] for r in plan["rooms"]}, set(doors) - {r["name"] for r in plan["rooms"]}
+    return plan
+
+
+PLANS = {f: with_doors(f, floor_plan(f)) for f in FLOORS}
 
 
 def build():
