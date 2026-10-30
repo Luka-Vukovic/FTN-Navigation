@@ -113,8 +113,9 @@ class FGraphTest {
         assertTrue(doorOf("F 208").x < end.x)
         assertTrue(doorOf("F 209").y < end.y && distance(doorOf("F 209").id, end.id) < 5.0)
         assertTrue(room("F 207").y > end.y && distance(doorOf("F 207").id, end.id) < 5.0)
-        // Vrata 209 su na zidu same sobe 209 (ne susedne).
-        assertTrue(abs(doorOf("F 209").x - room("F 209").x) < 1e-3f)
+        // Vrata 209 su na zidu same sobe 209 (ne susedne): soba je široka 49 px plana (0,078 viewport-a), od 30.10.2026 vrata
+        // nisu na sredini nego uz kraj hodnika (evakuacioni plan).
+        assertTrue(abs(doorOf("F 209").x - room("F 209").x) < 0.035f)
     }
 
     /** Iz Amfiteatara na III sprat F-bloka: pasarelom (bez staza) pa stepeništem. */

@@ -233,7 +233,34 @@ def floor_3():
     }
 
 
-PLANS = {0: floor_0(), 1: floor_1(), 2: floor_2(), 3: floor_3()}
+# Vrata I-III sprata po evakuacionim planovima (30.10.2026, korisnik: "vrata i za F-blok"; teren/izveštaj2/IMG_20261002_103655 (I),
+# _104205 (II, mutna), _104108 (III), perspektiva ispravljena po 4 ugla zgrade na 600 x 163). I i III: prekidi u zidu i lukovi otvaranja;
+# II: prekidi se ne vide, pa strelice evakuacije (na I spratu stoje tačno ispred vrata, do 1 px). Samo gde je razlika veća od ~0,4 m;
+# ostale sobe imaju vrata na sredini zida i to se slaže sa planom. 214: dve strelice -> dvoja vrata. 209 ima takođe dve strelice
+# (63, 87), ali korisnik (30.10.2026): "F-209 ima svoja vrata desno" na kraju hodnika (jedna) - ostaju samo vrata uz kraj hodnika.
+# III: ispred 320 je pregrada sa vratima preko hodnika (x ~525) - nije nacrtana; II: kraj kod 223 je nejasan - ostaje.
+DOORS = {
+    1: {"F 124": [(388, 82)], "F 125": [(486, 82)], "F 126": [(583, 82)],
+        "F 1": [(494, 113)], "F 2": [(556, 113)], "F 3": [(590, 113)]},
+    2: {"F 209": [(63, 82)],"F 214": [(212, 82), (237, 82)], "F 221": [(485, 82)], "F 222": [(511, 82)],
+        "F 207": [(64, 114)], "F 206": [(137, 114)], "F 205": [(163, 114)], "F 204": [(212, 114)], "F 202": [(314, 114)],
+        "F 226": [(493, 114)], "F 227": [(556, 114)], "F 228": [(591, 114)]},
+    3: {"F 309": [(71, 82)], "F 319": [(486, 82)], "F 320": [(558, 82)],
+        "F 308": [(40, 98)], "F 307": [(72, 98)], "F 326": [(487, 114)]},
+}
+
+
+def with_doors(f, plan):
+    """Vrata iz [DOORS] za sale sprata f."""
+    doors = DOORS.get(f, {})
+    for room in plan["rooms"]:
+        if room["name"] in doors:
+            room["doors"] = doors[room["name"]]
+    assert set(doors) <= {r["name"] for r in plan["rooms"]}, set(doors) - {r["name"] for r in plan["rooms"]}
+    return plan
+
+
+PLANS = {f: with_doors(f, plan) for f, plan in {0: floor_0(), 1: floor_1(), 2: floor_2(), 3: floor_3()}.items()}
 
 
 def build():
