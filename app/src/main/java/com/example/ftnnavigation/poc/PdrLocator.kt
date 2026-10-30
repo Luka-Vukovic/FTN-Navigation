@@ -2026,6 +2026,7 @@ class PdrLocator(
             this.entryMatch = entryMatch
             entryWalked = walkedX to walkedY
         }.also(::showClimb)
+        climb?.walk?.markStairStart()
         watch = StairWalk()
         stepStarts.clear()
     }
@@ -3118,7 +3119,9 @@ class PdrLocator(
     private fun landingGate(stair: Stair, foot: Node): Pair<Node, Node>? {
         val gates = gateways[place].orEmpty().map { it.node.id }.toSet()
         // Put preko podesta ide hodnikom (ne kroz vrata i sale): AMF S1 od 16.10.2026 ima traku do kraka i vrata Čitaonice uz nju.
-        fun onWay(n: Node) = n.floor == foot.floor && n.buildingId == foot.buildingId && n.type != NodeType.VRATA && n.type != NodeType.PROSTORIJA
+        // Ni preko dna drugog kraka (NB od 30.10.2026: dna oba kraka su spojena podestom sprata).
+        fun onWay(n: Node) = n.floor == foot.floor && n.buildingId == foot.buildingId && n.type != NodeType.VRATA &&
+            n.type != NodeType.PROSTORIJA && n.type != NodeType.STEPENISTE
         var prev = foot
         var current = graph.neighbors(foot.id).map { it.first }
             .firstOrNull { onWay(it) && it.id != stair.corridor(foot).id } ?: return null
@@ -3503,6 +3506,9 @@ class PdrLocator(
     private fun buildGateways(): Map<PdrPlace, List<Gateway>> {
         val result = HashMap<PdrPlace, MutableList<Gateway>>()
         for (node in graph.nodes.filter { it.isIndoor }) {
+            // Prolaz do koga se stiže samo ivicom za rutu ([BuildingGraph.routeOnly]) nije kapija za lociranje.
+            val inside = graph.neighbors(node.id).filter { it.first.buildingId == node.buildingId }
+            if (inside.isNotEmpty() && inside.all { (n, _) -> graph.edge(node.id, n.id)?.let(graph::routeOnly) == true }) continue
             for ((next, type) in graph.neighbors(node.id)) {
                 if (type != EdgeType.HOD || next.buildingId == node.buildingId) continue
                 // Spojni prolaz kampusa (K-P-...) vodi dalje u drugu zgradu sa planom; ako je nema (ITC), na kampus.

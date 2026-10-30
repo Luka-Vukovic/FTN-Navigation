@@ -58,6 +58,72 @@ class StairWalkTest {
         }
     }
 
+    /**
+     * Hod po stepeništu od koraka [entry] (ulazak na krak, [StairWalk.markStairStart]), kao [PdrLocator]: promene se potvrđuju,
+     * strana se pamti. Vraća stranu promene po koraku (0 - nema).
+     */
+    private fun StairWalk.onStairs(headings: List<Float>, entry: Int): List<Int> {
+        var changes = 0
+        var sense = 0
+        var t = 0L
+        return headings.mapIndexed { i, h ->
+            t += stepNs
+            step(h, timeNs = t)
+            if (i == entry) markStairStart()
+            val s = if (i >= entry) floorTurn(changes, sense, onStair = true) else 0
+            if (s != 0) {
+                confirmChange()
+                changes++
+                sense = s
+            }
+            s
+        }
+    }
+
+    /**
+     * Teren 30.10.2026, NB P -> I -> II (smer na planu sa snimka, 1216-1254 s): okret sa podesta I sprata se nastavio u treći let
+     * (157° -> 198° kroz 7 koraka) - nizovi od 5, "drugi krak bez promene sprata", II propušten. Trenutni let je najduži klizni
+     * niz na kraju.
+     */
+    @Test
+    fun secondFloor_turnTailIntoFlight_counts() {
+        val headings = listOf(23f, 18f, 11f, 1f, 359f, 2f, 5f, 359f, 351f, 353f, 354f, 353f, 357f, 16f, 52f, 92f, 111f, 116f, 128f,
+            157f, 173f, 194f, 194f, 191f, 188f, 185f, 184f, 185f, 188f, 185f, 197f, 227f, 258f, 279f, 305f, 325f, 347f, 356f, 2f, 4f,
+            7f, 14f, 4f, 9f, 17f, 6f, 12f, 17f, 26f, 47f, 72f, 95f, 116f, 122f, 123f, 157f, 167f, 171f, 180f, 191f, 197f, 198f, 197f,
+            195f, 194f)
+        val turns = StairWalk().onStairs(headings, entry = 2)
+        val at = turns.indices.filter { turns[it] != 0 }
+        assertEquals("$at", listOf(1, 1), at.map { turns[it] })
+        // Pre poslednjeg koraka (tada je bio "vratio se").
+        assertTrue("$at", at[1] < headings.size - 1)
+    }
+
+    /**
+     * Teren 30.10.2026, NB III -> II (1655-1678 s): kompas je u prvom kraku klizio (331° -> 8° -> 348°), pa je krak u strogoj
+     * podeli dva niza po 5 - let pre okreta je bio hod hodnikom pre stepeništa i okret od njega je bio samo −83°. Klizni let
+     * od ulaska na krak.
+     */
+    @Test
+    fun firstFlightDrifted_flightBeforeFromStairEntry() {
+        val headings = listOf(316f, 325f, 331f, 338f, 348f, 356f, 2f, 4f, 7f, 8f, 7f, 5f, 3f, 357f, 348f, 331f, 315f, 304f, 295f,
+            280f, 272f, 270f, 272f, 274f, 259f, 233f, 212f, 195f, 191f, 188f, 187f, 189f, 186f, 183f, 181f, 182f, 178f)
+        val turns = StairWalk().onStairs(headings, entry = 2)
+        assertEquals("$turns", -1, turns.firstOrNull { it != 0 })
+    }
+
+    /**
+     * Replay 30.10.2026, NTP I, S2: hod hodnikom (~20 koraka), polukrug ka kraku i tri koraka niz krak. Klizni letovi samo od
+     * ulaska na krak - inače je to bilo "let - okret - let" i lažno II sprat tri koraka posle ulaska.
+     */
+    @Test
+    fun corridorThenUTurnOntoFlight_notAFloor() {
+        val headings = listOf(261f, 259f, 264f, 267f, 270f, 276f, 281f, 283f, 280f, 280f, 280f, 281f, 278f, 278f, 278f, 275f, 272f,
+            271f, 272f, 269f, 264f, 262f, 262f, 262f, 269f, 271f, 270f, 275f, 279f, 283f, 289f, 298f, 311f, 331f, 350f, 17f, 36f, 57f,
+            76f, 97f, 111f, 115f, 112f, 111f, 110f, 108f, 104f, 103f)
+        val turns = StairWalk().onStairs(headings, entry = headings.indexOf(97f))
+        assertTrue("$turns", turns.all { it == 0 })
+    }
+
     @Test
     fun flightTurnRightFlight_isOneFloorTurningRight() {
         val walk = StairWalk()

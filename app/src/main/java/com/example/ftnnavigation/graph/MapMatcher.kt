@@ -212,7 +212,7 @@ class MapMatcher(
 
     init {
         fun onFloor(id: String) = graph.node(id)?.takeIf { it.buildingId == buildingId && it.floor == floor }
-        segments = graph.edges.filter { it.type == EdgeType.HOD }.mapNotNull { edge ->
+        segments = graph.edges.filter { it.type == EdgeType.HOD && !graph.routeOnly(it) }.mapNotNull { edge ->
             val a = onFloor(edge.fromId) ?: return@mapNotNull null
             val b = onFloor(edge.toId) ?: return@mapNotNull null
             (a.id to b.id) to Segment(a, b)

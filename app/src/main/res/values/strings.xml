@@ -268,6 +268,8 @@
     <string name="step_stairs_down">Stepenicama naniže · %1$s</string>
     <string name="step_lift">Liftom · %1$s</string>
     <string name="step_flight">Krak stepenica do podesta</string>
+    <string name="step_flight_up">Uz stepenice do podesta</string>
+    <string name="step_flight_down">Niz stepenice do podesta</string>
     <string name="step_enter">Uđi u zgradu %1$s</string>
     <string name="step_exit">Izađi iz zgrade %1$s</string>
     <string name="step_exit_outside">Izađi napolje</string>
@@ -347,8 +349,10 @@
     <string name="settings_step_length_reset">Vrati na %1$s m</string>
     <string name="settings_section_route">Ruta</string>
     <string name="settings_floor_change_title">Promena sprata</string>
+    <string name="settings_floor_change_usual">Uobičajeno</string>
+    <string name="settings_floor_change_usual_body">Stepeništa i liftovi kojima studenti obično idu. Ostala samo kad su mnogo brža; lift Nastavnog bloka ne.</string>
     <string name="settings_floor_change_fastest">Najbrže</string>
-    <string name="settings_floor_change_fastest_body">Stepenice ili lift - šta stiže brže (uz lift se računa i čekanje).</string>
+    <string name="settings_floor_change_fastest_body">Bilo koje stepenište ili lift - šta stiže brže (uz lift se računa i čekanje).</string>
     <string name="settings_floor_change_no_stairs">Bez stepenica</string>
     <string name="settings_floor_change_no_stairs_body">Liftom (kolica, povreda, prtljag). Amfiteatri, F-blok i MI nemaju lift, a na V sprat Nastavnog bloka se ide samo stepenicama - tamo ruta ide stepenicama, uz napomenu.</string>
     <string name="settings_floor_change_no_lift">Bez lifta</string>

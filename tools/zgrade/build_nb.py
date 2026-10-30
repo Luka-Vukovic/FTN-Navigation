@@ -52,7 +52,7 @@ LIFTS = [("L", (647, 330, 668, 372), (653, 382))]
 # Krakovi su iste širine (teren 29.10.2026, korisnik; ranije levi 19 px, desni 27 px), lift između njih - samo crtež: čvorovi
 # i putanja ostaju (pomeranje za 2-3 px je u replay-u 17.10. promenilo map-matching kod dna kraka, sprat je ostao pogrešan).
 FLIGHTS = Flights(up=(624, 330, 647, 377), down=(668, 330, 691, 377), landing=(624, 311, 691, 330),
-                  path=[(633, 382), (633, 320), (677, 320), (677, 382)])
+                  path=[(633, 382), (633, 320), (677, 320), (677, 382)], floor_landing=True)
 FLIGHTS_LOWEST = {**FLIGHTS, "draw_down": False}
 SPIRAL = ("S2", (908, 424, 928, 440), (918, 432))  # spiralno stepenište IV -> V sprat
 
@@ -63,7 +63,13 @@ PASSAGE_AMF = (680, 313)
 # Prolaz ka Amfiteatrima je sa međupodesta glavnog stepeništa (FtnGO: "stepenicama naviše"; plan: otvor iznad desnog
 # kraja međupodesta). Do 05.10.2026 je bio grana pravo iz hodnika - kroz desni krak (silazak u suteren).
 AMF_VIA = ("S", [("PODEST", (633, 320), STEPS), ("PODEST-AMF", (680, 320))])
-CAMPUS_LINKS = [("K-U-NB-1", "NB-0-ULAZ"), ("K-P-NB-KULA", "NB-0-PROLAZ"), ("K-P-AMF-NB", "NB-0-PROLAZ-AMF")]
+# Sa I sprata se do istog međupodesta silazi desnim krakom (krak naniže), pa je prolaz pravo ispred kraja kraka. Teren
+# 30.10.2026 (106 -> A2): ruta je išla dva kraka dole u prizemlje i jedan nazad gore, a na stepenicama "nije nigde bilo
+# obeleženo gde tačno da idem". Ivica pravo od dna kraka naniže do prolaza (bez čvora hodnika na međupodestu - lanac preko
+# čvora hodnika bi lociranje uzelo za bočni krak, kao AMF S1); prolaz sa oba nivoa vodi u isti spojni deo.
+AMF_VIA_1 = ("S-D", [], STEPS)
+CAMPUS_LINKS = [("K-U-NB-1", "NB-0-ULAZ"), ("K-P-NB-KULA", "NB-0-PROLAZ"), ("K-P-AMF-NB", "NB-0-PROLAZ-AMF"),
+                ("K-P-AMF-NB", "NB-1-PROLAZ-AMF")]
 # Veze sa drugom zgradom mimo kampusa (zastakljen prolaz NB - Kula na I spratu, evakuacioni plan).
 INDOOR_LINKS = [("NB-1-PROLAZ", "KULA-1-PROLAZ-NB")]
 
@@ -144,7 +150,8 @@ def floor_1():
         "title": "I sprat",
         "paths": spine(423, 425, 1025),
         "corridors": [rect_poly(416, 406, 1038, 441), hall(406),
-                      rect_poly(305, 404, 416, 440)],  # zastakljen prolaz ka Kuli
+                      rect_poly(305, 404, 416, 440),  # zastakljen prolaz ka Kuli
+                      rect_poly(668, 305, 692, 311)],  # prolaz ka Amfiteatrima (sa međupodesta, desnim krakom naniže)
         "rooms": [
             *row(311, 406, [(416, 449, None), (449, 485, "102"), (485, 624, "101"),
                             (760, 932, "109A"), (932, 1038, "109")]),
@@ -155,7 +162,7 @@ def floor_1():
         "stairs": STAIRS,
         "lifts": LIFTS,
         "flights": {"S": FLIGHTS},
-        "points": [("PROLAZ", PASSAGE_KULA, "PROLAZ")],
+        "points": [("PROLAZ", PASSAGE_KULA, "PROLAZ"), ("PROLAZ-AMF", PASSAGE_AMF, "PROLAZ", AMF_VIA_1)],
     }
 
 

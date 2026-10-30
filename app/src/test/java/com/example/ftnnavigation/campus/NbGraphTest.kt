@@ -115,6 +115,24 @@ class NbGraphTest {
         assertEquals(floors.sorted(), floors)
     }
 
+    /**
+     * Teren 30.10.2026 (snimak ekrana NB II, ruta ka 307): sa dna kraka naniže (stiže se odozdo) na dno kraka naviše ruta ide
+     * pravo preko podesta ispred lifta, ne 3 m dole u hodnik i nazad ("okolo"). Lociranje tu ivicu ne vidi (samo za rutu).
+     */
+    @Test
+    fun throughFloor_straightAcrossFloorLanding() {
+        val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, graph.room("307")!!.id))
+        val ids = route.nodes.map { it.id }
+        for (floor in 1..2) {
+            val at = ids.indexOf("NB-$floor-S-D")
+            assertTrue(ids.toString(), at >= 0 && ids[at + 1] == "NB-$floor-S")
+        }
+        val landing = checkNotNull(graph.edge("NB-2-S-D", "NB-2-S"))
+        assertTrue(graph.routeOnly(landing))
+        assertTrue(graph.routeOnly(checkNotNull(graph.edge("NB-1-S-D", "NB-1-PROLAZ-AMF"))))
+        assertFalse(graph.routeOnly(checkNotNull(graph.edge("NB-0-S", "NB-0-PODEST"))))
+    }
+
     @Test
     fun avoidStairs_takesLift() {
         val route = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, graph.room("AH3")!!.id, RoutingProfile(avoidStairs = true)))

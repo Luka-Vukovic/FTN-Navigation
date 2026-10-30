@@ -5,10 +5,16 @@ import androidx.core.content.edit
 import com.example.ftnnavigation.graph.RoutingProfile
 import kotlin.math.roundToInt
 
-/** Kako ruta menja sprat (Podešavanja): najbrže, ili izbegava stepenice / lift. */
+/** Kako ruta menja sprat (Podešavanja): uobičajeno, najbrže, ili izbegava stepenice / lift. */
 enum class FloorChange(val profile: RoutingProfile) {
-    /** Stepenice ili lift - šta je brže (lift: čekanje 45 s). */
-    NAJBRZE(RoutingProfile()),
+    /**
+     * Stepeništa i liftovi koje studenti obično koriste (teren 30.10.2026) - ostala samo kad su mnogo brža, lift NB-a ne
+     * ([RoutingProfile.uncommonVerticals], [RoutingProfile.liftOnlyAvoidingStairs]).
+     */
+    UOBICAJENO(RoutingProfile()),
+
+    /** Stepenice ili lift - šta je brže (lift: čekanje 45 s), svako stepenište i lift. */
+    NAJBRZE(RoutingProfile.FASTEST),
 
     /** Kolica, povreda, prtljag - liftom; gde lifta nema, stepenicama uz napomenu ([com.example.ftnnavigation.graph.Route.fallback]). */
     BEZ_STEPENICA(RoutingProfile(avoidStairs = true)),
@@ -63,7 +69,7 @@ object AppSettings {
     /** Promena sprata na ruti (i za vreme polaska u obaveštenju); podrazumevano najbrže. */
     fun floorChange(context: Context): FloorChange =
         prefs(context).getString(KEY_FLOOR_CHANGE, null)?.let { name -> FloorChange.entries.find { it.name == name } }
-            ?: FloorChange.NAJBRZE
+            ?: FloorChange.UOBICAJENO
 
     fun setFloorChange(context: Context, value: FloorChange) = prefs(context).edit { putString(KEY_FLOOR_CHANGE, value.name) }
 

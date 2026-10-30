@@ -136,10 +136,11 @@ fun stairsOf(graph: BuildingGraph): Map<String, Stair> =
             val (down, up) = all.partition { it.id.endsWith(DOWN_FOOT_SUFFIX) }
             // Na najvišem spratu stepeništa sa krakovima nema dna kraka naviše (AMF S1, S2) - tu je čvor sprata dno kraka naniže.
             val byFloor = up.associateBy { it.floor } + down.filter { d -> up.none { it.floor == d.floor } }.associateBy { it.floor }
-            // Čvor hodnika je najbliži sused na istom spratu; dalji je put preko međupodesta (NB: prolaz ka Amfiteatrima).
+            // Čvor hodnika je najbliži sused na istom spratu; dalji je put preko međupodesta (NB: prolaz ka Amfiteatrima). Ne
+            // ivicom samo za rutu ([BuildingGraph.routeOnly] - podest sprata, prolaz sa I sprata NB-a).
             val corridorOf = all.associate { s ->
                 s.id to graph.neighbors(s.id)
-                    .filter { (n, type) -> type == EdgeType.HOD && n.floor == s.floor }
+                    .filter { (n, type) -> type == EdgeType.HOD && n.floor == s.floor && graph.edge(s.id, n.id)?.let(graph::routeOnly) != true }
                     .minBy { (n, _) -> hypot(graph.position(n).x - graph.position(s).x, graph.position(n).y - graph.position(s).y) }
                     .first
             }
@@ -193,6 +194,15 @@ class StairWalk {
         headings.subList(0, drop).clear()
         times.subList(0, drop).clear()
         positions.subList(0, drop).clear()
+        stairStart = stairStart?.let { maxOf(0, it - drop) }
+    }
+
+    /** Prvi korak na samom stepeništu (tačka ušla na krak); null - ne zna se. Klizni letovi ([driftWindow]) su samo od njega. */
+    private var stairStart: Int? = null
+
+    /** Poslednji korak je ulazak na stepenište. */
+    fun markStairStart() {
+        stairStart = headings.size - 1
     }
 
     /** Pauza pre koraka [i] (duža od [PAUSE_NS]) - let se tu prekida. */
@@ -255,6 +265,16 @@ class StairWalk {
     private var pendingAnchor: Int? = null
 
     /**
+     * Let čiji je kraj [anchor] (ceo, kakav je bio pri prvoj promeni) - samo kad je sidro iz kliznog leta; inače se let sidra
+     * traži u podeli kao ranije. Teren 30.10.2026 (replay 29.10., NB II -> I -> P): sidro iz
+     * kliznog leta ([driftFlightBefore]) je u kasnijoj podeli bilo niz od 3 koraka, pa je okret za drugi sprat meren od njega -
+     * "vratio se".
+     */
+    private var anchorRun: IntRange? = null
+
+    private var pendingAnchorRun: IntRange? = null
+
+    /**
      * Strana okreta (+1 u smeru kazaljke, −1 suprotno) ako je upravo završen okret za sledeći sprat - posle [changes]
      * promena u ovom hodu, sa strane [sense] (0 dok promene nije bilo). Okret se meri od kraja leta pre prve promene do
      * početka trenutnog leta (bar [FLIGHT_STEPS] koraka) - i okret na podestu u istom smeru pre prvog leta (hodnik ->
@@ -270,9 +290,73 @@ class StairWalk {
             val drifted = runs(drifting = true).last()
             if (drifted.count() >= FLIGHT_STEPS) runs = runs.filter { it.last < drifted.first } + listOf(drifted)
         }
+        // Na stepeništu: trenutni let i kad je počeo repom okreta (podela od prvog koraka niza ga je prekinula) - najduži
+        // završni niz koji klizi ([driftWindow]). Teren 30.10.2026, NB I -> II: okret sa podesta sprata se nastavio u let
+        // (157° -> 198° kroz 7 koraka), nizovi od 5 - "drugi krak bez promene sprata", sprat II je propušten.
+        if (onStair && runs.isNotEmpty() && runs.last().count() < FLIGHT_STEPS) {
+            driftWindow(headings.size - 1).takeIf { it.count() >= FLIGHT_STEPS }?.let { w ->
+                runs = runs.filter { it.last < w.first } + listOf(w)
+            }
+        }
         val current = runs.lastOrNull() ?: return 0
         if (current.count() < FLIGHT_STEPS) return 0
-        val from = anchor ?: flightBefore(runs, current) ?: return 0
+        var from = anchor ?: flightBefore(runs, current)
+        var fromRun = anchorRun ?: from?.let { f -> runs.first { f in it } }
+        // Let pre okreta na stepeništu, ako ga stroga podela ne vidi (kompas je kroz krak klizio ~20°, pa je krak dva niza po
+        // 5) ili vidi samo raniji hod hodnikom. Teren 30.10.2026, NB III -> II: let pre okreta je bio hodnik pre stepeništa,
+        // okret meren od njega (−83°), sprat nije promenjen.
+        var keepRun: IntRange? = null
+        if (onStair && anchor == null) {
+            driftFlightBefore(current)?.takeIf { from == null || it.last > from!! }?.let {
+                from = it.last
+                fromRun = it
+                keepRun = it
+            }
+        }
+        val start = from ?: return 0
+        return turnFrom(start, fromRun!!, current, changes, sense, onStair, keepRun)
+    }
+
+    /**
+     * Niz koraka koji se završava korakom [end] i sme da klizi: svaki korak do [RUN_DEG] od prethodnog, ceo niz u rasponu do
+     * [FLIGHT_START_DEG], bez pauze, samo od ulaska na stepenište ([stairStart]). Najduži takav. Bez ograničenja ulaskom je
+     * hod hodnikom pa okret ka kraku bio "let - okret - let" (replay 30.10.2026, NTP I, S2: lažno II tri koraka posle ulaska).
+     */
+    private fun driftWindow(end: Int): IntRange {
+        val first = (stairStart ?: return end..end).coerceAtLeast(0)
+        var start = end
+        var rel = 0f
+        var lo = 0f
+        var hi = 0f
+        while (start > first && !pauseBefore(start)) {
+            val step = angleDiffDeg(headings[start], headings[start - 1])
+            if (abs(step) > RUN_DEG) break
+            rel -= step
+            if (maxOf(hi, rel) - minOf(lo, rel) > FLIGHT_START_DEG) break
+            lo = minOf(lo, rel)
+            hi = maxOf(hi, rel)
+            start--
+        }
+        return start..end
+    }
+
+    /**
+     * Poslednji let ([driftWindow] od bar [FLIGHT_STEPS] koraka) pre trenutnog [current], najviše [MAX_LANDING_SPAN_STEPS]
+     * koraka pre njega; niz upravan na trenutni let (hod preko širokog međupodesta) se preskače.
+     */
+    private fun driftFlightBefore(current: IntRange): IntRange? {
+        val currentDeg = meanHeading(current)
+        for (end in current.first - 1 downTo maxOf(0, current.first - 1 - MAX_LANDING_SPAN_STEPS)) {
+            val w = driftWindow(end)
+            if (w.count() < FLIGHT_STEPS) continue
+            if (abs(abs(angleDiffDeg(meanHeading(w), currentDeg)) - 90f) <= ACROSS_LANDING_DEG) continue
+            return w
+        }
+        return null
+    }
+
+    /** Okret od leta [fromRun] (kraj [from]) do trenutnog leta [current] - vidi [floorTurn]. */
+    private fun turnFrom(from: Int, fromRun: IntRange, current: IntRange, changes: Int, sense: Int, onStair: Boolean, keepRun: IntRange?): Int {
         // Prva promena: let pre okreta nije duži hod (hodnik), a okret se hodao (na podestu se okreće u hodu kroz više
         // koraka; u hodniku se korisnik okrene u mestu) - šetnja hodnikom gore-dole pored stepeništa nije stepenište.
         if (anchor == null && (from - flightFirst(from) + 1 > MAX_FLIGHT_STEPS || current.first - from < MIN_TURN_STEPS)) return 0
@@ -294,12 +378,12 @@ class StairWalk {
         }
         // Ukupan okret: od srednjeg smera leta pre okreta do srednjeg smera trenutnog leta. Poslednji korak leta je već
         // deo okreta (teren 05.10.2026, NTP II -> I: od njega 133°, od srednjeg smera leta 149°; pravi okret 180°).
-        val fromRun = runs.first { from in it }
         fun mean(run: IntRange) = run.map { sums[it] }.average().toFloat()
         for (s in if (sense != 0) listOf(sense) else listOf(1, -1)) {
             if (s * (sums[current.first] - sums[from]) < need - TURN_SLACK_DEG) continue
             if (s * (mean(current) - mean(fromRun)) < need) continue
             pendingAnchor = from
+            pendingAnchorRun = keepRun
             flightHeadings = meanHeading(fromRun) to meanHeading(current)
             return s
         }
@@ -381,6 +465,7 @@ class StairWalk {
 
     /** Sprat je promenjen po poslednjem [floorTurn]. */
     fun confirmChange() {
+        if (anchor == null) anchorRun = pendingAnchorRun
         anchor = anchor ?: pendingAnchor
     }
 

@@ -16,6 +16,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.hypot
 
 /** F-blok (assets/f.json, tools/zgrade/build_f.py; evakuacioni planovi sa terena 02.10.2026) spojen sa kampusom. */
@@ -84,21 +85,36 @@ class FGraphTest {
      */
     @Test
     fun numbering_fromFloorSigns() {
-        for ((floor, numbers) in mapOf(1 to listOf(101, 113, 114, 126), 2 to listOf(200, 208, 209, 224), 3 to listOf(301, 308, 309, 320))) {
+        for ((floor, numbers) in mapOf(1 to listOf(101, 113, 114, 126), 2 to listOf(200, 208, 209, 223), 3 to listOf(301, 308, 309, 320))) {
             val (first, eastEnd, southFirst, westEnd) = numbers.map { room("F $it") }
             val stairs = checkNotNull(graph.node("F-$floor-S"))
             val rooms = graph.rooms.filter { it.buildingId == FPlan.BUILDING_ID && it.floor == floor }
             assertEquals("$floor", rooms.filter { it.x < stairs.x }.minBy { distance(it.id, stairs.id) }.id, first.id)
             assertEquals("$floor", rooms.minOf { it.x }, eastEnd.x, 1e-4f)
-            // Gornji (južni) red: prvi broj je na istočnom kraju, poslednji na zapadnom.
-            val south = rooms.filter { it.y < 0.5f }
+            // Gornji (južni) red: prvi broj je na istočnom kraju, poslednji na zapadnom (II sprat: 208 je preko cele širine kraja).
+            val south = rooms.filter { it.y < 0.5f && it.id != eastEnd.id }
             assertEquals("$floor", south.minBy { it.x }.id, southFirst.id)
             assertEquals("$floor", south.maxBy { it.x }.id, westEnd.id)
             // Stepenište je dole na planu (korisnik: prirodnije kad se popne na sprat).
             assertTrue(stairs.y > 0.5f)
         }
         assertEquals(room("F 202").id, resolveTarget("F 203", graph, campus)!!.node.id)
-        assertEquals(room("F 224").id, resolveTarget("F 225", graph, campus)!!.node.id)
+    }
+
+    /**
+     * Teren 30.10.2026: "F-209 ima svoja vrata desno ... 207 je levo, 208 pravo, 209 desno, ako smo došli skroz do kraja
+     * hodnika". Do tada je 209 bila ugao iza kraja hodnika sa vratima na zidu sobe 210 - "fizički nemoguće doći".
+     */
+    @Test
+    fun endOfSecondFloorCorridor_207Left_208Ahead_209Right() {
+        val end = checkNotNull(graph.node("F-2-H51_98"))
+        fun doorOf(name: String) = graph.neighbors(room(name).id).single().first
+        // Na kraju hodnika (ka istoku, levo na planu) su vrata 208 pravo, 209 gore (desno), 207 dole (levo).
+        assertTrue(doorOf("F 208").x < end.x)
+        assertTrue(doorOf("F 209").y < end.y && distance(doorOf("F 209").id, end.id) < 5.0)
+        assertTrue(room("F 207").y > end.y && distance(doorOf("F 207").id, end.id) < 5.0)
+        // Vrata 209 su na zidu same sobe 209 (ne susedne).
+        assertTrue(abs(doorOf("F 209").x - room("F 209").x) < 1e-3f)
     }
 
     /** Iz Amfiteatara na III sprat F-bloka: pasarelom (bez staza) pa stepeništem. */

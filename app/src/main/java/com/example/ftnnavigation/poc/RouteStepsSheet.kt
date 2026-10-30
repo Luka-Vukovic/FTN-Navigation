@@ -121,7 +121,13 @@ private fun stepTitle(step: RouteStep, campus: CampusData): String {
             floor.orEmpty(),
         )
         StepKind.LIFT -> stringResource(R.string.step_lift, floor.orEmpty())
-        StepKind.KRAK -> stringResource(R.string.step_flight)
+        StepKind.KRAK -> stringResource(
+            when (step.up) {
+                true -> R.string.step_flight_up
+                false -> R.string.step_flight_down
+                null -> R.string.step_flight
+            },
+        )
         StepKind.ULAZ -> stringResource(R.string.step_enter, building.orEmpty())
         StepKind.IZLAZ -> building?.let { stringResource(R.string.step_exit, it) } ?: stringResource(R.string.step_exit_outside)
         StepKind.PROLAZ -> stringResource(R.string.step_passage, building.orEmpty())

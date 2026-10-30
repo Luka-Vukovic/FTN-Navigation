@@ -102,6 +102,19 @@ class RouteStepsTest {
         assertEquals(listOf(1 to 3), steps.filter { it.kind == StepKind.STEPENICE }.map { it.fromFloor to it.floor })
     }
 
+    /**
+     * Krak do podesta kaže smer (teren 30.10.2026, 106 -> A2: "na stepenicama nigde nije bilo obeleženo gde tačno da idem"): sa I
+     * sprata NB-a niz stepenice do podesta, pa prolazom u Amfiteatre; iz prizemlja uz stepenice.
+     */
+    @Test
+    fun flightToLanding_saysUpOrDown() {
+        val fromFirst = steps(roomId("106"), "A2")
+        val flight = fromFirst.single { it.kind == StepKind.KRAK }
+        assertEquals(false, flight.up)
+        assertEquals(StepKind.PROLAZ, fromFirst[fromFirst.indexOf(flight) + 1].kind)
+        assertEquals(true, steps(roomId("018"), "A2").single { it.kind == StepKind.KRAK }.up)
+    }
+
     /** Kratak prolaz NB - Kula (krajevi hodnika na ~1 m, pod uglom) i izlazak iz lifta nisu "okreni se". */
     @Test
     fun noTurnAround_afterPassageOrLift() {

@@ -187,7 +187,9 @@ def floor_2():
         "title": "II sprat",
         # 208 je na kraju hodnika, preko cele širine (tabla II sprata, teren/izveštaj3/IMG_20261003_121332.jpg; korisnik
         # 29.10.2026: "208 je zapravo pravo ispred, a ne sa leve strane"): hodnik se završava u nju, vrata pravo na kraju.
-        # 209 (gornji ugao) ima vrata uz ugao hodnika.
+        # Gornji red počinje sa 209 odmah uz 208 (korisnik 30.10.2026: "F-209 ima svoja vrata desno, i odande se nastavlja
+        # brojanje ... 207 je levo, 208 pravo, 209 desno"; tabla: 209-223 pa 224/225). Do tada je 209 bila ugao iza kraja
+        # hodnika sa vratima na zidu 210 - "fizički nemoguće doći". 224/225 sa table na crtežu nema mesta (red ima 15 soba).
         "paths": [poly((51, 98), (597, 98))],
         "corridors": [
             poly((50, 82), (600, 82), (600, 114), (50, 114)),
@@ -195,12 +197,11 @@ def floor_2():
             poly((452, 114), (489, 114), (489, 163), (452, 163)),  # podest stepeništa
         ],
         "rooms": [
-            R(0, 50, 0, 82, "F 209", door=(51, 82)),
-            *rooms(2, 0, 82, [(50, 99, 10), (99, 122, 11), (122, 149, 12), (149, 172, 13),
-                              (172, 199, 14), (199, 247, 15), (247, 270, 16), (270, 297, 17), (297, 347, 18),
-                              (347, 397, 19), (397, 421, 20), (421, 448, 21), (448, 498, 22), (498, 548, 23),
-                              (548, 600, 24)]),  # 224 = i 225
-            R(0, 50, 82, 163, "F 208", door=(50, 98)),
+            *rooms(2, 0, 82, [(50, 99, 9), (99, 122, 10), (122, 149, 11), (149, 172, 12),
+                              (172, 199, 13), (199, 247, 14), (247, 270, 15), (270, 297, 16), (297, 347, 17),
+                              (347, 397, 18), (397, 421, 19), (421, 448, 20), (448, 498, 21), (498, 548, 22),
+                              (548, 600, 23)]),
+            R(0, 50, 0, 163, "F 208", door=(50, 98)),
             *rooms(2, 114, 163, [(50, 100, 7), (100, 149, 6), (149, 198, 5), (198, 248, 4),
                                  (248, 322, 2), (322, 347, 1), (347, 373, 0),  # 202 = i 203 (tabla: dve sobe)
                                  (489, 509, 26), (509, 548, TOALET), (548, 573, 27), (573, 600, 28)]),

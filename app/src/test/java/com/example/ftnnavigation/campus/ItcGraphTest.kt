@@ -81,13 +81,18 @@ class ItcGraphTest {
         assertTrue(routeOrFallback(RoutingProfile(avoidStairs = true)) { graph.route(ItcPlan.ENTRANCE_ID, room("ITCS-RC").id, it) }!!.fallback)
     }
 
-    /** Iz Amfiteatara u ITC se ide iznutra, kroz prolaz u prizemlju (ne napolje). */
+    /**
+     * Iz suterena Amfiteatara u ITC: najbrže iznutra (široko stepenište S2 u AMF-u, pa prolaz u prizemlju). Podrazumevano se S2
+     * ne koristi (teren 30.10.2026, korisnik: "generalno se retko koristi, samo do INT i do toaleta"), pa ruta ide napolje.
+     */
     @Test
     fun fromAmf_throughPassage() {
-        val route = graph.route(AmfPlan.ENTRANCE_ID, room("ITCA1").id)!!
+        val route = graph.route(AmfPlan.ENTRANCE_ID, room("ITCA1").id, RoutingProfile.FASTEST)!!
         val ids = route.nodes.map { it.id }
         assertTrue(ids.toString(), "ITC-0-PROLAZ-AMF" in ids)
         assertTrue(route.nodes.none { it.type == NodeType.STAZA })
+        val usual = graph.route(AmfPlan.ENTRANCE_ID, room("ITCA1").id)!!.nodes.map { it.id }
+        assertTrue(usual.toString(), usual.none { "S2" in it })
     }
 
     @Test

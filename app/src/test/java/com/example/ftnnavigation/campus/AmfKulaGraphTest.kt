@@ -103,6 +103,22 @@ class AmfKulaGraphTest {
         assertFalse(route.nodes.any { it.type == NodeType.STAZA })
     }
 
+    /**
+     * Teren 30.10.2026 (106 -> A2): sa I sprata NB-a desnim krakom niz stepenice pravo u prolaz na međupodestu - ne dva kraka
+     * u prizemlje pa jedan nazad gore. Podrazumevano se ne ide širokim S2 u AMF-u (A2 -> Skriptarnica preko S1; korisnik:
+     * "S2 se retko koristi"), a "Najbrže" ga i dalje koristi.
+     */
+    @Test
+    fun nbFirstFloorToA2_downOneFlightIntoPassage_andSkriptarnicaOverS1() {
+        val ids = checkNotNull(graph.route(room("106").id, room("A2").id)).nodes.map { it.id }
+        assertTrue(ids.toString(), "NB-1-PROLAZ-AMF" in ids)
+        assertFalse(ids.toString(), ids.any { it.startsWith("NB-0-") })
+        val usual = checkNotNull(graph.route(room("A2").id, room("Skriptarnica").id)).nodes.map { it.id }
+        assertTrue(usual.toString(), "AMF-m1-S1" in usual && usual.none { "S2" in it })
+        val fastest = checkNotNull(graph.route(room("A2").id, room("Skriptarnica").id, RoutingProfile.FASTEST)).nodes.map { it.id }
+        assertTrue(fastest.toString(), fastest.any { "S2" in it })
+    }
+
     /** Sala nije usputni čvor: do AR sala ide se hodnicima (preko Kule), ne kroz amfiteatar. */
     @Test
     fun nbToArRoom_notThroughAmphitheatre() {
@@ -221,7 +237,7 @@ class AmfKulaGraphTest {
     fun stepEdges_marked() {
         assertEquals(
             setOf(
-                "NB-0-S" to "NB-0-PODEST", "AMF-m1-S1" to "AMF-m1-PODEST-S1", "AMF-0-S1-D-KRAK" to "AMF-0-PODEST-S1-D",
+                "NB-0-S" to "NB-0-PODEST", "NB-1-S-D" to "NB-1-PROLAZ-AMF", "AMF-m1-S1" to "AMF-m1-PODEST-S1", "AMF-0-S1-D-KRAK" to "AMF-0-PODEST-S1-D",
                 "AMF-0-S1-D-KRAK-L" to "AMF-0-PODEST-S1-D-L",
                 "K-P-AMF-F" to "F-0-PROLAZ-AMF", "K-P-AMF-F" to "F-1-PROLAZ-AMF",
             ),
@@ -249,10 +265,10 @@ class AmfKulaGraphTest {
         val noStairs = RoutingProfile(avoidStairs = true)
         val toA2 = routeOrFallback(noStairs) { graph.route(room("101").id, room("A2").id, it) }
         assertNotNull(toA2)
-        if (!toA2!!.fallback) assertFalse(toA2.nodes.any { it.id == "NB-0-PODEST" })
+        if (!toA2!!.fallback) assertFalse(toA2.nodes.any { it.id == "NB-0-PODEST" || it.id == "NB-1-PROLAZ-AMF" })
         assertNull(graph.route(room("101").id, room("F 315").id, noStairs))
         assertTrue(routeOrFallback(noStairs) { graph.route(room("101").id, room("F 315").id, it) }!!.fallback)
-        // Bez podešavanja ruta i dalje ide staklenim prolazom (kraće).
-        assertTrue(graph.route(room("101").id, room("A2").id)!!.nodes.any { it.id == "NB-0-PODEST" })
+        // Bez podešavanja ruta i dalje ide staklenim prolazom (kraće) - sa I sprata niz desni krak (od 30.10.2026).
+        assertTrue(graph.route(room("101").id, room("A2").id)!!.nodes.any { it.id == "NB-1-PROLAZ-AMF" })
     }
 }

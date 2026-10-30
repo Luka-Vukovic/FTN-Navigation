@@ -161,7 +161,7 @@ private fun StepLengthCard(stepLengthM: Float, onChange: (Float) -> Unit) {
     }
 }
 
-/** Kako ruta menja sprat: jedan od tri izbora (dodir na red bira). */
+/** Kako ruta menja sprat: jedan od četiri izbora (dodir na red bira). */
 @Composable
 private fun FloorChangeCard(selected: FloorChange, onSelect: (FloorChange) -> Unit) {
     SettingsCard {
@@ -187,12 +187,14 @@ private fun FloorChangeCard(selected: FloorChange, onSelect: (FloorChange) -> Un
 }
 
 private fun FloorChange.labelRes(): Int = when (this) {
+    FloorChange.UOBICAJENO -> R.string.settings_floor_change_usual
     FloorChange.NAJBRZE -> R.string.settings_floor_change_fastest
     FloorChange.BEZ_STEPENICA -> R.string.settings_floor_change_no_stairs
     FloorChange.BEZ_LIFTA -> R.string.settings_floor_change_no_lift
 }
 
 private fun FloorChange.bodyRes(): Int = when (this) {
+    FloorChange.UOBICAJENO -> R.string.settings_floor_change_usual_body
     FloorChange.NAJBRZE -> R.string.settings_floor_change_fastest_body
     FloorChange.BEZ_STEPENICA -> R.string.settings_floor_change_no_stairs_body
     FloorChange.BEZ_LIFTA -> R.string.settings_floor_change_no_lift_body

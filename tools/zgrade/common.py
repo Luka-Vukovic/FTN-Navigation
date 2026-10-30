@@ -52,16 +52,19 @@ def R(x0, x1, y0, y1, name=None, door=None, doors=None, amenity=None):
     return {"rect": (x0, y0, x1, y1), "name": name, "doors": doors or ([door] if door else None), "amenity": amenity}
 
 
-def Flights(up, down, landing, path, draw_down=True, down_node=None, draw_up=True):
+def Flights(up, down, landing, path, draw_down=True, down_node=None, draw_up=True, floor_landing=False):
     """
     Krakovi stepeništa (vidi "flights" gore): up/down/landing - pravougaonici kraka naviše, kraka naniže i
     međupodesta (crtež); path - [dno kraka naviše, okret na međupodestu iznad njega, okret iznad kraka naniže,
     dno kraka naniže]. draw_down=False: krak naniže se ne crta (najniži sprat - ispod nema ničega). down_node: čvor
     <ključ>-D drugde od kraja putanje (AMF S1: gde se hodnik spaja sa oba bočna kraka). draw_up=False: krak naviše se
     ne crta (AMF S1 u prizemlju: srednji krak je ispod galerije, sa nje se vidi samo ograda nad praznim prostorom).
+    floor_landing=True: dno kraka naviše i dno kraka naniže istog sprata su spojeni pravo preko podesta sprata (NB: ispred
+    lifta). Teren 30.10.2026 (snimak ekrana NB II, ruta ka 307): bez toga je ruta sa kraka na krak išla "okolo" - 3 m dole
+    u hodnik, duž njega i nazad gore.
     """
     return {"up": up, "down": down, "landing": landing, "path": path, "draw_down": draw_down,
-            "down_node": down_node or path[3], "draw_up": draw_up}
+            "down_node": down_node or path[3], "draw_up": draw_up, "floor_landing": floor_landing}
 
 
 def variants(flights):
@@ -197,6 +200,8 @@ def build_floor(g, f, plan, down_keys=(), up_keys=None):
         if key in down_keys:
             foot = variants(flights)[0]["down_node"]
             g.edge(g.node(f, key + "-D", *foot, kind="STEPENISTE"), net.attach(foot))
+            if variants(flights)[0].get("floor_landing") and g.nid(f, key) in g.nodes:
+                g.edge(g.nid(f, key), g.nid(f, key + "-D"))
     for key, _, at in plan.get("lifts", []):
         g.edge(g.node(f, key, *at, kind="LIFT"), net.attach(at))
     for key, at, kind, *via in plan.get("points", []):
@@ -207,13 +212,14 @@ def build_floor(g, f, plan, down_keys=(), up_keys=None):
         # Tačka van mreže hodnika: (ključ postojećeg čvora, [(ključ, tačka), ...]) - npr. prolaz sa međupodesta
         # stepeništa (NB -> Amfiteatri): od čvora stepeništa preko podesta do prolaza. (ključ, tačka, STEPS): ivica do te
         # tačke ide krakom stepeništa (HOD, ali sa stepenicima - za rutu "bez stepenica").
-        anchor, chain = via[0]
+        # (ključ, lanac, STEPS): i poslednja ivica (do same tačke) ide stepenicima - NB I sprat: niz krak do prolaza.
+        anchor, chain, *last = via[0]
         prev = g.nid(f, anchor)
         for k, p, *mark in chain:
             cur = g.node(f, k, *p)
             g.edge(prev, cur, steps=STEPS in mark)
             prev = cur
-        g.edge(prev, n)
+        g.edge(prev, n, steps=STEPS in last)
     net.finish()
 
 

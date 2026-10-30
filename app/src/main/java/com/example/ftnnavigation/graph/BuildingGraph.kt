@@ -75,10 +75,20 @@ data class RoutingProfile(
      * koriste u jednom cugu". Sa 30 s je ruta AMF −1 -> ITC III išla napolje (umesto prolazom: S2 u AMF-u, pa stepenište ITC-a).
      */
     val stairwellChangeSec: Double = 20.0,
+    /**
+     * Stepeništa i liftovi koje studenti retko koriste ([verticalOf] ključ, npr. "NTP/S3"). Teren 30.10.2026, korisnik: "treba
+     * preferirati opcije koje studenti uobičajeno koriste u kretnji, poput S1, S2, L1, L2 u NTP-u, stepenice u NB ... a ovo
+     * ostalo može da se bira kod najbržeg"; AMF S2 (široko stepenište) "se retko koristi, samo do INT i do toaleta" - ruta
+     * A2 -> Skriptarnica je išla njime i ~45 m suterenom, a ide se preko S1.
+     */
+    val uncommonVerticals: Set<String> = UNCOMMON_VERTICALS,
+    /** Kazna (s) za ulazak na stepenište/lift iz [uncommonVerticals] - kao [stairwellChangeSec], samo za izbor rute. */
+    val uncommonVerticalSec: Double = 60.0,
 ) {
     init {
         require(walkingSpeedMps > 0) { "walkingSpeedMps mora biti > 0" }
         require(stairwellChangeSec >= 0) { "stairwellChangeSec mora biti >= 0" }
+        require(uncommonVerticalSec >= 0) { "uncommonVerticalSec mora biti >= 0" }
         require(crowdFactor >= 1.0) { "crowdFactor mora biti >= 1" }
         require(buildingCrowd.values.all { it >= 1.0 }) { "gužva po zgradi mora biti >= 1" }
         require(!(avoidStairs && avoidLift)) { "bez stepenica i bez lifta - nema promene sprata" }
@@ -90,6 +100,14 @@ data class RoutingProfile(
 
     /** Isti profil bez izbegavanja stepenica/lifta. */
     fun withoutAvoidance(): RoutingProfile = copy(avoidStairs = false, avoidLift = false)
+
+    companion object {
+        /** Podrazumevano retko korišćena stepeništa i liftovi ([uncommonVerticals]). */
+        val UNCOMMON_VERTICALS = setOf("NTP/S3", "NTP/L3", "AMF/S2")
+
+        /** "Najbrže": svako stepenište i lift ravnopravno, i lift NB-a. */
+        val FASTEST = RoutingProfile(liftOnlyAvoidingStairs = emptySet(), uncommonVerticals = emptySet())
+    }
 }
 
 /**
@@ -161,6 +179,23 @@ class BuildingGraph(
     /** Ivica između čvorova [aId] i [bId] (smer nije bitan), ili null ako nisu susedi. */
     fun edge(aId: String, bId: String): Edge? = edgeIndex[aId to bId]
 
+    /**
+     * Ivica samo za rutu, ne za lociranje (map-matching i prolazi je ne vide):
+     * - krak stepeništa (sa stepenicima) pravo od dna kraka do prolaza u drugu zgradu - NB I sprat: niz desni krak na
+     *   međupodest i u prolaz ka Amfiteatrima (30.10.2026). Pri silasku I -> P korisnik napravi par koraka pravo po podestu pre
+     *   okreta ka drugom kraku, pa je lociranje to uzimalo za izlazak u prolaz (replay 19.10. i 30.10.2026);
+     * - podest sprata između dna dva kraka (NB, ispred lifta, 30.10.2026): tačka u holu se lepila za njega, pa posle povratka
+     *   sa kraka više nije ulazila na stepenište (replay 12.10.2026, NB II). Hod po stepeništu vodi putanja krakova.
+     */
+    fun routeOnly(edge: Edge): Boolean {
+        val a = node(edge.fromId) ?: return false
+        val b = node(edge.toId) ?: return false
+        if (a.type == NodeType.STEPENISTE && b.type == NodeType.STEPENISTE) return edge.type == EdgeType.HOD
+        if (!edge.steps) return false
+        val types = setOf(a.type, b.type)
+        return NodeType.STEPENISTE in types && NodeType.PROLAZ in types
+    }
+
     /** Sale (prostorije sa nazivom); toaleti su prostorije bez naziva i nisu odredište po nazivu. */
     val rooms: List<Node> get() = nodes.filter { it.type == NodeType.PROSTORIJA && it.name != null }
 
@@ -211,7 +246,9 @@ class BuildingGraph(
                 if (next.buildingId == cameFromBuilding) continue
                 val step = cost(node, next, type, profile) ?: continue
                 val vertical = if (type == EdgeType.HOD) state.vertical else verticalOf(next)
-                val penalty = if (state.vertical != null && vertical != state.vertical) profile.stairwellChangeSec else 0.0
+                val changed = vertical != state.vertical
+                val penalty = (if (state.vertical != null && changed) profile.stairwellChangeSec else 0.0) +
+                    (if (changed && vertical != null && vertical in profile.uncommonVerticals) profile.uncommonVerticalSec else 0.0)
                 val nextState = SearchState(next.id, vertical)
                 val nextG = g + step + penalty
                 if (nextG < (best[nextState] ?: Double.POSITIVE_INFINITY)) {

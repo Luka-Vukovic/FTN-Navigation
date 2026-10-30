@@ -217,7 +217,7 @@ fun PocScreen(
     route: Route?,
     routeStart: RouteStart,
     /** Promena sprata iz Podešavanja - baner piše kad je ruta po njoj nemoguća. */
-    floorChange: FloorChange = FloorChange.NAJBRZE,
+    floorChange: FloorChange = FloorChange.UOBICAJENO,
     /** Gužva između časova na ruti (procenat sporijeg hoda) - baner je piše; null = nema vredne pomena. */
     crowdPercent: Int? = null,
     canStartTracking: Boolean,

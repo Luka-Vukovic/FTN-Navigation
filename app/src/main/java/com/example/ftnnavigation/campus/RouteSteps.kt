@@ -52,7 +52,7 @@ enum class Side { LEVO, DESNO, PRAVO }
  * Korak uputstva: manevar, pa hod od [walkM] metara do sledećeg koraka. [node] je mesto manevra (posle promene sprata
  * ili zgrade - već na novom mestu), da se na dodir prikaže njegov plan. [buildingId]: zgrada u koju se ulazi, iz koje
  * se izlazi, ili zgrada cilja; [floor]: sprat posle manevra (null - zgrada bez plana). [steps]: prolaz ide i preko
- * stepenika (pasarela F-bloka na podest).
+ * stepenika (pasarela F-bloka na podest). [up]: krak do podesta ([StepKind.KRAK]) naviše ili naniže (null - ne zna se).
  */
 data class RouteStep(
     val kind: StepKind,
@@ -64,7 +64,21 @@ data class RouteStep(
     val name: String? = null,
     val side: Side? = null,
     val steps: Boolean = false,
+    val up: Boolean? = null,
 )
+
+/**
+ * Smer hoda krakom [a] -> [b] do podesta: sa dna kraka naviše (čvor stepeništa) gore, sa dna kraka naniže ("-D") dole; sa
+ * podesta na dno kraka obrnuto. Teren 30.10.2026 (NB I -> prolaz ka Amfiteatrima): "na stepenicama nigde nije bilo obeleženo
+ * gde tačno da idem" - uputstvo je govorilo samo "krak stepenica do podesta".
+ */
+private fun flightUp(a: Node, b: Node): Boolean? = when {
+    a.type == NodeType.STEPENISTE -> !a.id.endsWith(DOWN_FOOT)
+    b.type == NodeType.STEPENISTE -> b.id.endsWith(DOWN_FOOT)
+    else -> null
+}
+
+private const val DOWN_FOOT = "-D"
 
 /** Gde je čvor: u zgradi (sa planom ili čvor ZGRADA bez plana), napolju ili u spojnom prolazu kampusa (K-P). */
 private sealed interface Place {
@@ -234,7 +248,7 @@ fun routeSteps(route: Route, graph: BuildingGraph, campus: CampusData): List<Rou
                 )
                 else -> run += b
             }
-            edge?.steps == true -> begin(RouteStep(StepKind.KRAK, b), listOf(a, b))
+            edge?.steps == true -> begin(RouteStep(StepKind.KRAK, b, up = flightUp(a, b)), listOf(a, b))
             else -> run += b
         }
         i++
