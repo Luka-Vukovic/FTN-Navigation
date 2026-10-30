@@ -301,17 +301,27 @@ GROUND = {
 # se lista soba promeni, oznake treba preneti). Vrata su na sredini zida ka hodniku (kao u NB-u), osim gde je
 # drugačije napisano. Za svaku sobu: (centar, vrata, čvor hodnika).
 OFFICES = [393, 511, 632, 753, 872, 989, 1107, 1226, 1343, 1462, 1580, 1698, 1819, 1985]
+# Vrata po evakuacionim planovima (30.10.2026, korisnik: "vrata i za NTP po evakuacionim planovima"; lukovi otvaranja na ispravljenim
+# fotografijama w1-w4, isečci sa mrežom): kancelarije donjeg reda imaju vrata uz desni zid (~0,6 m od njega), osim 13. (do x 1885)
+# uz levi; isto na I-IV. Poslednja (ugao, x 1985) ostaje. Čvorovi B<sredina sobe> ostaju (na njih se kače drugi: B872, B1343, B1580,
+# B1819, B1985), a naspram vrata su novi B<x vrata>.
+OFFICE_DOORS = [431, 550, 668, 790, 906, 1028, 1146, 1266, 1384, 1502, 1621, 1740, 1795, 1985]
+# Gornji red (sobe 6-9; 202 na II, 402-405 na IV): vrata uz levi kraj sobe (do tada na sredini zida). II i IV isto.
+UPPER_DOORS = {6: 682, 7: 786, 8: 890, 9: 993}
 TYPICAL_DOORS = {
     0: ((235, 593), (345, 593), "M595"), 1: ((200, 736), (345, 736), "M736"), 2: ((200, 927), (345, 927), "M927"),
     3: ((235, 1112), (345, 1112), "M1112"), 4: ((235, 1250), (345, 1250), "M1250"),
-    6: ((715, 730), (715, 646), "U715"), 7: ((817, 730), (817, 646), "U817"),
-    8: ((921, 730), (921, 646), "U921"), 9: ((1023, 730), (1023, 646), "U1023"),
+    **{room: (((a + b) // 2, 730), (UPPER_DOORS[room], 646), f"U{UPPER_DOORS[room]}")
+       for room, (a, b) in zip(range(6, 10), ((666, 765), (765, 869), (869, 974), (974, 1073)))},
     10: ((559, 908), (451, 908), "M927"), 11: ((559, 1102), (451, 1102), "M1112"), 12: ((559, 1242), (451, 1242), "M1250"),
     14: ((1187, 929), (1301, 929), "R930"), 15: ((1187, 1160), (1301, 1160), "R1160"),
     16: ((1612, 1057), (1612, 1280), "C1600"), 17: ((1952, 1351), (1822, 1470), "K1795"),
     18: ((815, 1473), (815, 1389), "C815"), 19: ((983, 1473), (983, 1389), "C983"), 20: ((1170, 1473), (1170, 1389), "C1170"),
-    **{21 + i: ((x, 1745), (x, 1660), "M1608" if x == 393 else f"B{x}") for i, x in enumerate(OFFICES)},
+    **{21 + i: ((x, 1745), (d, 1660), f"B{d}") for i, (x, d) in enumerate(zip(OFFICES, OFFICE_DOORS))},
 }
+# Sobe 14 i 15 uz desni hodnik (II-IV; I sprat ima FIRST_RIGHT): pregrada i vrata po spratu sa evakuacionih planova (30.10.2026) -
+# (y pregrade, y vrata 14, y vrata 15). Do tada na svim spratovima pregrada na y 1040 i vrata 929 / 1160 (crtež II sprata).
+RIGHT_ROOMS = {2: (940, 915, 965), 3: (1067, 1045, 1250), 4: (1025, 1000, 1250)}
 # Sobe podeljene na dve (korisnik: "razdvojeno", "razdvojeno staklom"), prva je gornja/leva. Teren 04.10.2026 (korisnik)
 # potvrđuje redosled: "115 je najbliže zidu zgrade, pa redom do hodnika 115, 116, 117, 118"; "320 je bliže 317-319, onda
 # ide 321"; "322 je bliže 321, a 323 je bliže 324. U 323 se ulazi preko 322"; "223 i 224 analogno 322 i 323" (VIA_FIRST).
@@ -378,7 +388,7 @@ FIRST_SUITE = {
     "121": ((1680, 1180), (1595, 1280), "C1600"),
     "122": {"door": (1785, 1334), "pass": (1840, 1350), "room": (1960, 1335)},
     "123": ((1950, 1495), (1885, 1400)),  # iz T3
-    "124": (1900, 1630),  # uz čvor B1819 (124 je prolaz do 125 i 126)
+    "124": (1900, 1630),  # uz prvi čvor iza dvokrilnih vrata (x 1765): B1795 (od 30.10.2026 naspram vrata 126; bio B1819)
 }
 FIRST_CORE = "B1580"  # I sprat: S3 i L3 iz donjeg hodnika (vrata jezgra dole)
 # 419 (IV sprat, kancelarija): korisnik je dodirnuo kraj donjeg hodnika desno (1971, 1597) - PRETPOSTAVKA: soba na
@@ -527,11 +537,22 @@ def west_door(room, spec):
     return center, (345 if room < 10 else 451, yd), f"M{yd}"
 
 
+def right_door(f, room):
+    """(centar, vrata, čvor hodnika) sobe 14 ili 15 uz desni hodnik na spratu f (RIGHT_ROOMS)."""
+    split, door14, door15 = RIGHT_ROOMS[f]
+    y0, y1, yd = (817, split, door14) if room == 14 else (split, 1280, door15)
+    return (1187, (y0 + y1) // 2), (1301, yd), f"R{yd}"
+
+
 def typical_plan(f):
     """Crtež II-IV sprata: zajednička geometrija + sobe uz glavni hodnik, pregrade podeljenih soba i spojene sobe tog sprata."""
     rooms = list(TYPICAL["rooms"])
     for room, spec in WEST_ROOMS.get(f, {}).items():
         rooms[room] = west_shape(room, *spec[:2]) if spec else None
+    if f in RIGHT_ROOMS:
+        split = RIGHT_ROOMS[f][0]
+        rooms[14] = [(1073, 817), (1301, 817), (1301, split), (1073, split)]
+        rooms[15] = [(1073, split), (1301, split), (1301, 1280), (1073, 1280)]
     for room in SPLIT.get(f, ()):
         rooms[room] = None
         rooms += split_shapes(f)[room]
@@ -563,19 +584,21 @@ def plan_for(f):
 def typical_floor(g, f):
     # I sprat: gornji hodnik je niži (FIRST), pa i njegovi čvorovi.
     top = {f"U{x}": (x, 636) for x in (690, 782, 882, 982, 1040)} if f == 1 else \
-        {f"U{x}": (x, 595) for x in (715, 817, 921, 1023)}
+        {f"U{x}": (x, 595) for x in UPPER_DOORS.values()}
     # Glavni hodnik: čvorovi naspram vrata soba uz njega (WEST_ROOMS) i stalni (stepeništa, raskrsnice).
     main = sorted({380, 450, 508, 595, 676, 736, 927, 1112, 1250, 1334, 1470, 1608} |
                   {spec[2] for spec in WEST_ROOMS.get(f, {}).values() if spec} | ({1365} if f == 1 else set()))
     # Desni hodnik: I sprat ima čvorove naspram vrata 115-118 (FIRST_RIGHT).
-    right = sorted({830, 930, 1160} | ({int(a[1:]) for _, _, a in FIRST_RIGHT.values()} if f == 1 else set()))
+    right = sorted({830, 930, 1160} | ({int(a[1:]) for _, _, a in FIRST_RIGHT.values()} if f == 1 else set()) |
+                   set(RIGHT_ROOMS.get(f, (0, 930, 1160))[1:]))
+    offices = sorted(set(OFFICES[1:]) | set(OFFICE_DOORS))
     points(g, f, {
         **{f"M{y}": (400, y) for y in main},
         "U513": LIFT_EXIT, "U640": (640, 595), **top, **{f"U{x}": (x, LIFT_EXIT[1]) for x in L1_CABIN_EXITS},
         **{f"R{y}": (1350, y) for y in right},
         **{f"C{x}": (x, 1334) for x in (560, 815, 870, 983, 1170, 1350, 1494, 1600, 1795)},
         "K1350": (1350, 1470), "K1795": (1795, 1470),
-        **{f"B{x}": (x, 1608) for x in OFFICES[1:]},
+        **{f"B{x}": (x, 1608) for x in offices},
     })
     g.chain(f, [f"M{y}" for y in main])
     g.chain(f, ["M595", "U486", "U513", "U541", "U640", *sorted(top, key=lambda k: top[k][0])])
@@ -590,7 +613,7 @@ def typical_floor(g, f):
     else:
         g.chain(f, ["M1334", "C560", "C815", "C870", "C983", "C1170", "C1350", "C1494", "C1600", "C1795"])
         g.chain(f, ["C1795", "K1795", "B1819"])
-    g.chain(f, ["M1608", *[f"B{x}" for x in OFFICES[1:]]])
+    g.chain(f, ["M1608", *[f"B{x}" for x in offices]])
     stair_nodes(g, f, {"S1": S1_CORRIDOR, "S2": "M1470", "S3": FIRST_CORE if f == 1 else "C1600"})
     g.edge(f"NTP-{f}-S1-D", f"NTP-{f}-U513")
     lift_l1(g, f)
@@ -626,6 +649,8 @@ def typical_floor(g, f):
             spec = FIRST_110[1:]
         elif WEST_ROOMS.get(f, {}).get(room):
             spec = west_door(room, WEST_ROOMS[f][room])
+        elif f in RIGHT_ROOMS and room in (14, 15):
+            spec = right_door(f, room)
         else:
             spec = TYPICAL_DOORS[room]
         g.room(f, f"NTP-{numbers[0]}", *spec)
@@ -655,7 +680,7 @@ def first_suite(g):
     g.edge(d, g.node(f, "T3", *t3["pass"]))
     beside("122", t3["room"], "T3")
     g.room(f, "NTP-123", *s["123"], "T3")
-    beside("124", s["124"], "B1819")
+    beside("124", s["124"], "B1795")
 
 
 def top_floor(g):
