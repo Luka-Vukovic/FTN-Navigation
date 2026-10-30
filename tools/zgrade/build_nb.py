@@ -176,10 +176,10 @@ def floor_2():
             # su dve oznake, 204A čak sa zidom - verovatno ranije odvojene). "…A" su drugi ulazi (ROOM_ALIASES).
             *row(311, 395, [(416, 521, "202"), (521, 624, "201"), (933, 1038, "207")]),
             *toilets(),
-            R(760, 933, 311, 395, "208", doors=[(803, 395), (890, 395)]),
+            R(760, 933, 311, 395, "208"),
             *row(436, 519, [(416, 588, "203"), (934, 1038, "206")]),
-            R(588, 760, 436, 519, "204", doors=[(640, 436), (726, 436)]),
-            R(760, 934, 436, 519, "205", doors=[(803, 436), (890, 436)]),
+            R(588, 760, 436, 519, "204"),
+            R(760, 934, 436, 519, "205"),
         ],
         "stairs": STAIRS,
         "lifts": LIFTS,
@@ -251,7 +251,48 @@ def floor_5():
     }
 
 
-PLANS = {-1: floor_m1(), 0: floor_0(), 1: floor_1(), 2: floor_2(), 3: floor_3(), 4: floor_4(), 5: floor_5()}
+# Vrata po FtnGO snimcima (prekidi u zidu sale prema hodniku na ispravljenim snimcima w<sprat>.png - prepare_screens.py nb;
+# očitano i provereno na uvećanim isečcima, 30.10.2026). Korisnik, teren 30.10.: "pokušaj, tamo gde imaš planove, da prilagodiš
+# pozicije vrata" (i 01.10.: "ostale sale imaju vrata na kraju, ne na sredini"). Široki prekidi (~1,9 m) su dvokrilna vrata
+# učionica, uski (~0,9 m) obična. Sale koje ovde nema (prekid se ne vidi ili je crtež nejasan: P03, 018A, 015-017 i 012 u
+# prizemlju, AH1A, 406, toaleti) ostaju sa vratima na sredini zida; P17/P18 su sa terena (27.10.).
+DOORS = {
+    -1: {"P01": [(610, 413)], "P08": [(568, 450)], "P21": [(713, 387)], "P20": [(740.5, 387)]},
+    0: {"018": [(480, 383)], "019": [(498, 383)], "021-3": [(547.5, 383)], "021-2": [(582, 383)], "021-1": [(611.5, 383)],
+        "Svečana sala": [(815, 405), (975, 405)], "Studentska služba": [(768.5, 456)], "002": [(1009, 456)]},
+    1: {"102": [(462, 406)], "101": [(502, 406)], "109A": [(802, 406)], "109": [(982, 406)], "103": [(440, 441)],
+        "104": [(538, 441)], "105": [(604, 441)], "106": [(710, 441)], "107": [(777, 441)], "108": [(854, 441)],
+        "108A": [(982, 441)]},
+    # 204, 205 i 208 su sale sa dva ulaza (korisnik, 30.09.) - na FtnGO-u vrata blizu oba kraja.
+    2: {"202": [(502, 395)], "201": [(605, 395)], "208": [(783, 395), (917, 395)], "207": [(987, 395)], "203": [(568, 436)],
+        "204": [(605, 436), (751, 436)], "205": [(778.5, 436), (913.5, 436)], "206": [(951, 436)]},
+    3: {"L2 (RC)": [(432, 395)], "L4 (RC)": [(501, 395)], "L1 (RC)": [(605, 395)], "312": [(820, 395)], "311": [(916.5, 395)],
+        "310": [(1001.5, 395)], "L3 (RC)": [(432, 436)], "303A": [(505.5, 436)], "L5 (RC)": [(572, 436)],
+        "L6 (RC)": [(604, 436)], "306A": [(678, 436)], "306": [(704, 436)], "307": [(782, 436)], "308": [(916, 436)],
+        "309": [(950, 436)]},
+    # IV: zid ispod hodnika je na snimku ~2 px niže (y 436) nego na crtežu (434) - vrata na našem zidu.
+    4: {"AH8": [(604, 395)], "AH7A": [(776, 395)], "AH7": [(876, 395)], "AH6A": [(913.5, 395)], "AH6": [(1005, 395)],
+        "AH1B": [(537, 434)], "AH2": [(572, 434), (642, 434)], "AH3": [(674.5, 434), (753, 434)], "AH4": [(797, 434)],
+        "AH4A": [(891.5, 434)], "AH5": [(955, 434)]},
+    5: {"501A": [(547.5, 394)], "501": [(611.5, 394)], "500": [(718.5, 394)], "509A": [(745, 394)], "512": [(814, 394)],
+        "520": [(866, 400)], "519": [(918.5, 400)], "518": [(952, 400)], "503": [(547.5, 411)], "504": [(581, 411)],
+        "505": [(650.5, 411)], "506": [(666, 411)], "509": [(733.5, 411)], "510": [(778.5, 411)], "511": [(814, 411)],
+        "521": [(866.5, 416)], "515": [(941, 415)], "516": [(963, 415)]},
+}
+
+
+def with_doors(f, plan):
+    """Vrata iz [DOORS] za sale sprata f."""
+    doors = DOORS.get(f, {})
+    for room in plan["rooms"]:
+        if room["name"] in doors:
+            room["doors"] = doors[room["name"]]
+    assert set(doors) <= {r["name"] for r in plan["rooms"]}, set(doors) - {r["name"] for r in plan["rooms"]}
+    return plan
+
+
+PLANS = {f: with_doors(f, plan) for f, plan in
+         {-1: floor_m1(), 0: floor_0(), 1: floor_1(), 2: floor_2(), 3: floor_3(), 4: floor_4(), 5: floor_5()}.items()}
 
 
 def build():

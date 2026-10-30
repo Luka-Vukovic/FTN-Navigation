@@ -397,7 +397,8 @@ class PdrLocatorTest {
     @Test
     fun trappedInRoomBesideCorridor_walkingOn_reachesKula() {
         val locator = locatorAt("NB-0-021-3")
-        val azimuth = magneticAzimuth(graph.position(node("NB-0-H537_420")), graph.position(inner("NB-0-PROLAZ")))
+        // Pravac hodnika (vrata 021-3 su od 30.10.2026 pri kraju sobe, pa čvor naspram njih nije više na 537).
+        val azimuth = magneticAzimuth(graph.position(node("NB-0-H633_420")), graph.position(inner("NB-0-PROLAZ")))
         val reasons = mutableListOf<PlaceReason>()
         var steps = 0
         while (locator.place != PdrPlace("KULA", 0)) {
