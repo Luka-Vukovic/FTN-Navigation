@@ -119,6 +119,19 @@ class AmfKulaGraphTest {
         assertTrue(fastest.toString(), fastest.any { "S2" in it })
     }
 
+    /**
+     * Teren 30.10.2026 popodne (NB I -> Skriptarnica): ruta je išla prolazom u Kulu I pa spiralom u prizemlje; korisnik je
+     * išao stepeništem NB-a u prizemlje pa kroz Kulu P i trem ("ruta duža"). Spirala Kule je retko stepenište; "Najbrže" je
+     * i dalje sme da koristi, a do kancelarija Kule se ide njom.
+     */
+    @Test
+    fun nbFirstFloorToSkriptarnica_nbStairsNotKulaSpiral() {
+        val ids = checkNotNull(graph.route("NB-1-H677_423", room("Skriptarnica").id)).nodes.map { it.id }
+        assertTrue(ids.toString(), "NB-0-S" in ids && "KULA-0-PROLAZ-NB" in ids)
+        assertFalse(ids.toString(), ids.any { it.startsWith("KULA-1-") })
+        assertTrue(checkNotNull(graph.route(room("101").id, room("Kula 203").id)).nodes.any { it.id == "KULA-2-S" })
+    }
+
     /** Sala nije usputni čvor: do AR sala ide se hodnicima (preko Kule), ne kroz amfiteatar. */
     @Test
     fun nbToArRoom_notThroughAmphitheatre() {

@@ -82,6 +82,12 @@ data class RoutingProfile(
      * A2 -> Skriptarnica je išla njime i ~45 m suterenom, a ide se preko S1.
      */
     val uncommonVerticals: Set<String> = UNCOMMON_VERTICALS,
+    /**
+     * Stepeništa retka samo u prolazu kroz zgradu: kazna kao za [uncommonVerticals] kad ni početak ni cilj rute nisu u toj
+     * zgradi. Spirala Kule (teren 30.10.2026 popodne, NB I -> Skriptarnica: ruta prolazom u Kulu I pa spiralom u P; korisnik je
+     * išao stepeništem NB-a u P pa kroz Kulu P, "ruta duža"). Do kancelarija Kule se i dalje ide spiralom, ne liftom.
+     */
+    val uncommonTransitVerticals: Set<String> = UNCOMMON_TRANSIT_VERTICALS,
     /** Kazna (s) za ulazak na stepenište/lift iz [uncommonVerticals] - kao [stairwellChangeSec], samo za izbor rute. */
     val uncommonVerticalSec: Double = 60.0,
 ) {
@@ -105,8 +111,11 @@ data class RoutingProfile(
         /** Podrazumevano retko korišćena stepeništa i liftovi ([uncommonVerticals]). */
         val UNCOMMON_VERTICALS = setOf("NTP/S3", "NTP/L3", "AMF/S2")
 
+        /** Podrazumevano retka stepeništa u prolazu kroz zgradu ([uncommonTransitVerticals]). */
+        val UNCOMMON_TRANSIT_VERTICALS = setOf("KULA/S")
+
         /** "Najbrže": svako stepenište i lift ravnopravno, i lift NB-a. */
-        val FASTEST = RoutingProfile(liftOnlyAvoidingStairs = emptySet(), uncommonVerticals = emptySet())
+        val FASTEST = RoutingProfile(liftOnlyAvoidingStairs = emptySet(), uncommonVerticals = emptySet(), uncommonTransitVerticals = emptySet())
     }
 }
 
@@ -224,6 +233,8 @@ class BuildingGraph(
         // sprata), pa stanje može ponovo da se otvori - zato nema zatvorenog skupa.
         val open = PriorityQueue<Triple<Double, Double, SearchState>>(compareBy { it.first })
         open += Triple(heuristic(start, goal, profile), 0.0, startState)
+        val uncommon = profile.uncommonVerticals +
+            profile.uncommonTransitVerticals.filter { it.substringBefore('/') != start.buildingId && it.substringBefore('/') != goal.buildingId }
 
         while (open.isNotEmpty()) {
             val (_, g, state) = open.poll()!!
@@ -248,7 +259,7 @@ class BuildingGraph(
                 val vertical = if (type == EdgeType.HOD) state.vertical else verticalOf(next)
                 val changed = vertical != state.vertical
                 val penalty = (if (state.vertical != null && changed) profile.stairwellChangeSec else 0.0) +
-                    (if (changed && vertical != null && vertical in profile.uncommonVerticals) profile.uncommonVerticalSec else 0.0)
+                    (if (changed && vertical != null && vertical in uncommon) profile.uncommonVerticalSec else 0.0)
                 val nextState = SearchState(next.id, vertical)
                 val nextG = g + step + penalty
                 if (nextG < (best[nextState] ?: Double.POSITIVE_INFINITY)) {

@@ -392,7 +392,10 @@ class StairWalk {
 
     /**
      * Kraj leta pre trenutnog [current]: poslednji raniji niz od bar [FLIGHT_STEPS] koraka. Niz upravan na trenutni let
-     * (hod preko širokog međupodesta) se preskače, ako je let pre njega do [MAX_LANDING_SPAN_STEPS] koraka od trenutnog.
+     * (hod preko širokog međupodesta) se preskače, ako je let pre njega do [MAX_LANDING_SPAN_STEPS] koraka od trenutnog i
+     * nije se završio pre ulaska na stepenište ([stairStart]). Teren 30.10.2026 popodne (NB III -> I): izlazak iz 307 (5
+     * koraka ka jugu), hodnik ka zapadu (13 koraka), pa krak ka severu - bilo je "let - preko podesta - let", okret od 151° na
+     * stranu penjanja, i tačka je 3,5 s posle ulaska na krak naniže otišla na "IV sprat".
      */
     private fun flightBefore(runs: List<IntRange>, current: IntRange): Int? {
         val flights = runs.dropLast(1).filter { it.count() >= FLIGHT_STEPS }
@@ -400,6 +403,7 @@ class StairWalk {
         val currentDeg = meanHeading(current)
         if (abs(abs(angleDiffDeg(meanHeading(last), currentDeg)) - 90f) > ACROSS_LANDING_DEG) return last.last
         val before = flights.dropLast(1).lastOrNull() ?: return last.last
+        if (stairStart?.let { before.last < it } == true) return last.last
         return if (current.first - before.last <= MAX_LANDING_SPAN_STEPS) before.last else last.last
     }
 

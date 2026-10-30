@@ -492,6 +492,9 @@ class PdrLocatorTest {
         again.walk("KULA-0-PROLAZ-AMF", beyondSteps = 6)
         assertEquals(PdrPlace("KULA", 0), again.place)
         assertNull(again.match)
+        // Ruta kreće od kraja prolaza ka kome ide, ne od kraja hodnika iza korisnika (teren 30.10.2026 popodne: na tremu
+        // AMF -> Kula linija rute je vodila nazad na vrh S1).
+        assertEquals(listOf("AMF-0-PROLAZ-KULA"), again.routeStarts().map { it.id })
     }
 
     /** Okret nazad u prolazu vraća na kraj hodnika iz koga se izašlo. */
@@ -502,6 +505,7 @@ class PdrLocatorTest {
         locator.walk(inner("KULA-0-PROLAZ-AMF").id)
         assertEquals(PdrPlace("KULA", 0), locator.place)
         assertNotNull(locator.match)
+        assertTrue(locator.routeStarts().isEmpty())
     }
 
     private val east = 90f - declination
@@ -1611,15 +1615,71 @@ class PdrLocatorTest {
         val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
             setPosition(PdrPlace("NB", 2), Offset(0.501154f, 0.38216054f), measure = false)
         }
-        var routeStartOnFlight: String? = null
+        var routeStartsOnFlight: List<String>? = null
         val reasons = recorded.mapNotNull { s ->
-            locator.walk("NB", s).also { if (s.timeS == 331.25) routeStartOnFlight = locator.stairRouteStart()?.id }
+            locator.walk("NB", s).also { if (s.timeS == 331.25) routeStartsOnFlight = locator.routeStarts().map { it.id } }
         }
         assertEquals("$reasons", listOf(PlaceReason.STEPENICE, PlaceReason.STEPENICE), reasons)
         assertEquals(PdrPlace("NB", 0), locator.place)
-        // Na prvom kraku naniže (još II sprat) ruta kreće od dna stepeništa na I, ne od čvora iza korisnika na II.
-        assertEquals("NB-1-S", routeStartOnFlight)
-        assertNull(locator.stairRouteStart()) // sišao sa stepeništa
+        // Na prvom kraku naniže (još II sprat) ruta kreće od dna stepeništa na I, ne od čvora iza korisnika na II. Sa
+        // međupodesta II-I nema prolaza.
+        assertEquals(listOf("NB-1-S"), routeStartsOnFlight)
+        assertTrue(locator.routeStarts().isEmpty()) // sišao sa stepeništa
+    }
+
+    /**
+     * Teren 30.10.2026 popodne (hod-20261030-165019, 717-756 s, zadatak 307 -> 107): izlazak iz 307 ka jugu (5 koraka),
+     * hodnikom ka zapadu (13 koraka), pa na krak naniže ka severu. Sa pravilom širokog međupodesta to je bilo "let - preko
+     * podesta - let" (let pre okreta završen u hodniku, 15 koraka pre stepeništa), okret +151° na stranu penjanja - tačka je 3,5
+     * s posle ulaska na krak otišla na "IV sprat". Pravi okret na međupodestu (741-747 s) vodi na II.
+     */
+    @Test
+    fun nbStairs_corridorUTurnBeforeDownFlight_notAFloorUp() {
+        val recorded = timedSteps(
+            """
+            201|0.82|-1.26|717.28 199|0.23|-1.02|717.84 199|0.82|0.02|718.68 197|0.51|-0.92|719.38 199|0.54|-1.12|719.86
+            208|0.82|-0.57|720.27 232|0.80|-0.63|720.79 258|0.61|-0.24|721.40 268|0.82|-1.40|721.68 281|0.82|-1.49|722.10
+            284|0.82|-0.06|722.64 286|0.82|-0.04|723.14 289|0.82|0.26|723.76 295|0.82|0.16|724.30 299|0.82|0.09|724.88
+            300|0.82|-0.06|725.44 304|0.82|0.33|726.07 311|0.82|0.15|726.58 320|0.82|0.03|727.23 331|0.82|0.05|727.75
+            346|0.82|-0.28|728.43 355|0.82|-0.31|729.08 357|0.82|-0.67|729.61 348|0.82|-0.87|729.87 344|0.26|-0.34|730.18
+            359|0.20|-0.99|731.43 4|0.49|-1.41|731.79 11|0.73|-1.33|732.19 12|0.73|-0.92|732.44 20|0.52|-0.36|733.01
+            21|0.24|-0.77|734.05 21|0.82|0.45|734.31 21|0.82|-0.21|734.96 22|0.82|0.15|735.60 26|0.82|-0.11|736.30
+            26|0.82|-0.10|736.99 24|0.82|0.07|737.63 20|0.82|0.54|738.21 17|0.82|0.18|738.91 13|0.82|0.45|739.44
+            9|0.82|0.25|740.14 1|0.82|0.95|740.78 349|0.82|0.33|741.29 325|0.82|-0.34|742.08 306|0.82|-0.28|742.98
+            297|0.82|0.11|743.27 288|0.82|0.46|743.73 289|0.82|0.45|744.40 287|0.82|0.67|745.00 280|0.82|0.10|745.79
+            267|0.82|-0.34|746.33 248|0.58|0.53|746.89 238|0.82|-1.23|747.15 217|0.82|-0.76|747.82 210|0.82|-0.09|748.21
+            203|0.82|0.23|748.65 201|0.82|0.61|749.29 200|0.82|0.65|749.93 198|0.34|0.48|750.20 192|0.82|-0.02|750.62
+            192|0.82|0.23|751.27 192|0.82|0.79|751.92 194|0.82|0.21|752.54 196|0.82|0.55|753.15 196|0.82|-0.11|754.03
+            195|0.82|0.34|754.71 193|0.82|-0.11|755.32
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("NB", 3), Offset(0.63253593f, 0.3488283f), measure = false)
+        }
+        val floors = recorded.mapNotNull { s -> locator.walk("NB", s)?.let { locator.place.floor } }
+        assertEquals(listOf(2), floors)
+    }
+
+    /**
+     * Teren 30.10.2026 popodne (hod-20261030-165019, 129-141 s, zadatak 106 -> A2): na desnom kraku NB-a naniže sa I sprata
+     * ruta kreće i od dna tog kraka (niz krak do međupodesta, pa pravo u stakleni prolaz), ne samo od dna stepeništa u
+     * prizemlju - odatle je kartica govorila "Uz stepenice do podesta" i korisnik je sišao u prizemlje.
+     */
+    @Test
+    fun nbDownFlightToGlassPassage_routeAlsoFromFlightFoot() {
+        val recorded = timedSteps(
+            """
+            14|0.24|-0.92|129.34 22|0.19|-0.06|130.23 29|0.82|-0.14|130.94 26|0.82|0.13|131.62 17|0.82|0.53|132.24
+            7|0.82|0.21|132.94 358|0.82|0.53|133.54 359|0.82|-0.17|134.19 5|0.82|-0.35|135.09 4|0.82|0.47|135.78
+            3|0.82|0.82|136.39 3|0.82|0.72|137.03 359|0.82|0.57|137.67
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("NB", 1), Offset(0.48214012f, 0.41756448f), measure = false)
+        }
+        for (s in recorded) locator.walk("NB", s)
+        assertEquals(PdrPlace("NB", 1), locator.place)
+        assertEquals(listOf("NB-0-S", "NB-1-S-D"), locator.routeStarts().map { it.id })
     }
 
     /**

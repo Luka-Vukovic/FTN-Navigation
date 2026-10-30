@@ -135,12 +135,24 @@ private fun stepTitle(step: RouteStep, campus: CampusData): String {
     }
 }
 
-/** Drugi red: sprat posle ulaza/prolaza, strana vrata cilja. */
+/** Drugi red: sprat posle ulaza/prolaza, strana prolaza sa podesta, strana vrata cilja. */
 @Composable
 private fun stepDetail(step: RouteStep): String? = when (step.kind) {
     StepKind.KRENI -> stringResource(R.string.step_start_detail)
     StepKind.ULAZ -> step.floor?.let { floorName(it) }
+    StepKind.KRAK -> when (step.side) {
+        Side.PRAVO -> stringResource(R.string.step_flight_then_passage_ahead)
+        Side.LEVO -> stringResource(R.string.step_flight_then_passage_left)
+        Side.DESNO -> stringResource(R.string.step_flight_then_passage_right)
+        null -> null
+    }
     StepKind.PROLAZ -> listOfNotNull(
+        when (step.side) {
+            Side.PRAVO -> stringResource(R.string.step_passage_from_landing_ahead)
+            Side.LEVO -> stringResource(R.string.step_passage_from_landing_left)
+            Side.DESNO -> stringResource(R.string.step_passage_from_landing_right)
+            null -> null
+        },
         step.floor?.let { floorName(it) },
         if (step.steps) stringResource(R.string.step_passage_steps) else null,
     ).joinToString(" · ").ifEmpty { null }

@@ -1284,21 +1284,41 @@ class PdrLocator(
     val onStairs: Boolean get() = climb != null || spiralWalk != null
 
     /**
-     * Dok je tačka na stepeništu i zna se kuda ide: čvor stepeništa ka kome ide (dolazak na sprat posle promene u ovom kraku,
-     * inače na sledećem spratu) - ruta odatle, a ne od najbližeg čvora (često iza korisnika). Teren 29.10.2026: "tačka uvek
-     * čudno pokazuje na stepenicama, sugeriše povratak nazad". null: nije na stepeništu ili smer nije poznat (stepenište bez
-     * crteža krakova pre prve promene sprata, spirala).
+     * Čvorovi od kojih ruta kreće dok je tačka na stepeništu ili u prolazu između zgrada (ruta od najboljeg), a ne od
+     * najbližeg čvora - on je često iza korisnika. Prazno: ruta od pozicije.
+     * - Stepenište, kad se zna kuda ide: čvor stepeništa ka kome ide (dolazak na sprat posle promene u ovom kraku, inače na
+     *   sledećem spratu). Teren 29.10.2026: "tačka uvek čudno pokazuje na stepenicama, sugeriše povratak nazad". Smer se ne
+     *   zna kod stepeništa bez crteža krakova pre prve promene sprata i na spirali.
+     * - Na kraku do međupodesta sa prolazom (NB I -> stakleni prolaz ka Amfiteatrima, AMF S1 -> trem ka Kuli) i dno tog
+     *   kraka (ruta niz/uz krak do podesta, pa u prolaz - korisnik je na toj liniji). Teren 30.10.2026 popodne (106 -> A2): na
+     *   kraku naniže ruta je kretala od dna stepeništa u prizemlju - "Uz stepenice do podesta" - i korisnik je sišao u
+     *   prizemlje, pa se vratio na podest.
+     * - Prolaz između zgrada: kraj prolaza ka kome ide. Teren 30.10.2026 popodne (trem AMF -> Kula): u prvoj polovini prolaza
+     *   (još plan AMF-a) ruta se crtala od tačke nazad do vrha S1.
      */
-    fun stairRouteStart(): Node? {
-        val c = climb ?: return null
+    fun routeStarts(): List<Node> {
+        passage?.let { return listOf(it.target) }
+        val c = climb ?: return emptyList()
         val flights = pathOf(c) != null
         val dir = when {
             flights -> if (c.up) 1 else -1
-            c.changes > 0 -> lastStairChange?.takeIf { it.stairKey == c.stair.key }?.let { it.toFloor - it.fromFloor } ?: return null
-            else -> return null
+            c.changes > 0 -> lastStairChange?.takeIf { it.stairKey == c.stair.key }?.let { it.toFloor - it.fromFloor } ?: return emptyList()
+            else -> return emptyList()
         }.sign
         val floor = if (!flights || c.changedInLeg) place.floor else place.floor + dir
-        return if (dir > 0) c.stair.downNodes[floor] ?: c.stair.nodes[floor] else c.stair.nodes[floor] ?: c.stair.downNodes[floor]
+        val ahead = if (dir > 0) c.stair.downNodes[floor] ?: c.stair.nodes[floor] else c.stair.nodes[floor] ?: c.stair.downNodes[floor]
+        // Međupodest je još ispred: prvi krak sa ovog sprata (pre okreta na međupodestu).
+        val landing = if (flights && !c.changedInLeg && (c.part == ClimbPart.FIRST || c.part == ClimbPart.LANDING)) {
+            val foot = if (c.up) c.stair.nodes[place.floor] else c.stair.downNodes[place.floor]
+            foot?.takeIf { f ->
+                graph.neighbors(f.id).any { (n, type) ->
+                    type == EdgeType.HOD && n.type != NodeType.STEPENISTE && graph.edge(f.id, n.id)?.steps == true
+                }
+            }
+        } else {
+            null
+        }
+        return listOfNotNull(ahead, landing)
     }
 
     /** Smer za prikaz, u odnosu na "gore" plana mesta. */

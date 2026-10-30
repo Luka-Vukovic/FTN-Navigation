@@ -464,11 +464,11 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val raw = state.rawPosition
         val gps = routeGps
         val place = state.pdrPlace
-        // Na stepeništu ruta kreće od čvora ka kome korisnik ide (ne vraća ga nazad niz krak).
-        val stairStart = locator?.stairRouteStart()?.takeIf { raw != null }
+        // Na stepeništu i u prolazu ruta kreće od čvora ka kome korisnik ide (ne vraća ga nazad niz krak / kroz prolaz).
+        val starts = locator?.routeStarts()?.takeIf { raw != null }.orEmpty()
         return routeOrFallback(floorChange.profile.copy(buildingCrowd = crowdNow)) { profile ->
             when {
-                stairStart != null -> graph.route(stairStart.id, nodeId, profile)
+                starts.isNotEmpty() -> starts.mapNotNull { graph.route(it.id, nodeId, profile) }.minByOrNull { it.durationSec }
                 match != null -> graph.routeFrom(match.point, nodeId, profile)
                 raw != null -> graph.routeFrom(
                     place.buildingId, place.floor, raw.x, raw.y, nodeId, profile,

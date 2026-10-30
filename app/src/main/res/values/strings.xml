@@ -270,6 +270,12 @@
     <string name="step_flight">Krak stepenica do podesta</string>
     <string name="step_flight_up">Uz stepenice do podesta</string>
     <string name="step_flight_down">Niz stepenice do podesta</string>
+    <string name="step_flight_then_passage_ahead">pa pravo u prolaz, ne na sledeći krak</string>
+    <string name="step_flight_then_passage_left">pa levo u prolaz</string>
+    <string name="step_flight_then_passage_right">pa desno u prolaz</string>
+    <string name="step_passage_from_landing_ahead">sa podesta pravo</string>
+    <string name="step_passage_from_landing_left">sa podesta levo</string>
+    <string name="step_passage_from_landing_right">sa podesta desno</string>
     <string name="step_enter">Uđi u zgradu %1$s</string>
     <string name="step_exit">Izađi iz zgrade %1$s</string>
     <string name="step_exit_outside">Izađi napolje</string>

@@ -115,6 +115,21 @@ class RouteStepsTest {
         assertEquals(true, steps(roomId("018"), "A2").single { it.kind == StepKind.KRAK }.up)
     }
 
+    /**
+     * Prolaz sa podesta je PRAVO u pravcu kraka (teren 30.10.2026 popodne, 106 -> A2: korisnik se na podestu okrenuo ka
+     * sledećem kraku i sišao u prizemlje). I krak i prolaz to nose.
+     */
+    @Test
+    fun flightToLanding_passageStraightAhead() {
+        val fromFirst = steps(roomId("106"), "A2")
+        val flight = fromFirst.single { it.kind == StepKind.KRAK }
+        val passage = fromFirst[fromFirst.indexOf(flight) + 1]
+        assertEquals(Side.PRAVO, flight.side)
+        assertEquals(Side.PRAVO, passage.side)
+        // Prolaz bez kraka pre njega nema stranu.
+        assertTrue(steps(NbPlan.ENTRANCE_ID, "Kula 905").filter { it.kind == StepKind.PROLAZ }.all { it.side == null })
+    }
+
     /** Kratak prolaz NB - Kula (krajevi hodnika na ~1 m, pod uglom) i izlazak iz lifta nisu "okreni se". */
     @Test
     fun noTurnAround_afterPassageOrLift() {

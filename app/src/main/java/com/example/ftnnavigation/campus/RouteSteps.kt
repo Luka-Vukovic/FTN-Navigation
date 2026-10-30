@@ -158,6 +158,32 @@ fun routeSteps(route: Route, graph: BuildingGraph, campus: CampusData): List<Rou
         outdoor = isOutdoor
     }
 
+    /**
+     * Prolaz sa podesta odmah posle kraka ([StepKind.KRAK]): strana prolaza (ka [end]) u odnosu na pravac kraka; i krak je
+     * dobija ("pa pravo u prolaz"). Teren 30.10.2026 popodne (106 -> A2): sa dna desnog kraka NB-a prolaz ka Amfiteatrima je
+     * pravo, a korisnik se na podestu po navici okrenuo ka sledećem kraku i sišao u prizemlje. null - pre prolaza nije krak.
+     */
+    fun landingPassageSide(end: Node): Side? {
+        if (start.kind != StepKind.KRAK || run.size < 2) return null
+        val a = graph.position(run[0])
+        val b = graph.position(run[1])
+        val gate = graph.position(run.last())
+        val e = graph.position(end)
+        val ux = b.x - a.x
+        val uy = b.y - a.y
+        val vx = e.x - gate.x
+        val vy = e.y - gate.y
+        if (hypot(ux, uy) < 0.5 || hypot(vx, vy) < 0.5) return null
+        val turn = Math.toDegrees(atan2(ux * vy - uy * vx, ux * vx + uy * vy))
+        val side = when {
+            abs(turn) < AHEAD_DEG -> Side.PRAVO
+            turn > 0 -> Side.DESNO
+            else -> Side.LEVO
+        }
+        start = start.copy(side = side)
+        return side
+    }
+
     /** Kraj stepenica od [from]: zaredom, i preko kratkog hoda po podestu sprata (od kraka naniže do kraka naviše). */
     fun stairsEnd(from: Int): Int {
         val up = nodes[from + 1].floor > nodes[from].floor
@@ -215,10 +241,11 @@ fun routeSteps(route: Route, graph: BuildingGraph, campus: CampusData): List<Rou
                     // Čvor prolaza kampusa (težište OSM spojnog dela) ume da bude iza kraja hodnika - preskače se.
                     val end = nodes[k]
                     val viaSteps = (i until k).any { graph.edge(nodes[it].id, nodes[it + 1].id)?.steps == true }
+                    val side = landingPassageSide(end)
                     begin(
                         RouteStep(
                             StepKind.PROLAZ, end, buildingId = after.buildingId,
-                            floor = end.floor.takeIf { after.hasPlan }, steps = viaSteps,
+                            floor = end.floor.takeIf { after.hasPlan }, steps = viaSteps, side = side,
                         ),
                         listOf(a, end),
                     )
@@ -242,7 +269,7 @@ fun routeSteps(route: Route, graph: BuildingGraph, campus: CampusData): List<Rou
                 to is Place.Inside -> begin(
                     RouteStep(
                         StepKind.PROLAZ, b, buildingId = to.buildingId, floor = b.floor.takeIf { to.hasPlan },
-                        steps = edge?.steps == true,
+                        steps = edge?.steps == true, side = landingPassageSide(b),
                     ),
                     listOf(a, b),
                 )
