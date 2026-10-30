@@ -187,7 +187,29 @@ def floor_1():
     }
 
 
-PLANS = {-1: floor_m1(), 0: floor_0(), 1: floor_1()}
+# Vrata (30.10.2026, korisnik: "vrata i za Amfiteatre ... uzmi u obzir i evakuacione planove, oni deluju aktuelniji"). Prizemlje:
+# evakuacioni plan (teren/izveštaj2/IMG_20261002_103156.jpg, lukovi otvaranja vrata; zid AMF-a na fotografiji -> 168..835 x -65..210).
+# AR sale su spojene po obeležavanju korisnika (10.10.) - svaka ima vrata svih nekadašnjih soba. A3 gore desno; A1/A2 (korisnik
+# potvrdio 30.10.), A4 i Čitaonica se slažu sa planom - ostaju. Suteren: FtnGO (prekidi u zidu, prepare_screens.py amf) - B001-B004,
+# B008; B005-B007, INT 1, GRID-1 i toaleti su nejasni i ostaju na sredini zida. Nivo 1 (L1) bez izmene.
+DOORS = {
+    -1: {"B001": [(310, -17)], "B002": [(324, -17)], "B003": [(354, -17)], "B004": [(384.5, -17)], "B008": [(356, 3)]},
+    0: {"AR0": [(252, -28)], "AR1": [(263, -28), (311, -28)], "AR2": [(374, -28), (408, -28)], "AR3": [(441, -28), (455, -28)],
+        "AR4": [(618, -28), (651, -28)], "AR5": [(686, -28), (719, -28)], "AR6": [(760, -28)], "A3": [(817, 7)]},
+}
+
+
+def with_doors(f, plan):
+    """Vrata iz [DOORS] za sale sprata f."""
+    doors = DOORS.get(f, {})
+    for room in plan["rooms"]:
+        if room["name"] in doors:
+            room["doors"] = doors[room["name"]]
+    assert set(doors) <= {r["name"] for r in plan["rooms"]}, set(doors) - {r["name"] for r in plan["rooms"]}
+    return plan
+
+
+PLANS = {f: with_doors(f, plan) for f, plan in {-1: floor_m1(), 0: floor_0(), 1: floor_1()}.items()}
 
 
 def build():
