@@ -27,11 +27,18 @@
         <!-- Stepeništa -->
         <path
             android:fillColor="#FFFFE0B2"
-            android:pathData="M398,114 L446,114 L446,160 L398,160 Z" />
+            android:pathData="M398,115 L446,115 L446,137 L398,137 Z" />
         <path
             android:strokeColor="#FF8D6E63"
             android:strokeWidth="0.8"
-            android:pathData="M404,114 V160 M410,114 V160 M416,114 V160 M422,114 V160 M428,114 V160 M434,114 V160 M440,114 V160" />
+            android:pathData="M404,115 V137 M410,115 V137 M416,115 V137 M422,115 V137 M428,115 V137 M434,115 V137 M440,115 V137" />
+
+        <!-- Međupodesti -->
+        <path
+            android:strokeColor="#FF8D6E63"
+            android:strokeWidth="0.8"
+            android:fillColor="#FFFFE0B2"
+            android:pathData="M446,113 L465,113 L465,163 L446,163 Z" />
 
         <!-- Prostorije -->
         <path

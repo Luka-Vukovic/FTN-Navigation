@@ -169,14 +169,17 @@ def floor_1():
 def floor_2():
     return {
         "title": "II sprat",
-        "paths": spine(415, 425, 1025),
-        "corridors": [rect_poly(416, 395, 1038, 436), hall(395)],
+        # Južni kraj hodnika (evakuacioni plan II sprata, teren 31.10.2026): hodnik se završava na x 481; od 542 do 481 je uzak
+        # deo uz zapadni zid (vrata 202), a ispod njega sobica sa vratima ka hodniku. Do tada hodnik pune širine do 416.
+        "paths": spine(415, 542, 1025) + [[(542, 415), (542, 400), (490, 400)]],
+        "corridors": [[(481, 395), (1038, 395), (1038, 436), (542, 436), (542, 406), (481, 406)], hall(395)],
         "rooms": [
             # 204/204A, 205/205A i 208/208A su po jedna velika učionica sa dva ulaza (korisnik; na FtnGO-u
             # su dve oznake, 204A čak sa zidom - verovatno ranije odvojene). "…A" su drugi ulazi (ROOM_ALIASES).
             *row(311, 395, [(416, 521, "202"), (521, 624, "201"), (933, 1038, "207")]),
             *toilets(),
             R(760, 933, 311, 395, "208"),
+            R(416, 481, 395, 436), R(481, 542, 406, 436),  # kraj hodnika (bez vrata na planu) i sobica
             *row(436, 519, [(416, 588, "203"), (934, 1038, "206")]),
             R(588, 760, 436, 519, "204"),
             R(760, 934, 436, 519, "205"),
@@ -264,10 +267,13 @@ DOORS = {
         "104": [(538, 441)], "105": [(604, 441)], "106": [(710, 441)], "107": [(777, 441)], "108": [(854, 441)],
         "108A": [(982, 441)]},
     # 204, 205 i 208 su sale sa dva ulaza (korisnik, 30.09.) - na FtnGO-u vrata blizu oba kraja.
+    # II i III sprat: provereno evakuacionim planovima (fotografije sa terena 31.10.2026, teren/izveštaj30/, ispravljene po
+    # uglovima zgrade): 205 ima i treća, dvokrilna vrata na sredini; na III su vrata 312 i 310 bila pomerena (FtnGO). Ostala
+    # vrata II i III se slažu sa planom (do ~1 px).
     2: {"202": [(502, 395)], "201": [(605, 395)], "208": [(783, 395), (917, 395)], "207": [(987, 395)], "203": [(568, 436)],
-        "204": [(605, 436), (751, 436)], "205": [(778.5, 436), (913.5, 436)], "206": [(951, 436)]},
-    3: {"L2 (RC)": [(432, 395)], "L4 (RC)": [(501, 395)], "L1 (RC)": [(605, 395)], "312": [(820, 395)], "311": [(916.5, 395)],
-        "310": [(1001.5, 395)], "L3 (RC)": [(432, 436)], "303A": [(505.5, 436)], "L5 (RC)": [(572, 436)],
+        "204": [(605, 436), (751, 436)], "205": [(778.5, 436), (853, 436), (913.5, 436)], "206": [(951, 436)]},
+    3: {"L2 (RC)": [(432, 395)], "L4 (RC)": [(501, 395)], "L1 (RC)": [(605, 395)], "312": [(782.5, 395)], "311": [(916.5, 395)],
+        "310": [(985.5, 395)], "L3 (RC)": [(432, 436)], "303A": [(505.5, 436)], "L5 (RC)": [(572, 436)],
         "L6 (RC)": [(604, 436)], "306A": [(678, 436)], "306": [(704, 436)], "307": [(782, 436)], "308": [(916, 436)],
         "309": [(950, 436)]},
     # IV: zid ispod hodnika je na snimku ~2 px niže (y 436) nego na crtežu (434) - vrata na našem zidu.

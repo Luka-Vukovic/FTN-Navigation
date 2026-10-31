@@ -99,11 +99,12 @@ class NbGraphTest {
     /** 204/204A, 205/205A, 208/208A: jedna učionica sa dva ulaza; oznaka sa A vodi u istu salu. */
     @Test
     fun twoEntranceRooms_areOneRoom() {
-        for (room in listOf("204", "205", "208")) {
+        // 205 ima i treća, dvokrilna vrata na sredini (evakuacioni plan II sprata, teren 31.10.2026).
+        for ((room, doors) in listOf("204" to 2, "205" to 3, "208" to 2)) {
             val node = graph.room(room)!!
             assertNull(graph.room("${room}A"))
             assertEquals(node, resolveTarget("${room}A", graph, campus)?.node)
-            assertEquals(room, 2, graph.neighbors(node.id).count { (n, _) -> n.type == NodeType.VRATA })
+            assertEquals(room, doors, graph.neighbors(node.id).count { (n, _) -> n.type == NodeType.VRATA })
         }
     }
 

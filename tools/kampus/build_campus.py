@@ -665,7 +665,7 @@ def main():
     shared["MI"] = shared_placement(to_campus, placement, m_per_px, build_mi.VIEWPORT)
     for label, (plan_xy, node) in {
         "AMF ulaz": ((245, -65), "K-U-AMF-1"), "AMF ulaz GRID": ((723, -65), "K-U-AMF-2"),
-        "AMF prolaz ka NB": ((680, 207), "K-P-AMF-NB"), "AMF prolaz ka Kuli": ((257, 210), "K-P-AMF-KULA"),
+        "AMF prolaz ka NB": (build_amf.PASSAGE_NB, "K-P-AMF-NB"), "AMF prolaz ka Kuli": ((257, 210), "K-P-AMF-KULA"),
         "AMF prolaz ka F": ((40, -13), "K-P-AMF-F"), "AMF prolaz ka ITC": ((832, -10), "K-P-ITC-AMF"),
         "Kula ulaz": ((243, 554), "K-U-KULA-1"), "Kula prolaz ka NB": ((333, 413), "K-P-NB-KULA"),
         "Kula trem ka AMF": ((236, 376), "K-P-AMF-KULA"),

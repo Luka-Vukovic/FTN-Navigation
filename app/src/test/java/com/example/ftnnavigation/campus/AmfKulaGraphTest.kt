@@ -252,6 +252,8 @@ class AmfKulaGraphTest {
             setOf(
                 "NB-0-S" to "NB-0-PODEST", "NB-1-S-D" to "NB-1-PROLAZ-AMF", "AMF-m1-S1" to "AMF-m1-PODEST-S1", "AMF-0-S1-D-KRAK" to "AMF-0-PODEST-S1-D",
                 "AMF-0-S1-D-KRAK-L" to "AMF-0-PODEST-S1-D-L",
+                // F (31.10.2026): sa I sprata niz krak do pasarele (samo za rutu).
+                "F-1-S-D" to "F-1-PROLAZ-AMF",
                 "K-P-AMF-F" to "F-0-PROLAZ-AMF", "K-P-AMF-F" to "F-1-PROLAZ-AMF",
             ),
             graph.edges.filter { it.steps }.map { it.fromId to it.toId }.toSet(),

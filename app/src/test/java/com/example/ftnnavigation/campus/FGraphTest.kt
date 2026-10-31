@@ -87,7 +87,8 @@ class FGraphTest {
     fun numbering_fromFloorSigns() {
         for ((floor, numbers) in mapOf(1 to listOf(101, 113, 114, 126), 2 to listOf(200, 208, 209, 223), 3 to listOf(301, 308, 309, 320))) {
             val (first, eastEnd, southFirst, westEnd) = numbers.map { room("F $it") }
-            val stairs = checkNotNull(graph.node("F-$floor-S"))
+            // Dno kraka naniže (od 31.10.2026 stepenište ima krakove; III sprat nema krak naviše ni čvor F-3-S).
+            val stairs = checkNotNull(graph.node("F-$floor-S-D"))
             val rooms = graph.rooms.filter { it.buildingId == FPlan.BUILDING_ID && it.floor == floor }
             assertEquals("$floor", rooms.filter { it.x < stairs.x }.minBy { distance(it.id, stairs.id) }.id, first.id)
             assertEquals("$floor", rooms.minOf { it.x }, eastEnd.x, 1e-4f)

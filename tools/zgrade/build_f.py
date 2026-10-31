@@ -41,7 +41,7 @@ sredina zgrade) su samo nacrtane; evakuacioni izlaz na zapadnom kraju se ne crta
 import argparse
 from pathlib import Path
 
-from common import STEPS, TOALET, R, build_graph, write_all
+from common import STEPS, TOALET, Flights, R, build_graph, write_all
 
 VX, VY, VW, VH = VIEWPORT = (-15, -15, 630, 230)
 WALL = (0, 0, 600, 163)  # OSM obris (60,8 x 16,5 m)
@@ -74,15 +74,37 @@ def rooms(floor, y0, y1, spans):
     return [R(a, b, y0, y1, amenity=n) if n == TOALET else R(a, b, y0, y1, name(n)) for a, b, n in spans]
 
 
-STAIRS_RECT = (402, 452, 114, 160)  # glavno stepenište, uz donji (severni) zid
 PASSAGE = (470, 163)  # pasarela ka Amfiteatrima, na međunivou stepeništa (prizemlje i I sprat)
 # Pasarela stiže na podest između P i I - do oba sprata pola sprata stepenicama (STEPS).
 CAMPUS_LINKS = [("K-P-AMF-F", "F-0-PROLAZ-AMF", STEPS), ("K-P-AMF-F", "F-1-PROLAZ-AMF", STEPS)]
 
 
-def stairs(rect=STAIRS_RECT):
-    x0, x1, y0, y1 = rect
-    return [("S", box(x0, x1, y0, y1), ((x0 + x1) / 2, 125))]
+# Krakovi glavnog stepeništa (31.10.2026; fotografija iz hola prizemlja teren/izveštaj9/IMG_20261010_120816.jpg i evakuacioni
+# planovi): dvokrako, sa okretom za 180° na međupodestu. Sa sprata (hol, istočna strana stepeništa) severni krak (uz severni zid,
+# na planu dole) vodi naviše ka zapadu na međupodest; sa njega južni krak nazad ka istoku na sledeći sprat. Južni krak sa sprata
+# vodi naniže. Pasarela ka Amfiteatrima je na severnoj strani međupodesta između P i I: iz prizemlja pravo ispred kraja kraka
+# naviše, sa I sprata sa strane posle kraka naniže. Do tada je stepenište bilo jedan čvor u sredini kutije, a pasarela je sa I
+# sprata išla pravo u hodnik - teren 31.10.2026 (107 -> F 214): sa pasarele uz krak na I sprat, a tačka je išla hodnikom I
+# sprata ka istoku, pa je posle okreta na I "sprat II" došao prerano (promašaj 6 m); korisnik: "treba izmeniti i stepenice u F-bloku".
+LANDING_X = 490  # zapadni kraj međupodesta
+
+
+def flights(x0, x1, land=LANDING_X, draw_up=True, draw_down=True):
+    """Krakovi između x0 (hol) i x1, međupodest x1..land; putanja: dno severnog kraka, okret, dno južnog kraka (sprat)."""
+    mid = (x1 + land) / 2
+    return Flights(up=(x0, 139, x1, 161), down=(x0, 115, x1, 137), landing=(x1, 113, land, 163),
+                   path=[(x0, 150), (mid, 150), (mid, 126), (x0, 126)], draw_up=draw_up, draw_down=draw_down,
+                   floor_landing=True)
+
+
+def stairs(x0):
+    """Čvor stepeništa na dnu severnog kraka (ka spratu iznad); dno južnog kraka je čvor S-D (common.build_floor)."""
+    return [("S", None, (x0, 150))]
+
+
+def hall(x, y_corridor):
+    """Put kroz hol do oba kraka (pod pravim uglom na hodnik; krakovi se kače vodoravno sa njega)."""
+    return [poly((x, y_corridor), (x, 150))]
 
 
 def floor_0():
@@ -105,7 +127,7 @@ def floor_0():
         # Niše su zatvoreni mali hodnici sa jednim vratima ka glavnom hodniku (korisnik, 10.10.2026 uveče; na planu: niša
         # 010A-C vrata desno, x 284-294; niša 011C/D vrata levo, x 383-393).
         "paths": [poly((77, 96), (597, 96)), poly((228, 69), (296, 69)), poly((289, 69), (289, 96)),
-                  poly((378, 71), (422, 71)), poly((388, 71), (388, 96))],
+                  poly((378, 71), (422, 71)), poly((388, 71), (388, 96))] + hall(385, 96),
         "corridors": [
             poly((74, 79), (600, 79), (600, 101), (560, 101), (560, 113), (74, 113)),  # hodnik (zapadni kraj ka toaletu)
             poly((225, 59), (300, 59), (300, 79), (225, 79)),  # niša 010A-C
@@ -114,9 +136,9 @@ def floor_0():
             poly((250, 163), (300, 163), (300, 177), (250, 177)),  # izlaz iz 002 na spoljne stepenice
         ],
         "entrances": [box(455, 491, 163, 205)],  # pasarela (IZLAZ)
-        # Krakovi: severni gore (na međupodest), južni dole; spoljne stepenice kod 002.
-        "steps": [box(400, 454, 140, 160), box(400, 454, 116, 138), box(249, 302, 177, 205)],
-        "landings": [box(454, 490, 113, 163)],
+        # Krakovi: severni gore (na međupodest), južni dole (flights); spoljne stepenice kod 002.
+        "steps": [box(249, 302, 177, 205)],
+        "flights": {"S": flights(400, 454)},
         "rooms": [
             # Istočni kraj: prostorija (ne zna se kakva - korisnik: "nije prazan prostor"), vrata ka hodniku u pregradi; iz nje
             # se ulazi u dve krajnje sobe. Donji zid je stepenast (kao na planu).
@@ -149,11 +171,11 @@ def floor_0():
             R(490, 550, 113, 163),
             R(550, 600, 113, 163, door=(560, 113), amenity=TOALET),
         ],
-        # Graf kao ranije: čvor stepeništa (ka I spratu) u kutiji stepeništa, pasarela pravo sa hodnika (krak do međupodesta
-        # je na vezi sa kampusom, STEPS). Probano 10.10.2026: pasarela iz hola preko kraka i međupodesta (kako je na planu) -
-        # replay 04.10. (F -> AMF) više nije prelazio: korisnik je sa "Ovde sam" u hodniku kod x 470 išao pravo ka pasareli,
-        # a tačka je zapela. Prelazi su na terenu radili sa ovim grafom ("Ok su bili prelazi"), pa je novo samo crtež.
-        "stairs": [("S", None, (427, 125))],
+        # Pasarela pravo sa hodnika (kao do sada). Probano 10.10.2026 (pasarela iz hola preko kraka, bez crteža krakova) i ponovo
+        # 31.10.2026 (sa krakovima, pasarela pravo ispred kraja kraka naviše): replay 04.10. (F -> AMF) ne prelazi - korisnik je sa
+        # "Ovde sam" u hodniku kod x 468 išao ravnim hodom (znak ~0) pravo ka pasareli, 10 koraka. Na terenu su prelazi sa ovim
+        # grafom radili ("Ok su bili prelazi").
+        "stairs": stairs(400),
         "points": [("PROLAZ-AMF", PASSAGE, "PROLAZ")],
     }
 
@@ -161,12 +183,13 @@ def floor_0():
 def floor_1():
     return {
         "title": "I sprat",
-        "paths": [poly((3, 97), (597, 97))],
+        "paths": [poly((3, 97), (597, 97))] + hall(390, 97),
         "corridors": [
             poly((0, 82), (600, 82), (600, 113), (0, 113)),
             poly((352, 113), (405, 113), (405, 163), (385, 163)),
             poly((453, 113), (489, 113), (489, 163), (453, 163)),
         ],
+        "flights": {"S": flights(405, 453)},
         "entrances": [box(453, 489, 163, 205)],
         "rooms": [
             *rooms(1, 0, 82, [(0, 51, None), (51, 75, 14), (75, 100, 15), (100, 125, 16), (125, 150, 17),
@@ -177,8 +200,10 @@ def floor_1():
                                  (275, 300, 3), (300, 325, 2), (325, 352, 1),
                                  (489, 509, "F 1"), (509, 550, TOALET), (550, 572, "F 2"), (572, 600, "F 3")]),
         ],
-        "stairs": stairs((405, 453, 114, 160)),
-        "points": [("PROLAZ-AMF", PASSAGE, "PROLAZ")],
+        "stairs": stairs(405),
+        # Sa I sprata niz južni krak na međupodest, pa sa strane na pasarelu - ivica samo za rutu (kao NB I sprat; lociranje:
+        # PdrLocator, prolaz sa kraka).
+        "points": [("PROLAZ-AMF", PASSAGE, "PROLAZ", ("S-D", [], STEPS))],
     }
 
 
@@ -190,12 +215,13 @@ def floor_2():
         # Gornji red počinje sa 209 odmah uz 208 (korisnik 30.10.2026: "F-209 ima svoja vrata desno, i odande se nastavlja
         # brojanje ... 207 je levo, 208 pravo, 209 desno"; tabla: 209-223 pa 224/225). Do tada je 209 bila ugao iza kraja
         # hodnika sa vratima na zidu 210 - "fizički nemoguće doći". 224/225 sa table na crtežu nema mesta (red ima 15 soba).
-        "paths": [poly((51, 98), (597, 98))],
+        "paths": [poly((51, 98), (597, 98))] + hall(388, 98),
         "corridors": [
             poly((50, 82), (600, 82), (600, 114), (50, 114)),
             poly((373, 114), (402, 114), (402, 163), (390, 163)),
             poly((452, 114), (489, 114), (489, 163), (452, 163)),  # podest stepeništa
         ],
+        "flights": {"S": flights(402, 452)},
         "rooms": [
             *rooms(2, 0, 82, [(50, 99, 9), (99, 122, 10), (122, 149, 11), (149, 172, 12),
                               (172, 199, 13), (199, 247, 14), (247, 270, 15), (270, 297, 16), (297, 347, 17),
@@ -206,7 +232,7 @@ def floor_2():
                                  (248, 322, 2), (322, 347, 1), (347, 373, 0),  # 202 = i 203 (tabla: dve sobe)
                                  (489, 509, 26), (509, 548, TOALET), (548, 573, 27), (573, 600, 28)]),
         ],
-        "stairs": stairs(),
+        "stairs": stairs(402),
     }
 
 
@@ -214,7 +240,7 @@ def floor_3():
     return {
         "title": "III sprat",
         # Uži hodnik levo: prelaz na širi pod pravim uglom (27.10.2026; do tada koso 374 -> 390).
-        "paths": [poly((3, 90), (382, 90), (382, 98), (597, 98))],
+        "paths": [poly((3, 90), (382, 90), (382, 98), (597, 98))] + hall(392, 98),
         "corridors": [
             poly((0, 82), (600, 82), (600, 114), (398, 114), (398, 160), (387, 160), (387, 132), (374, 132),
                  (374, 98), (0, 98)),
@@ -229,7 +255,9 @@ def floor_3():
             R(374, 387, 132, 163),  # ostava kod stepeništa
             *rooms(3, 114, 163, [(465, 496, 26), (496, 537, TOALET), (559, 600, None)]),
         ],
-        "stairs": stairs((398, 446, 114, 160)),
+        # Poslednji sprat: samo krak naniže (južni); međupodest ispod je uži (do sobe 326).
+        "flights": {"S": flights(398, 446, land=465, draw_up=False)},
+        "stairs": stairs(398),
     }
 
 

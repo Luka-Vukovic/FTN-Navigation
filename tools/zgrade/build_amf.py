@@ -91,8 +91,14 @@ S2 = ("S2", None, S2_PATH[0])
 
 # Kraj staklenog prolaza iz NB-a (evakuacioni plan): širi krak niz prolaz u hodnik iza amfiteatara (deo prolaza - crtež)
 # i uži krak desno od njega, naviše - u L1 (korisnik: "po oznaci na vratima").
-S3 = ("S3", (688, 226, 704, 247), (696, 228))
+# Dno S3 je na vrhu širokog kraka (kraj prolaza, y 252), a ne u hodniku iza amfiteatara: do 31.10.2026 je čvor S3 bio na
+# (696, 228) i visio 4 m niz hodnik x 696, uporedo sa prolazom (1,6 m) - teren 31.10. (A2 -> 307) tačka iz hodnika iza A2 je
+# skliznula na tu ivicu i ušla na S3 umesto u prolaz ka NB-u. Sada se S3 kači pod pravim uglom na put kroz prolaz (x 680),
+# pa hod pravo kroz prolaz ne ide ka stepeništu.
+S3 = ("S3", (688, 226, 704, 247), (696, 252))
 NB_PASSAGE_STEPS = (670, 226, 688, 264)
+# Kapija prolaza ka NB-u: na vrhu širokog kraka (kraj staklenog dela; do 31.10.2026 na početku kraka, y 207).
+PASSAGE_NB = (680, 265)
 CAMPUS_LINKS = [
     ("K-U-AMF-1", "AMF-m1-ULAZ"),
     ("K-U-AMF-2", "AMF-m1-ULAZ-GRID"),
@@ -144,8 +150,11 @@ def floor_0():
     return {
         "title": "Prizemlje",
         # Sredinom hodnika do račvanja ka krakovima S1 (S1-D, 0,4 m dalje).
-        # Hodnik iza amfiteatara do ispod S3 (x 696), da je stepenište ka L1 upravno (27.10.2026; do tada koso sa x 690).
-        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, S1_TOP[1] - 4)], [(555, 188), (696, 188)]],
+        # Hodnik iza amfiteatara: 27.10.2026 produžen do ispod S3 (x 696, da stepenište ne bude koso); od 31.10.2026 se završava
+        # na prolazu (x 680), a S3 se kači sa strane puta kroz prolaz.
+        # + niz prolaz ka NB-u do vrha širokog kraka (dno S3 sa strane, pod pravim uglom).
+        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, S1_TOP[1] - 4)], [(555, 188), (680, 188)],
+                  [(680, 188), (680, PASSAGE_NB[1] - 13)]],
         "corridors": [rect_poly(170, -28, 832, 7), rect_poly(212, 7, 287, 172),  # hodnik do ograde iznad S1
                       rect_poly(30, -32, 170, 5),  # prolaz ka F-bloku
                       rect_poly(553, 168, 693, 207),  # hodnik iza amfiteatara, iz prolaza iz NB-a
@@ -170,7 +179,7 @@ def floor_0():
         "steps": [NB_PASSAGE_STEPS],
         "voids": [S1_VOID],  # iza ograde na kraju hodnika (ispod: podest i srednji krak S1)
         "points": [("PROLAZ-F", (40, -13), "PROLAZ"), ("PROLAZ-ITC", (832, -10), "PROLAZ"),
-                   ("PROLAZ-NB", (680, 207), "PROLAZ"), ("PROLAZ-KULA", PASSAGE_KULA, "PROLAZ", KULA_VIA_0),
+                   ("PROLAZ-NB", PASSAGE_NB, "PROLAZ"), ("PROLAZ-KULA", PASSAGE_KULA, "PROLAZ", KULA_VIA_0),
                    ("PROLAZ-KULA", PASSAGE_KULA, "PROLAZ", KULA_VIA_0_L)],
     }
 
