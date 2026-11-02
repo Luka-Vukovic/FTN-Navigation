@@ -128,6 +128,7 @@ import com.example.ftnnavigation.graph.MiPlan
 import com.example.ftnnavigation.graph.KulaPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NtpPlan
+import com.example.ftnnavigation.graph.PlanPoint
 import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.schedule.RoomSchedule
@@ -201,6 +202,7 @@ fun PocRoute(
         onPlanStep = viewModel::stepPlan,
         developerMode = viewModel.developerMode,
         routeBends = viewModel.routeBends,
+        routeStairLegs = viewModel.routeStairLegs,
     )
 }
 
@@ -247,6 +249,8 @@ fun PocScreen(
     developerMode: Boolean = false,
     /** Savijanje linije rute krakom do prolaza sa međupodesta ([flightBends]). */
     routeBends: Map<Pair<String, String>, Offset> = emptyMap(),
+    /** Linija rute krakovima stepeništa do međupodesta ([stairLegs]). */
+    routeStairLegs: Map<Pair<String, String>, List<PlanPoint>> = emptyMap(),
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     var showSteps by rememberSaveable { mutableStateOf(false) }
@@ -305,6 +309,7 @@ fun PocScreen(
                             graph = graph,
                             route = route,
                             routeBends = routeBends,
+                            routeStairLegs = routeStairLegs,
                             position = state.position.takeIf { pdrHere },
                             rawPosition = state.rawPosition.takeIf { pdrHere && developerMode },
                             showGraph = developerMode,
@@ -479,6 +484,7 @@ private fun FloorPlan(
     graph: BuildingGraph?,
     route: Route?,
     routeBends: Map<Pair<String, String>, Offset>,
+    routeStairLegs: Map<Pair<String, String>, List<PlanPoint>>,
     position: Offset?,
     rawPosition: Offset?,
     showGraph: Boolean,
@@ -565,7 +571,7 @@ private fun FloorPlan(
                 val up = stringResource(R.string.route_floor_change_up, "%s")
                 val down = stringResource(R.string.route_floor_change_down, "%s")
                 Canvas(Modifier.fillMaxSize()) {
-                    drawRoute(route, routeBends, buildingId, floor, position, colors.primary, colors.secondary, 1f / zoom.scale)
+                    drawRoute(route, routeBends, routeStairLegs, buildingId, floor, position, colors.primary, colors.secondary, 1f / zoom.scale)
                     drawFloorChanges(
                         route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / zoom.scale, zoom.rotationDeg,
                     ) { from, to ->
@@ -725,6 +731,7 @@ private fun DrawScope.drawGraph(
 private fun DrawScope.drawRoute(
     route: Route,
     bends: Map<Pair<String, String>, Offset>,
+    stairLegs: Map<Pair<String, String>, List<PlanPoint>>,
     buildingId: String,
     floor: Int,
     position: Offset?,
@@ -734,15 +741,21 @@ private fun DrawScope.drawRoute(
 ) {
     fun Node.isHere() = this.buildingId == buildingId && this.floor == floor
     fun Node.toOffset() = Offset(x * size.width, y * size.height)
+    fun PlanPoint.toOffset() = Offset(x * size.width, y * size.height)
     val path = Path()
     var drawing = false
     var previous: Node? = null
+    var last: Node? = null
     if (position != null) {
         path.moveTo(position.x * size.width, position.y * size.height)
         drawing = true
     }
     for (node in route.nodes) {
+        val from = last
+        last = node
         if (!node.isHere()) {
+            // Napušta sprat stepeništem sa krakovima: linija još krakom do međupodesta ([stairLegs]).
+            if (previous != null) stairLegs[previous.id to node.id]?.forEach { path.lineTo(it.toOffset().x, it.toOffset().y) }
             drawing = false
             previous = null
             continue
@@ -752,7 +765,15 @@ private fun DrawScope.drawRoute(
             previous?.let { bends[it.id to node.id] }?.let { path.lineTo(it.x * size.width, it.y * size.height) }
             path.lineTo(p.x, p.y)
         } else {
-            path.moveTo(p.x, p.y)
+            // Stiže na sprat stepeništem sa krakovima: linija od međupodesta niz/uz krak do čvora.
+            val head = from?.let { stairLegs[node.id to it.id] }?.reversed().orEmpty()
+            if (head.isEmpty()) {
+                path.moveTo(p.x, p.y)
+            } else {
+                path.moveTo(head.first().toOffset().x, head.first().toOffset().y)
+                head.drop(1).forEach { path.lineTo(it.toOffset().x, it.toOffset().y) }
+                path.lineTo(p.x, p.y)
+            }
         }
         drawing = true
         previous = node

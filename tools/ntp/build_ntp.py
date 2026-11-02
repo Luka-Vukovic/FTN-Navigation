@@ -423,6 +423,9 @@ L1_CABIN_EXITS = tuple(L1_CABINS.values())
 # S1 na I-V spratu: dno kraka naviše (y 380) i dno kraka naniže (y 508) vezani pravo (pravcem kraka) za glavni hodnik, kao S1 u
 # prizemlju (isti crtež korisnika). Do tada oba koso za M450, pa je ulazak na krak i izlazak sa njega išao preko ugla.
 S1_CORRIDOR = ("M380", "M508")
+# S2 ostaje vezan koso za M1470 (oba dna kraka). Probano 02.11.2026 (teren 32, NTP II: tačka je sa glavnog hodnika koso skliznula
+# na krak S2): dno kraka naviše i naniže pravo za glavni hodnik (M1432, M1518), kao S1 - replay svih snimaka lošiji (srednji
+# 3,53 -> 3,67 m; NTP 28.10. 1,8 -> 28,5 m, 02.11. 3,2 -> 21,0 i 4,2 -> 20,8 m). Vidi "Šta nije radilo" u CLAUDE.md.
 # I-V sprat: iz L1 se izlazi pravo gore u gornji hodnik (teren 12.10.2026, posle vožnje P -> III: ~1,5 m gore, pa levo ka
 # glavnom hodniku). Do tada je L1 bio vezan koso za U640 (4,4 m udesno), pa je izlazak iz lifta išao zaobilazno.
 LIFT_EXIT = (513, 595)
@@ -449,13 +452,18 @@ FLIGHTS = {
 
 def stair_nodes(g, f, attach):
     """Čvorovi stepeništa sprata f (dno kraka naviše i, osim u prizemlju, naniže), vezani za čvor hodnika attach[ključ]
-    (ili (za dno kraka naviše, za dno kraka naniže))."""
+    (ili (za dno kraka naviše, za dno kraka naniže)). Na I-IV spratu dno kraka naniže i dno kraka naviše spaja i ivica
+    pravo preko podesta sprata (kao NB, `floor_landing` u common.py; u aplikaciji samo za rutu - `BuildingGraph.routeOnly`).
+    Teren 02.11.2026 (NTP S1, P -> II, snimak ekrana I sprata): ruta sa kraka na krak išla je "okolo" - sa podesta u glavni
+    hodnik, duž njega i nazad; korisnik: "treba izmeniti graf na stepenicama slično kao u NB. To je za S1, ali verovatno i S2"."""
     for key in STAIRS:
         path = FLIGHTS[key]["path"]
         up, down = attach[key] if isinstance(attach[key], tuple) else (attach[key], attach[key])
         g.edge(g.node(f, key, *path[0], "STEPENISTE"), f"NTP-{f}-{up}")
         if f > 0:
             g.edge(g.node(f, f"{key}-D", *path[3], "STEPENISTE"), f"NTP-{f}-{down}")
+        if 0 < f < FLOORS[-1]:
+            g.edge(f"NTP-{f}-{key}", f"NTP-{f}-{key}-D")
 
 # Ulazi (ULAZ) prizemlja -> ulaz u grafu kampusa (build_campus.py pravi K-U-NTP-n na istim tačkama).
 ENTRANCES = {

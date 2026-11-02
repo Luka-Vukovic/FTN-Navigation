@@ -579,6 +579,9 @@ private const val TAP_STEP_NS = 550_000_000L
  * koraka sa znakom od [DESCENT_START_SCORE]; bez znaka (penjanje, džep) - svi do [TAP_CHECK_DEG] od pravca kraka. Inače
  * nazad na sprat (koraci se ponove kao hod). Replay 17.10.2026 (NTP III): "Ovde sam" na vrhu S1 je pao na crtež kraka, pa je
  * korisnik hodao po spratu (47°, 45°, 0°, 279° - krak 90°) - bez provere tačka je "sišla" na II.
+ * Pri silasku važi i pravac (svi koraci uz krak), ne samo znak: teren 02.11.2026 popodne (F II, dva dodira na kraku naniže): prvi
+ * koraci posle stajanja imaju slab znak (−1,2..0,2), a išli su pravo niz krak (69-86°, krak ~80°) - oba puta "nazad na sprat",
+ * korisnik je na kraju ručno označio I sprat.
  */
 private const val TAP_CHECK_STEPS = 4
 private const val TAP_CHECK_DEG = 60f
@@ -743,6 +746,14 @@ private const val CORRIDOR_MAX_DEG = 30f
  */
 private const val CORRIDOR_FORGET_NS = 20 * 60 * 1_000_000_000L
 
+/**
+ * Zgrade povezane iznutra (prolazi, trem, pasarela) dele ispravku iz hodnika; ostale (NTP, MI) imaju svoju - ispravka jedne
+ * grupe se pri ulasku u drugu odloži i vrati kad se korisnik vrati. Teren 02.11.2026 popodne: iz NB/AMF/F-a je u NTP doneto
+ * +18,5° (tamo je kompas ~18° levo), a NTP-u treba suprotno (~21° desno) - smer u holu je bio 45° pored stvarnog, ulazak na kraj
+ * sporednog hodnika (BB750), "Ovde sam" 35 m. Greška u NTP-u je pozitivna na svakom terenu (31.10. +23..+48°, 02.11. +14..+31°).
+ */
+private val CORRIDOR_SHARED_BUILDINGS = setOf("NB", "AMF", "KULA", "F", "ITC")
+
 private val ROOM_NODE_TYPES = setOf(NodeType.PROSTORIJA, NodeType.VRATA)
 
 /** Pokazivač u pravcu hodnika ([PdrLocator.corridorHeadingOnPlan]): smer do ovoliko od pravca ivice... */
@@ -891,8 +902,9 @@ class PdrLocator(
     private var outdoorLearnedNs: Long? = null
 
     /**
-     * Ispravka naučena iz hoda duž hodnika (vidi [CORRIDOR_GAIN]), preko zajedničke - jedna za sve zgrade (posebno po zgradi je
-     * u replay-u bilo lošije: 3,88 -> 4,46 m srednji promašaj - greška je više osobina telefona i dana). Napolju i dok traje
+     * Ispravka naučena iz hoda duž hodnika (vidi [CORRIDOR_GAIN]), preko zajedničke - jedna za zgrade povezane iznutra, a NTP i
+     * MI svaka svoju ([CORRIDOR_SHARED_BUILDINGS], od 02.11.2026; posebno za svaku zgradu je u replay-u bilo lošije: 3,88 -> 4,46 m
+     * srednji promašaj - greška je više osobina telefona i dana). Napolju i dok traje
      * provera posle ulaska ([entryCheck]) se ne primenjuje: napolju GPS drži poziciju, a provera "ušao pa uz zid nazad napolje"
      * je osetljiva na smer (10.10.2026, NTP: sa +6° iz F-bloka nije okinula). Briše je Reset.
      */
@@ -902,6 +914,27 @@ class PdrLocator(
 
     // Vreme koraka kad je ispravka iz hodnika poslednji put učena (null: nije učena ili vreme nije poznato).
     private var corridorLearnedNs: Long? = null
+
+    // Grupa zgrada na koju se odnosi ispravka iz hodnika ([CORRIDOR_SHARED_BUILDINGS]; null: još nijedna), i odložene
+    // ispravke ostalih grupa (vrednost, vreme učenja).
+    private var corridorGroup: String? = null
+    private val parkedCorridorBias = HashMap<String, Pair<Float, Long?>>()
+
+    /** U zgradi druge grupe: ispravka iz hodnika te grupe (odložena ili 0); tekuća se odloži. Napolju se grupa ne menja. */
+    private fun syncCorridorGroup() {
+        if (place.isCampus) return
+        val group = if (place.buildingId in CORRIDOR_SHARED_BUILDINGS) "FTN" else place.buildingId
+        val current = corridorGroup
+        if (group == current) return
+        if (current != null) {
+            parkedCorridorBias[current] = learnedCorridorBias to corridorLearnedNs
+            val (bias, learnedNs) = parkedCorridorBias.remove(group) ?: (0f to null)
+            learnedCorridorBias = bias
+            corridorLearnedNs = learnedNs
+            corridorRun = 0
+        }
+        corridorGroup = group
+    }
 
     // Hod duž hodnika: pravac (na planu, 0..180) i broj uzastopnih koraka kojima tačka napreduje njime.
     private var corridorAxisDeg: Float? = null
@@ -1572,6 +1605,8 @@ class PdrLocator(
         headingErrors.addLast(-(deg - if (outside) 0f else corridorDeg))
         learnedCorridorBias = corridorDeg
         corridorLearnedNs = lastStepNs.takeIf { corridorDeg != 0f }
+        corridorGroup = null
+        parkedCorridorBias.clear()
     }
 
     /** Ispravka naučena iz hodnika, i kad se trenutno ne primenjuje (napolju) - za snimak. */
@@ -1610,6 +1645,8 @@ class PdrLocator(
         exitedEntrance = null
         learnedCorridorBias = 0f
         corridorLearnedNs = null
+        corridorGroup = null
+        parkedCorridorBias.clear()
         corridorRun = 0
         outdoorErrors.clear()
         outdoorLearnedNs = null
@@ -2020,6 +2057,7 @@ class PdrLocator(
             sinceEntryM = 0.0
         }
         this.place = place
+        syncCorridorGroup()
         if (!place.isCampus) {
             gpsTrack.clear()
             doorFixes.clear()
@@ -2131,6 +2169,7 @@ class PdrLocator(
     /** Posle [CORRIDOR_FORGET_NS] bez učenja ispravka iz hodnika se briše (počinje se iz zajedničke). */
     private fun forgetCorridorBias(timeNs: Long?) {
         lastStepNs = timeNs
+        syncCorridorGroup()
         val learned = corridorLearnedNs ?: return
         // Starije vreme (koraci ponovljeni posle pitanja za lift) ne briše.
         if (timeNs != null && timeNs - learned > CORRIDOR_FORGET_NS) {
@@ -2792,11 +2831,8 @@ class PdrLocator(
             if (check.size >= TAP_CHECK_STEPS) {
                 climb.tapCheck = null
                 val known = check.mapNotNull { it.second }
-                val confirmed = if (!climb.up && known.size >= GAIT_STEPS) {
-                    known.count { it >= DESCENT_START_SCORE } >= GAIT_START_STEPS
-                } else {
-                    check.all { it.first <= TAP_CHECK_DEG }
-                }
+                val byGait = !climb.up && known.size >= GAIT_STEPS && known.count { it >= DESCENT_START_SCORE } >= GAIT_START_STEPS
+                val confirmed = byGait || check.all { it.first <= TAP_CHECK_DEG }
                 if (!confirmed) {
                     trace?.invoke("stepenište ${climb.stair.key}: posle dodira nije na kraku - nazad na sprat")
                     return backToCorridor(climb)

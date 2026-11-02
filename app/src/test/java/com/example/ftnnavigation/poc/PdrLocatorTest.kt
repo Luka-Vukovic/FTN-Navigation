@@ -8,6 +8,7 @@ import com.example.ftnnavigation.campus.contains
 import com.example.ftnnavigation.campus.distanceToWallM
 import com.example.ftnnavigation.campus.seedGraph
 import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.graph.EdgeType
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.Node
@@ -1853,6 +1854,89 @@ class PdrLocatorTest {
         assertTrue("NB-1-S-D" to "NB-1-PROLAZ-AMF" in bends)
         // Ostale ivice se ne savijaju.
         assertTrue(bends.keys.all { (a, b) -> "PROLAZ" in a || "PROLAZ" in b })
+    }
+
+    /**
+     * Teren 02.11.2026 popodne (AMF P, ruta ka Biblioteci): linija rute se završavala na vrhu stepeništa i "nestajala" pri
+     * silasku na međupodest. Ivica stepenica se crta krakom do međupodesta na oba sprata; oba dela se sastaju na istoj tački.
+     */
+    @Test
+    fun stairLegs_routeLineAlongFlightsToLanding() {
+        val legs = stairLegs(graph, stairPaths)
+        // AMF S1: sa račvanja hodnika u prizemlju pod pravim uglom do bočnog kraka, niz njega na podest; na -1 srednjim krakom.
+        val down = checkNotNull(legs["AMF-0-S1-D" to "AMF-m1-S1"])
+        val up = checkNotNull(legs["AMF-m1-S1" to "AMF-0-S1-D"])
+        val fork = node("AMF-0-S1-D")
+        assertEquals(3, down.size)
+        assertEquals(fork.y, down[0].y, 1e-4f)
+        assertEquals(down[0].x, down[1].x, 1e-4f)
+        assertEquals(down.last(), up.last())
+        // NTP S1, I -> II: krak naviše i međupodest na I, krak naniže na II do dna kraka (čvor S1-D je na kraju putanje).
+        val ntpUp = checkNotNull(legs["NTP-1-S1" to "NTP-2-S1-D"])
+        val ntpDown = checkNotNull(legs["NTP-2-S1-D" to "NTP-1-S1"])
+        assertEquals(2, ntpUp.size)
+        assertEquals(listOf(ntpUp.last()), ntpDown)
+        // Samo ivice stepenica između spratova, i samo stepeništa sa krakovima (Kula je spirala).
+        assertTrue(legs.keys.all { (a, b) -> graph.edge(a, b)?.type == EdgeType.STEPENICE && node(a).floor != node(b).floor })
+        assertTrue(legs.keys.none { (a, _) -> a.startsWith("KULA") })
+        assertTrue("NB-0-S" to "NB-1-S-D" in legs)
+    }
+
+    /**
+     * Teren 02.11.2026 popodne (hod-20261102-162854, 595-609 s, F II -> I ka pasareli): "Ovde sam" usred kraka naniže, pa koraci
+     * niz krak (82-99°), okret na međupodestu i drugi krak. Prvi koraci posle stajanja imaju slab znak silaska (0,05, −0,19, −0,61),
+     * pa je provera vraćala tačku na sprat (dvaput) - korisnik: "ne funkcioniše baš stvarno ono ovde sam". Pravac kraka potvrđuje.
+     */
+    @Test
+    fun hereOnFlight_fSecondFloor_weakGaitAlongFlight_descends() {
+        val recorded = timedSteps(
+            """
+            82|0.75|0.05|595.92 86|0.77|-0.19|596.82 99|0.77|-0.61|597.34 132|0.77|-0.57|597.89 168|0.77|-0.50|598.60
+            198|0.17|-0.87|599.22 231|0.17|-1.21|599.98 250|0.77|-0.51|600.73 259|0.77|0.16|601.42 260|0.77|0.66|602.06
+            261|0.77|0.33|602.68 262|0.77|0.57|603.42 264|0.77|0.38|604.06 267|0.49|-0.33|604.35 268|0.77|0.15|604.72
+            268|0.77|0.74|605.37 267|0.77|0.73|605.98 264|0.77|0.43|606.63 262|0.77|0.22|607.27 262|0.77|0.73|607.90
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("F", 2), Offset(0.7472999f, 0.65441203f), measure = false, timeNs = 595_540_000_000L)
+        }
+        val reasons = recorded.mapNotNull { locator.walk("F", it) }
+        assertEquals("$reasons", listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("F", 1), locator.place)
+    }
+
+    /**
+     * Ispravka iz hodnika po grupi zgrada: NB, AMF, Kula, F i ITC dele jednu, NTP ima svoju (teren 02.11.2026 popodne: iz NB-a
+     * doneto +18,5°, a u NTP-u je kompas grešio na drugu stranu). Pri povratku se vraća odložena ispravka.
+     */
+    @Test
+    fun corridorBias_separateForNtp_restoredOnReturn() {
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
+        fun at(id: String) = node(id).let { locator.setPosition(PdrPlace(it.buildingId, it.floor), Offset(it.x, it.y), measure = false) }
+        at("NB-0-ULAZ")
+        locator.restoreBias(0f, corridorDeg = 15f)
+        at("KULA-0-PROLAZ-NB")
+        assertEquals(15f, locator.corridorBiasDeg, 1e-3f)
+        at("NTP-0-ULAZ")
+        assertEquals(0f, locator.corridorBiasDeg, 1e-3f)
+        at("AMF-m1-ULAZ")
+        assertEquals(15f, locator.corridorBiasDeg, 1e-3f)
+    }
+
+    /**
+     * Teren 02.11.2026 popodne (NTP S1, P -> II, snimak ekrana I sprata): ruta sa kraka na krak je išla "okolo" kroz glavni
+     * hodnik. Na I-IV spratu NTP-a dno kraka naniže i dno kraka naviše spaja ivica preko podesta sprata (samo za rutu, kao NB).
+     */
+    @Test
+    fun ntpFloorLanding_routeStaysOnStairs() {
+        for (f in 1..4) for (s in listOf("S1", "S2", "S3")) {
+            val edge = checkNotNull(graph.edge("NTP-$f-$s", "NTP-$f-$s-D")) { "NTP-$f-$s" }
+            assertTrue(graph.routeOnly(edge))
+        }
+        assertNull(graph.edge("NTP-5-S1", "NTP-5-S1-D"))
+        // P -> II: kroz I sprat bez čvora hodnika.
+        val route = checkNotNull(graph.route("NTP-0-S1", "NTP-2-S1-D"))
+        assertTrue(route.nodes.map { it.id }.toString(), route.nodes.none { it.floor == 1 && it.type == NodeType.HODNIK })
     }
 
     /**

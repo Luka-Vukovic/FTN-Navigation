@@ -58,6 +58,7 @@ import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.PlanPlacement
+import com.example.ftnnavigation.graph.PlanPoint
 import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.graph.routeOrFallback
 import com.example.ftnnavigation.schedule.AgendaItem
@@ -215,6 +216,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Savijanje linije rute krakom do prolaza sa međupodesta ([flightBends]): (čvor, čvor) -> tačka plana. */
     var routeBends by mutableStateOf<Map<Pair<String, String>, Offset>>(emptyMap())
+        private set
+
+    /** Linija rute krakovima stepeništa do međupodesta ([stairLegs]): (čvor, čvor na drugom spratu) -> tačke plana. */
+    var routeStairLegs by mutableStateOf<Map<Pair<String, String>, List<PlanPoint>>>(emptyMap())
         private set
 
     /** Graf kampusa i zgrada (null dok se učitava iz baze). NB ima 7 nivoa (-1 ... 5), AMF 2, Kula 10, NTP 6. */
@@ -500,6 +505,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             val graph = loadGraph(application, campus)
             val stairPaths = loadStairPaths(application)
             routeBends = flightBends(graph, stairPaths).mapValues { (_, p) -> Offset(p.x, p.y) }
+            routeStairLegs = stairLegs(graph, stairPaths)
             // Pozicija se ne može postaviti pre ovoga ("Ovde sam" i Start čekaju graf).
             locator = PdrLocator(
                 graph, campus, declination, stairPaths, loadOpenAreas(application), loadSpiralPaths(application),

@@ -182,6 +182,36 @@ fun flightBends(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, 
 }
 
 /**
+ * Linija rute na stepeništu sa krakovima ([StairPath]): za ivicu STEPENICE (a, b) tačke na spratu čvora a koje se crtaju posle a
+ * kad ruta ide ka b - sa nižeg sprata krak naviše do međupodesta i preko njega do početka kraka ka višem spratu, sa višeg sprata
+ * (redom od b ka a) krak naniže do međupodesta. Relativne koordinate plana. Teren 02.11.2026 (AMF P, ruta ka Biblioteci): linija se
+ * završavala na vrhu stepeništa, pa je "nestajala" pri silasku na međupodest - na spratu se nije videlo kuda dalje.
+ * Čvor stepeništa van putanje (AMF S1 u prizemlju: račvanje hodnika ka oba bočna kraka) do kraka ide pod pravim uglom, preko
+ * tačke ose kraka naspram čvora. Stepeništa sa više varijanti krakova (AMF S1): prva.
+ */
+fun stairLegs(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, String>, List<PlanPoint>> {
+    val byStair = paths.groupBy { it.stairKey to it.floor }.mapValues { it.value.first().points }
+    fun onAxis(node: Node, foot: PlanPoint, turn: PlanPoint): List<PlanPoint> {
+        if (abs(node.x - foot.x) < 1e-4f && abs(node.y - foot.y) < 1e-4f) return emptyList()
+        val corner = if (abs(foot.x - turn.x) < abs(foot.y - turn.y)) PlanPoint(foot.x, node.y) else PlanPoint(node.x, foot.y)
+        return listOf(corner, foot)
+    }
+    val legs = mutableMapOf<Pair<String, String>, List<PlanPoint>>()
+    for (edge in graph.edges) {
+        if (edge.type != EdgeType.STEPENICE) continue
+        val a = graph.node(edge.fromId) ?: continue
+        val b = graph.node(edge.toId) ?: continue
+        if (a.buildingId != b.buildingId || a.floor == b.floor) continue
+        val (lower, upper) = if (a.floor < b.floor) a to b else b to a
+        val low = byStair[stairKey(lower) to lower.floor]?.takeIf { it.size == 4 } ?: continue
+        val high = byStair[stairKey(upper) to upper.floor]?.takeIf { it.size == 4 } ?: continue
+        legs[lower.id to upper.id] = onAxis(lower, low[0], low[1]) + listOf(low[1], low[2])
+        legs[upper.id to lower.id] = onAxis(upper, high[3], high[2]) + listOf(high[2])
+    }
+    return legs
+}
+
+/**
  * Hod po stepeništu od ulaska: smer svakog koraka. Letovi su nizovi od bar [FLIGHT_STEPS] koraka istog smera; sprat se
  * menja samo okretom između dva leta. Okret na podestu pre prvog leta (korisnik se okreće ka letu) se ne broji
  * (03.10.2026, F III: okret od 200° ulevo kod stepeništa pre silaska bio bi "sprat", i to sa pogrešnom stranom).
