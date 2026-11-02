@@ -200,6 +200,7 @@ fun PocRoute(
         plan = viewModel.plan,
         onPlanStep = viewModel::stepPlan,
         developerMode = viewModel.developerMode,
+        routeBends = viewModel.routeBends,
     )
 }
 
@@ -244,6 +245,8 @@ fun PocScreen(
     onPlanStep: (Int) -> Unit = {},
     /** Režim za razvoj (Podešavanja): graf, brojači, prekidači za teren, čista PDR tačka, GPS uz poziciju. */
     developerMode: Boolean = false,
+    /** Savijanje linije rute krakom do prolaza sa međupodesta ([flightBends]). */
+    routeBends: Map<Pair<String, String>, Offset> = emptyMap(),
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     var showSteps by rememberSaveable { mutableStateOf(false) }
@@ -301,6 +304,7 @@ fun PocScreen(
                             floor = floor,
                             graph = graph,
                             route = route,
+                            routeBends = routeBends,
                             position = state.position.takeIf { pdrHere },
                             rawPosition = state.rawPosition.takeIf { pdrHere && developerMode },
                             showGraph = developerMode,
@@ -474,6 +478,7 @@ private fun FloorPlan(
     floor: Int,
     graph: BuildingGraph?,
     route: Route?,
+    routeBends: Map<Pair<String, String>, Offset>,
     position: Offset?,
     rawPosition: Offset?,
     showGraph: Boolean,
@@ -560,7 +565,7 @@ private fun FloorPlan(
                 val up = stringResource(R.string.route_floor_change_up, "%s")
                 val down = stringResource(R.string.route_floor_change_down, "%s")
                 Canvas(Modifier.fillMaxSize()) {
-                    drawRoute(route, buildingId, floor, position, colors.primary, colors.secondary, 1f / zoom.scale)
+                    drawRoute(route, routeBends, buildingId, floor, position, colors.primary, colors.secondary, 1f / zoom.scale)
                     drawFloorChanges(
                         route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / zoom.scale, zoom.rotationDeg,
                     ) { from, to ->
@@ -715,10 +720,11 @@ private fun DrawScope.drawGraph(
 /**
  * Deo rute na spratu [floor] zgrade [buildingId] kao debela linija (od pozicije, ako je
  * postavljena); delovi van zgrade i na drugim spratovima se preskaču. Odredište se obeležava ako
- * je na tom spratu.
+ * je na tom spratu. Ivica iz [bends] (krak do prolaza sa međupodesta) ide preko kraja kraka.
  */
 private fun DrawScope.drawRoute(
     route: Route,
+    bends: Map<Pair<String, String>, Offset>,
     buildingId: String,
     floor: Int,
     position: Offset?,
@@ -730,6 +736,7 @@ private fun DrawScope.drawRoute(
     fun Node.toOffset() = Offset(x * size.width, y * size.height)
     val path = Path()
     var drawing = false
+    var previous: Node? = null
     if (position != null) {
         path.moveTo(position.x * size.width, position.y * size.height)
         drawing = true
@@ -737,11 +744,18 @@ private fun DrawScope.drawRoute(
     for (node in route.nodes) {
         if (!node.isHere()) {
             drawing = false
+            previous = null
             continue
         }
         val p = node.toOffset()
-        if (drawing) path.lineTo(p.x, p.y) else path.moveTo(p.x, p.y)
+        if (drawing) {
+            previous?.let { bends[it.id to node.id] }?.let { path.lineTo(it.x * size.width, it.y * size.height) }
+            path.lineTo(p.x, p.y)
+        } else {
+            path.moveTo(p.x, p.y)
+        }
         drawing = true
+        previous = node
     }
     drawPath(path, color, style = Stroke(5.dp.toPx() * k, cap = StrokeCap.Round, join = StrokeJoin.Round))
     val target = route.nodes.last()

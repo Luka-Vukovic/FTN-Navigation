@@ -4,7 +4,9 @@ import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.EdgeType
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.PlanPoint
 import com.example.ftnnavigation.graph.PointM
+import com.example.ftnnavigation.graph.StairPath
 import com.example.ftnnavigation.graph.indoorBuilding
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -152,6 +154,32 @@ fun stairsOf(graph: BuildingGraph): Map<String, Stair> =
 /** "NB/S" za NB-m1-S, NB-0-S, NB-1-S-D ... (id je zgrada-sprat-ključ). */
 fun stairKey(node: Node): String =
     node.buildingId + "/" + node.id.removePrefix(node.buildingId + "-").substringAfter('-').removeSuffix(DOWN_FOOT_SUFFIX)
+
+/**
+ * Ivice samo za rutu od dna kraka naniže do prolaza sa međupodesta ([BuildingGraph.routeOnly]; F I sprat -> pasarela, NB I ->
+ * stakleni prolaz): za crtanje rute krakom do međupodesta (kraj kraka, tačka 2 putanje [StairPath]), pa do prolaza - u oba
+ * smera ivice, relativne koordinate plana. Teren 02.11.2026, F I sprat: linija je išla pravo od vrha kraka do pasarele, preko
+ * oba kraka.
+ */
+fun flightBends(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, String>, PlanPoint> {
+    val byStair = paths.groupBy { it.stairKey to it.floor }
+    val bends = mutableMapOf<Pair<String, String>, PlanPoint>()
+    for (edge in graph.edges) {
+        if (!graph.routeOnly(edge)) continue
+        val a = graph.node(edge.fromId) ?: continue
+        val b = graph.node(edge.toId) ?: continue
+        val (foot, gate) = when {
+            a.type == NodeType.STEPENISTE && b.type == NodeType.PROLAZ -> a to b
+            b.type == NodeType.STEPENISTE && a.type == NodeType.PROLAZ -> b to a
+            else -> continue
+        }
+        if (!foot.id.endsWith(DOWN_FOOT_SUFFIX)) continue
+        val bend = byStair[stairKey(foot) to foot.floor]?.firstOrNull()?.points?.getOrNull(2) ?: continue
+        bends[foot.id to gate.id] = bend
+        bends[gate.id to foot.id] = bend
+    }
+    return bends
+}
 
 /**
  * Hod po stepeništu od ulaska: smer svakog koraka. Letovi su nizovi od bar [FLIGHT_STEPS] koraka istog smera; sprat se

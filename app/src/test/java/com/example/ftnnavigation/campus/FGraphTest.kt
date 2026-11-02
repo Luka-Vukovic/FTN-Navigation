@@ -85,7 +85,7 @@ class FGraphTest {
      */
     @Test
     fun numbering_fromFloorSigns() {
-        for ((floor, numbers) in mapOf(1 to listOf(101, 113, 114, 126), 2 to listOf(200, 208, 209, 223), 3 to listOf(301, 308, 309, 320))) {
+        for ((floor, numbers) in mapOf(1 to listOf(101, 113, 114, 126), 2 to listOf(200, 208, 209, 225), 3 to listOf(301, 308, 309, 320))) {
             val (first, eastEnd, southFirst, westEnd) = numbers.map { room("F $it") }
             // Dno kraka naniže (od 31.10.2026 stepenište ima krakove; III sprat nema krak naviše ni čvor F-3-S).
             val stairs = checkNotNull(graph.node("F-$floor-S-D"))
@@ -117,6 +117,22 @@ class FGraphTest {
         // Vrata 209 su na zidu same sobe 209 (ne susedne): soba je široka 49 px plana (0,078 viewport-a), od 30.10.2026 vrata
         // nisu na sredini nego uz kraj hodnika (evakuacioni plan).
         assertTrue(abs(doorOf("F 209").x - room("F 209").x) < 0.035f)
+    }
+
+    /**
+     * Teren 02.11.2026: "vrata 220 treba da su otprilike naspram praznog prostora ispred stepenica". Sobe sa dve strelice
+     * evakuacije su po dve sobe - gornji red II sprata ima 17 soba 209-225 (do tada 15, 220 dve sobe dalje).
+     */
+    @Test
+    fun secondFloor_220OppositeStairHall_17RoomsInUpperRow() {
+        fun doorOf(name: String) = graph.neighbors(room(name).id).single().first
+        val hall = checkNotNull(graph.node("F-2-H388_98"))
+        // Čvor prolaza ka stepeništu je na sredini hodnika (1,6 m od zida sa vratima).
+        assertTrue(distance(doorOf("F 220").id, hall.id) < 2.5)
+        val upper = (209..225).map { room("F $it") }
+        assertEquals(17, upper.map { it.id }.distinct().size)
+        // Redom od istoka (levo na planu) ka zapadu.
+        assertEquals(upper, upper.sortedBy { it.x })
     }
 
     /** Iz Amfiteatara na III sprat F-bloka: pasarelom (bez staza) pa stepeništem. */

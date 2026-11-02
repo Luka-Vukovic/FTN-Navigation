@@ -27,7 +27,8 @@ istočne krajnje sobe (na tabli I sprata 113 zauzima ceo kraj). Zapadno od stepe
 gornji red je bio pomeren za jednu sobu.
 II sprat: tabla ima 8 soba između stepeništa i istočnog kraja (200-207), crtež 7 - crtež je verovatno tačniji (korisnik),
 a jedina neobična soba crteža je široka 74 px (ostale 25/50): tu tabla ima dve sobe -> "F 202" sa aliasom 203
-(PRETPOSTAVKA). 224/225 je jedna soba (jugozapadni ugao, potvrđuje 3D). III sprat: na 3D-u piše "318" dvaput - druga je
+(PRETPOSTAVKA). Gornji red II od 02.11.2026: 17 soba 209-225 (sobe sa dve strelice evakuacije su po dve sobe, 220 naspram
+prostora ispred stepeništa - vidi floor_2); ranije je 224/225 bila jedna soba (jugozapadni ugao). III sprat: na 3D-u piše "318" dvaput - druga je
 319 (u rasporedu postoji); uska soba (450-474) nema broj. Prizemlje: od 10.10.2026 precrtano sa jasnije fotografije
 evakuacionog plana, oznake upisao korisnik (vidi floor_0). Ranije (02.-10.10.) šematski crtež sa nišama po 4 sobe i
 brojevima po obrascu - bio je pogrešan (korisnik: "nije baš bila ispravna mapa za F-blok prizemlje").
@@ -222,11 +223,16 @@ def floor_2():
             poly((452, 114), (489, 114), (489, 163), (452, 163)),  # podest stepeništa
         ],
         "flights": {"S": flights(402, 452)},
+        # Gornji red (02.11.2026): evakuacioni plan crta 15 soba, ali sobe na 50-99 i 199-247 imaju po dve strelice evakuacije -
+        # svaka je dve sobe (pregrade se na mutnoj fotografiji ne vide). Tako red ima 17 soba za 17 brojeva 209-225 (tabla:
+        # 209-223 i "224/225"), a 220 je naspram prostora ispred stepeništa - korisnik (teren 02.11.): "vrata 220 treba da su
+        # otprilike naspram praznog prostora ispred stepenica". Pregrade 75 i 224 (sredina između strelica) - PRETPOSTAVKA.
+        # Do tada (30.10.) 209 cela 50-99, 214 cela 199-247 sa dvoja vrata, 224/225 jedna soba bez mesta na crtežu.
         "rooms": [
-            *rooms(2, 0, 82, [(50, 99, 9), (99, 122, 10), (122, 149, 11), (149, 172, 12),
-                              (172, 199, 13), (199, 247, 14), (247, 270, 15), (270, 297, 16), (297, 347, 17),
-                              (347, 397, 18), (397, 421, 19), (421, 448, 20), (448, 498, 21), (498, 548, 22),
-                              (548, 600, 23)]),
+            *rooms(2, 0, 82, [(50, 75, 9), (75, 99, 10), (99, 122, 11), (122, 149, 12), (149, 172, 13),
+                              (172, 199, 14), (199, 224, 15), (224, 247, 16), (247, 270, 17), (270, 297, 18),
+                              (297, 347, 19), (347, 397, 20), (397, 421, 21), (421, 448, 22), (448, 498, 23),
+                              (498, 548, 24), (548, 600, 25)]),
             R(0, 50, 0, 163, "F 208", door=(50, 98)),
             *rooms(2, 114, 163, [(50, 100, 7), (100, 149, 6), (149, 198, 5), (198, 248, 4),
                                  (248, 322, 2), (322, 347, 1), (347, 373, 0),  # 202 = i 203 (tabla: dve sobe)
@@ -264,13 +270,14 @@ def floor_3():
 # Vrata I-III sprata po evakuacionim planovima (30.10.2026, korisnik: "vrata i za F-blok"; teren/izveštaj2/IMG_20261002_103655 (I),
 # _104205 (II, mutna), _104108 (III), perspektiva ispravljena po 4 ugla zgrade na 600 x 163). I i III: prekidi u zidu i lukovi otvaranja;
 # II: prekidi se ne vide, pa strelice evakuacije (na I spratu stoje tačno ispred vrata, do 1 px). Samo gde je razlika veća od ~0,4 m;
-# ostale sobe imaju vrata na sredini zida i to se slaže sa planom. 214: dve strelice -> dvoja vrata. 209 ima takođe dve strelice
-# (63, 87), ali korisnik (30.10.2026): "F-209 ima svoja vrata desno" na kraju hodnika (jedna) - ostaju samo vrata uz kraj hodnika.
+# ostale sobe imaju vrata na sredini zida i to se slaže sa planom. Sobe sa dve strelice (63, 87 i 212, 237) su od 02.11.2026 po dve
+# sobe sa svojim vratima: 209 | 210 i 215 | 216 (do tada 209 sa vratima uz kraj hodnika i 214 sa dvoja vrata; vidi floor_2).
 # III: ispred 320 je pregrada sa vratima preko hodnika (x ~525) - nije nacrtana; II: kraj kod 223 je nejasan - ostaje.
 DOORS = {
     1: {"F 124": [(388, 82)], "F 125": [(486, 82)], "F 126": [(583, 82)],
         "F 1": [(494, 113)], "F 2": [(556, 113)], "F 3": [(590, 113)]},
-    2: {"F 209": [(63, 82)],"F 214": [(212, 82), (237, 82)], "F 221": [(485, 82)], "F 222": [(511, 82)],
+    2: {"F 209": [(63, 82)], "F 210": [(87, 82)], "F 215": [(212, 82)], "F 216": [(237, 82)], "F 223": [(485, 82)],
+        "F 224": [(511, 82)],
         "F 207": [(64, 114)], "F 206": [(137, 114)], "F 205": [(163, 114)], "F 204": [(212, 114)], "F 202": [(314, 114)],
         "F 226": [(493, 114)], "F 227": [(556, 114)], "F 228": [(591, 114)]},
     3: {"F 309": [(71, 82)], "F 319": [(486, 82)], "F 320": [(558, 82)],

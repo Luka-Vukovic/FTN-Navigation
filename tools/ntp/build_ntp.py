@@ -321,7 +321,10 @@ TYPICAL_DOORS = {
 }
 # Sobe 14 i 15 uz desni hodnik (II-IV; I sprat ima FIRST_RIGHT): pregrada i vrata po spratu sa evakuacionih planova (30.10.2026) -
 # (y pregrade, y vrata 14, y vrata 15). Do tada na svim spratovima pregrada na y 1040 i vrata 929 / 1160 (crtež II sprata).
-RIGHT_ROOMS = {2: (940, 915, 965), 3: (1067, 1045, 1250), 4: (1025, 1000, 1250)}
+# 218 (II, soba 14): vrata na kraju bliže 219, ne uz pregradu ka 217 (teren 02.11.2026, korisnik: "vrata 218 su sa desne strane" -
+# licem prema sobi iz hodnika, na kraju bliže 219; "Ovde sam" kod vrata na y ~872). Bilo 915 (luk sa evakuacionog plana -
+# verovatno vrata 217). 840 = ~0,7 m od zida ka 219 - PRETPOSTAVKA.
+RIGHT_ROOMS = {2: (940, 840, 965), 3: (1067, 1045, 1250), 4: (1025, 1000, 1250)}
 # Sobe podeljene na dve (korisnik: "razdvojeno", "razdvojeno staklom"), prva je gornja/leva. Teren 04.10.2026 (korisnik)
 # potvrđuje redosled: "115 je najbliže zidu zgrade, pa redom do hodnika 115, 116, 117, 118"; "320 je bliže 317-319, onda
 # ide 321"; "322 je bliže 321, a 323 je bliže 324. U 323 se ulazi preko 322"; "223 i 224 analogno 322 i 323" (VIA_FIRST).

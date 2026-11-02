@@ -398,7 +398,7 @@ class PdrLocatorReplayTest {
                         val placeBefore = locator.place
                         val before = locator.position()
                         val missLine = missRow(file, sec(t), steps, anchorKind, locator, place, Offset(f[5].toFloat(), f[6].toFloat()))
-                        val check = locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()))
+                        val check = locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()), timeNs = t)
                         direction?.nearStairs = locator.nearStairs
                         direction?.onStairs = locator.onStairs
                         // Označeno mesto zalepljeno za graf (ono što aplikacija posle prikazuje).

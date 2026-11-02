@@ -213,6 +213,10 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     var campus by mutableStateOf<CampusData?>(null)
         private set
 
+    /** Savijanje linije rute krakom do prolaza sa međupodesta ([flightBends]): (čvor, čvor) -> tačka plana. */
+    var routeBends by mutableStateOf<Map<Pair<String, String>, Offset>>(emptyMap())
+        private set
+
     /** Graf kampusa i zgrada (null dok se učitava iz baze). NB ima 7 nivoa (-1 ... 5), AMF 2, Kula 10, NTP 6. */
     var graph by mutableStateOf<BuildingGraph?>(null)
         private set
@@ -494,9 +498,11 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
                 CampusGeo.REF_LAT.toFloat(), CampusGeo.REF_LON.toFloat(), CAMPUS_ALT_M, System.currentTimeMillis(),
             ).declination
             val graph = loadGraph(application, campus)
+            val stairPaths = loadStairPaths(application)
+            routeBends = flightBends(graph, stairPaths).mapValues { (_, p) -> Offset(p.x, p.y) }
             // Pozicija se ne može postaviti pre ovoga ("Ovde sam" i Start čekaju graf).
             locator = PdrLocator(
-                graph, campus, declination, loadStairPaths(application), loadOpenAreas(application), loadSpiralPaths(application),
+                graph, campus, declination, stairPaths, loadOpenAreas(application), loadSpiralPaths(application),
             ).apply {
                 applyCorrection = state.applyHeadingCorrection
                 restoreStairTurns(AppSettings.stairTurns(application))
@@ -799,7 +805,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val building = mode.building
         val place = if (building != null) PdrPlace(building.buildingId, floorOf(building)) else PdrPlace.CAMPUS
         val before = locator.place
-        val check = locator.setPosition(place, point)
+        val check = locator.setPosition(place, point, timeNs = SystemClock.elapsedRealtimeNanos())
         // Smer hoda odmah zna da je tačka uz stepenište - ne tek posle prvog primenjenog koraka ([HandlingGate] ih zadržava).
         walkingDirection.nearStairs = locator.nearStairs
         walkingDirection.onStairs = locator.onStairs
