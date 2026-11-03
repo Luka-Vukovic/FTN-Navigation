@@ -239,6 +239,40 @@ fun legFromPosition(position: Offset, node: Offset, leg: List<Offset>): List<Off
 }
 
 /**
+ * Linija rute koja počinje čvorom stepeništa [node], a pozicija [position] je na liniji kraka ([leg], bliže njoj nego čvoru), dok je
+ * sledeći čvor rute [next] na istoj liniji (do [tolerance]) između pozicije i čvora: tačke od pozicije nazad linijom do [next] - bez
+ * odlaska do čvora i nazad. null: nije tako. Teren 03.11.2026 popodne (AMF P, snimak ekrana, Biblioteka -> Čitaonica): posle bočnog
+ * kraka S1 tačka je na traci, ruta kreće od račvanja S1-D 4 m ispred, a bočna vrata Čitaonice su na traci između - linija je išla
+ * od tačke do račvanja pa nazad do vrata ("čudna predložena putanja").
+ */
+fun legBackTo(position: Offset, node: Offset, leg: List<Offset>, next: Offset, tolerance: Float): List<Offset>? {
+    val line = listOf(node) + leg
+    // Projekcija na liniju: deo (indeks), tačka, rastojanje, dužina linije od čvora do tačke.
+    fun project(p: Offset): Triple<Int, Offset, Pair<Float, Float>>? {
+        var best: Triple<Int, Offset, Pair<Float, Float>>? = null
+        var along = 0f
+        for (i in 0 until line.size - 1) {
+            val a = line[i]
+            val ab = line[i + 1] - a
+            val len = ab.getDistance()
+            if (len <= 0f) continue
+            val t = (((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / (len * len)).coerceIn(0f, 1f)
+            val q = a + ab * t
+            val d = (p - q).getDistance()
+            if (best == null || d < best.third.first) best = Triple(i, q, d to along + len * t)
+            along += len
+        }
+        return best
+    }
+    val (pIndex, pq, pd) = project(position) ?: return null
+    val (nIndex, _, nd) = project(next) ?: return null
+    if (pd.first >= (position - node).getDistance() || nd.first > tolerance) return null
+    if (nd.second <= 1e-3f || nd.second >= pd.second - 1e-3f) return null
+    // Od pozicije nazad ka čvoru: temena linije između, pa sledeći čvor.
+    return listOf(pq) + (pIndex downTo nIndex + 1).map { line[it] } + next
+}
+
+/**
  * Hod po stepeništu od ulaska: smer svakog koraka. Letovi su nizovi od bar [FLIGHT_STEPS] koraka istog smera; sprat se
  * menja samo okretom između dva leta. Okret na podestu pre prvog leta (korisnik se okreće ka letu) se ne broji
  * (03.10.2026, F III: okret od 200° ulevo kod stepeništa pre silaska bio bi "sprat", i to sa pogrešnom stranom).

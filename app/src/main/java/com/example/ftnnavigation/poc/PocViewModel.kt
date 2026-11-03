@@ -61,7 +61,9 @@ import com.example.ftnnavigation.graph.indoorBuilding
 import com.example.ftnnavigation.graph.PlanPlacement
 import com.example.ftnnavigation.graph.PlanPoint
 import com.example.ftnnavigation.graph.Route
+import com.example.ftnnavigation.graph.RoutingProfile
 import com.example.ftnnavigation.graph.routeOrFallback
+import com.example.ftnnavigation.graph.routeWithNearerVertical
 import com.example.ftnnavigation.schedule.AgendaItem
 import com.example.ftnnavigation.schedule.RoomSchedule
 import com.example.ftnnavigation.settings.AppSettings
@@ -418,7 +420,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val graph = graph
         val inside = state.rawPosition != null && !state.pdrPlace.isCampus && state.pdrPlace.buildingId == target.building?.id
         val exits = if (graph != null && target.isBuilding && inside) buildingExits(graph, target.node.buildingId) else emptyList()
-        exits.mapNotNull { routeTo(it.id) }.minByOrNull { it.durationSec } ?: routeTo(target.node.id)
+        (if (exits.isNotEmpty()) routeToNearest(exits.map { it.id }) else null) ?: routeTo(target.node.id)
     }
 
     /** Plan dana na Mapi: rute dana redom, prikazana je jedna; null - Mapa prikazuje rutu do [destination]. */
@@ -473,7 +475,21 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         get() = state.pdrPlace.building?.buildingId?.takeIf { state.rawPosition != null } ?: currentBuilding?.id
 
     /** Ruta do čvora [nodeId] odakle kreće i ruta na Mapi ([routeStart]); null dok se graf učitava ili puta nema. */
-    fun routeTo(nodeId: String): Route? {
+    fun routeTo(nodeId: String): Route? = routeToNearest(listOf(nodeId))
+
+    /**
+     * Ruta do najbližeg od čvorova [nodeIds] ([routeVia]), uz prednost bližem stepeništu ili liftu ([preferNearerVertical]): uz
+     * svaku rutu koja menja sprat i ruta bez njenog prvog stepeništa/lifta. Uz "Najbrže" samo najbrža.
+     */
+    private fun routeToNearest(nodeIds: List<String>): Route? {
+        val graph = graph ?: return null
+        if (floorChange == FloorChange.NAJBRZE) return nodeIds.mapNotNull { routeVia(it) }.minByOrNull { it.durationSec }
+        val profile = floorChange.profile
+        return routeWithNearerVertical(graph, nodeIds, profile.uncommonVerticals + profile.uncommonTransitVerticals, ::routeVia)
+    }
+
+    /** Ruta do čvora [nodeId] od mesta polaska ([routeStart]), bez stepeništa/liftova [excluded] ([RoutingProfile.excludedVerticals]). */
+    private fun routeVia(nodeId: String, excluded: Set<String> = emptySet()): Route? {
         val graph = graph ?: return null
         val campus = campus ?: return null
         val match = state.shownMatch
@@ -482,7 +498,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val place = state.pdrPlace
         // Na stepeništu i u prolazu ruta kreće od čvora ka kome korisnik ide (ne vraća ga nazad niz krak / kroz prolaz).
         val starts = locator?.routeStarts()?.takeIf { raw != null }.orEmpty()
-        return routeOrFallback(floorChange.profile.copy(buildingCrowd = crowdNow)) { profile ->
+        return routeOrFallback(floorChange.profile.copy(buildingCrowd = crowdNow, excludedVerticals = excluded)) { profile ->
             when {
                 starts.isNotEmpty() -> starts.mapNotNull { graph.route(it.id, nodeId, profile) }.minByOrNull { it.durationSec }
                 match != null -> graph.routeFrom(match.point, nodeId, profile)

@@ -90,6 +90,8 @@ data class RoutingProfile(
     val uncommonTransitVerticals: Set<String> = UNCOMMON_TRANSIT_VERTICALS,
     /** Kazna (s) za ulazak na stepenište/lift iz [uncommonVerticals] - kao [stairwellChangeSec], samo za izbor rute. */
     val uncommonVerticalSec: Double = 60.0,
+    /** Stepeništa i liftovi ([BuildingGraph.firstVertical] ključ) kojima se sprat ne menja - za drugu ponudu rute ([preferNearerVertical]). */
+    val excludedVerticals: Set<String> = emptySet(),
 ) {
     init {
         require(walkingSpeedMps > 0) { "walkingSpeedMps mora biti > 0" }
@@ -126,6 +128,45 @@ data class RoutingProfile(
 data class Route(val nodes: List<Node>, val durationSec: Double, val lengthM: Double, val fallback: Boolean = false) {
     /** Trajanje za prikaz: minuti zaokruženi naviše, najmanje 1. */
     val minutes: Int get() = ceil(durationSec / 60).toInt().coerceAtLeast(1)
+}
+
+/** Ruta preko bližeg stepeništa/lifta sme biti sporija najviše ovoliko ([preferNearerVertical]). */
+const val NEARER_VERTICAL_SLACK_SEC = 10.0
+
+/**
+ * Između ruta [candidates] (isti start, cilj isti ili jedan od izlaza): najbrža, osim kad je ruta sa kraćim hodom do prvog
+ * stepeništa/lifta ([BuildingGraph.firstVertical]) sporija najviše [slackSec] - tada ona. Teren 03.11.2026 popodne, korisnik (NTP
+ * III, izlaz): "Zbunjuje me zašto je predložen put preko S2 umesto S1" - S1 ~8 m od njega, S2 ~20 m u suprotnu stranu, a ruta preko
+ * S2 i glavnog ulaza samo 5 s brža od S1 i "ULAZ - FTN"; "daj prednost bližem stepeništu do 10 s". Ruta bez promene sprata se ne
+ * menja (najbrža ostaje i kad ne menja sprat).
+ */
+fun preferNearerVertical(graph: BuildingGraph, candidates: List<Route>, slackSec: Double = NEARER_VERTICAL_SLACK_SEC): Route? {
+    val best = candidates.minByOrNull { it.durationSec } ?: return null
+    val first = candidates.associateWith { graph.firstVertical(it) }
+    if (first[best] == null) return best
+    return candidates.filter { it.durationSec <= best.durationSec + slackSec && first[it] != null }
+        .minWith(compareBy<Route> { first.getValue(it)!!.second }.thenBy { it.durationSec })
+}
+
+/**
+ * Ruta do jednog od čvorova [targetIds] ([find]: ruta do cilja bez stepeništa/liftova iz drugog argumenta) uz prednost bližem
+ * stepeništu ([preferNearerVertical]): ponude su rute do svakog cilja i, uz svaku koja menja sprat, ruta bez njenog prvog
+ * stepeništa/lifta. Ruta bez izbegavanja ([Route.fallback]) nije druga ponuda za rutu po podešavanju, ni ruta preko retko
+ * korišćenog stepeništa/lifta [uncommon] (AMF S2, NTP S3/L3, spirala Kule) - vreme ponude je bez kazne kojom ih A* izbegava.
+ */
+fun routeWithNearerVertical(
+    graph: BuildingGraph,
+    targetIds: List<String>,
+    uncommon: Set<String> = RoutingProfile.UNCOMMON_VERTICALS + RoutingProfile.UNCOMMON_TRANSIT_VERTICALS,
+    find: (targetId: String, excluded: Set<String>) -> Route?,
+): Route? {
+    val routes = targetIds.mapNotNull { find(it, emptySet()) }
+    val others = routes.mapNotNull { r ->
+        graph.firstVertical(r)?.let { (vertical, _) ->
+            find(r.nodes.last().id, setOf(vertical))?.takeIf { it.fallback == r.fallback && graph.verticals(it).none { v -> v in uncommon } }
+        }
+    }
+    return preferNearerVertical(graph, routes + others)
 }
 
 /**
@@ -255,6 +296,7 @@ class BuildingGraph(
                 ?.takeIf { node.type == NodeType.PROLAZ && it != node.buildingId }
             for ((next, type) in neighbors(id)) {
                 if (next.buildingId == cameFromBuilding) continue
+                if (type != EdgeType.HOD && verticalOf(next) in profile.excludedVerticals) continue
                 val step = cost(node, next, type, profile) ?: continue
                 val vertical = if (type == EdgeType.HOD) state.vertical else verticalOf(next)
                 val changed = vertical != state.vertical
@@ -274,6 +316,28 @@ class BuildingGraph(
     }
 
     private data class SearchState(val nodeId: String, val vertical: String?)
+
+    /**
+     * Prvo stepenište ili lift kojim [route] menja sprat (ključ kao [RoutingProfile.excludedVerticals], npr. "NTP/S2") i hod do
+     * njega u metrima (sa delom do prvog čvora, kao [Route.lengthM]); null - ruta ne menja sprat.
+     */
+    fun firstVertical(route: Route): Pair<String, Double>? {
+        val nodes = route.nodes
+        val change = (0 until nodes.size - 1).firstOrNull { i ->
+            edge(nodes[i].id, nodes[i + 1].id)?.type.let { it == EdgeType.STEPENICE || it == EdgeType.LIFT }
+        } ?: return null
+        val after = (change until nodes.size - 1).sumOf { i ->
+            val a = nodes[i]
+            val b = nodes[i + 1]
+            if (a.floor == b.floor || a.buildingId != b.buildingId) distanceM(a, b) else 0.0
+        }
+        return verticalOf(nodes[change + 1]) to (route.lengthM - after).coerceAtLeast(0.0)
+    }
+
+    /** Stepeništa i liftovi kojima [route] menja sprat (ključevi kao [firstVertical]). */
+    fun verticals(route: Route): Set<String> =
+        route.nodes.zipWithNext().filter { (a, b) -> edge(a.id, b.id)?.type.let { it == EdgeType.STEPENICE || it == EdgeType.LIFT } }
+            .map { (_, b) -> verticalOf(b) }.toSet()
 
     /**
      * Stepenište ili lift kome pripada čvor [node] (kraj STEPENICE/LIFT ivice): zgrada i ključ iz id-ja bez sprata i bez

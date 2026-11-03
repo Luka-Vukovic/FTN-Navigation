@@ -9,7 +9,10 @@ import com.example.ftnnavigation.graph.MapMatcher
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
+import com.example.ftnnavigation.graph.NEARER_VERTICAL_SLACK_SEC
+import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.graph.RoutingProfile
+import com.example.ftnnavigation.graph.routeWithNearerVertical
 import com.example.ftnnavigation.schedule.ScheduleData
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -34,6 +37,48 @@ class NtpGraphTest {
     private val graph = seedGraph(campus, plans.values.toList()).let { (nodes, edges) -> BuildingGraph(nodes, edges, campus.placements()) }
 
     private val ntpNodes = graph.nodes.filter { it.buildingId == NtpPlan.BUILDING_ID }
+
+    private fun nearerVerticalRoute(fromId: String, targetIds: List<String>) =
+        routeWithNearerVertical(graph, targetIds) { id, excluded -> graph.route(fromId, id, RoutingProfile(excludedVerticals = excluded)) }
+
+    private fun verticalsOf(route: Route) = route.nodes.filter { it.type == NodeType.STEPENISTE || it.type == NodeType.LIFT }
+        .map { it.id.split('-')[2] }.distinct()
+
+    /**
+     * Teren 03.11.2026 popodne (snimak 16:47, NTP III kod 307, odredište NTP): najbrži izlaz je S2 i glavni ulaz (69,5 s), a S1 i
+     * "ULAZ - FTN" su 5 s sporiji - S1 je ~8 m od vrata 307, S2 ~20 m u suprotnu stranu. Korisnik: "daj prednost bližem stepeništu
+     * do 10 s".
+     */
+    @Test
+    fun exitFromThirdFloorAt307_nearerS1WithinTenSeconds() {
+        val exits = buildingExits(graph, NtpPlan.BUILDING_ID).map { it.id }
+        val fastest = exits.mapNotNull { graph.route("NTP-3-M770", it) }.minBy { it.durationSec }
+        assertEquals(listOf("S2"), verticalsOf(fastest))
+        val chosen = checkNotNull(nearerVerticalRoute("NTP-3-M770", exits))
+        assertEquals(listOf("S1"), verticalsOf(chosen))
+        assertEquals("NTP-0-ULAZ-FTN", chosen.nodes.last().id)
+        assertTrue(chosen.durationSec <= fastest.durationSec + NEARER_VERTICAL_SLACK_SEC)
+    }
+
+    /**
+     * Teren 03.11.2026 popodne (snimak 16:43, NTP-117 -> NTP-307): preko S2 99,9 s, preko S1 111,9 s - više od 10 s, ostaje S2 (na I
+     * spratu nema hodnika od 117 ka S1, pa je S2 i bliže stepenište).
+     */
+    @Test
+    fun room117To307_staysOnS2() {
+        val chosen = checkNotNull(nearerVerticalRoute("NTP-1-NTP-117", listOf("NTP-3-NTP-307")))
+        assertEquals(listOf("S2"), verticalsOf(chosen))
+        // Bez promene sprata: najbrža.
+        val flat = checkNotNull(nearerVerticalRoute("NTP-1-NTP-117", listOf("NTP-1-NTP-138")))
+        assertEquals(graph.route("NTP-1-NTP-117", "NTP-1-NTP-138")!!.durationSec, flat.durationSec, 1e-6)
+    }
+
+    /** Druga ponuda ne ide retkim stepeništem: A2 -> Skriptarnica i dalje preko S1, ne širokim S2 (AMF, teren 30.10.2026). */
+    @Test
+    fun nearerVertical_neverThroughRareStairs() {
+        val chosen = checkNotNull(nearerVerticalRoute("AMF-0-A2", listOf("AMF-m1-Skriptarnica")))
+        assertEquals(setOf("AMF/S1"), graph.verticals(chosen))
+    }
 
     @Test
     fun mainEntrance_isBuildingNode() {

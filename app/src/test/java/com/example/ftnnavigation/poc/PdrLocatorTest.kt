@@ -1952,6 +1952,96 @@ class PdrLocatorTest {
     }
 
     /**
+     * Teren 03.11.2026 popodne (snimak ekrana 16:27, Biblioteka -> Čitaonica): tačka na vrhu desnog bočnog kraka S1, ruta kreće od
+     * račvanja S1-D, a sledeći čvor (S1-D-DESNO, ka bočnim vratima Čitaonice) je na traci između - linija od tačke trakom do njega.
+     */
+    @Test
+    fun legBackTo_sideFlightTop_toDoorCorridorNodeOnLane() {
+        val legs = stairLegs(graph, stairPaths)
+        val fork = node("AMF-0-S1-D").let { Offset(it.x, it.y) }
+        val leg = checkNotNull(legs["AMF-0-S1-D" to "AMF-m1-S1"]).map { Offset(it.x, it.y) }
+        val top = node("AMF-0-S1-D-KRAK").let { Offset(it.x, it.y) }
+        val lane = node("AMF-0-S1-D-DESNO").let { Offset(it.x, it.y) }
+        val back = checkNotNull(legBackTo(top, fork, leg, lane, tolerance = 1e-3f))
+        assertEquals(top.x, back.first().x, 1e-4f)
+        assertEquals(top.y, back.first().y, 1e-4f)
+        assertEquals(lane, back.last())
+        assertTrue("bez račvanja", back.none { (it - fork).getDistance() < 1e-4f })
+        // Vrata nisu na traci (u zidu Čitaonice, 1 m u stranu) - kao ranije.
+        val door = node("AMF-0-V287_154").let { Offset(it.x, it.y) }
+        assertNull(legBackTo(top, fork, leg, door, tolerance = 1e-3f))
+        // Iz hodnika ispred račvanja - kao ranije.
+        assertNull(legBackTo(node("AMF-0-H250_50").let { Offset(it.x, it.y) }, fork, leg, lane, tolerance = 1e-3f))
+        // Sledeći čvor iza tačke (tačka je između račvanja i njega) - kao ranije.
+        assertNull(legBackTo(lane, fork, leg, top, tolerance = 1e-3f))
+    }
+
+    /** Lokator na čvoru [id] (kao posle starta) i koraci [recorded] u zgradi [buildingId]; za svaki korak (vreme, na stepeništu). */
+    private fun PdrLocator.replaySteps(buildingId: String, recorded: List<TimedStep>): List<Pair<Double, Boolean>> =
+        recorded.map { walk(buildingId, it); it.timeS to onStairs }
+
+    /**
+     * Teren 03.11.2026 popodne (hod-20261103-163638, 440-492 s, NTP-117 -> NTP-307): S2 sa I na III, odredište NTP III. Okret ka
+     * glavnom hodniku na III je bio na istu stranu kao na međupodestu, pa je tačka 8 koraka išla podestom sprata ka kraku za IV
+     * ("Zaglavila se tačka pri izlasku iz S2"). Na spratu odredišta okret je izlazak; posle izlaska tačka ne ulazi opet na S2.
+     */
+    @Test
+    fun ntpS2_arrivingOnDestinationFloor_leavesStairsOnTurn() {
+        val recorded = timedSteps(
+            """
+            313|0.78|0.46|440.00 325|0.78|-0.47|440.67 349|0.78|0.15|441.36 15|0.78|-0.54|441.93 43|0.78|-0.63|442.59 62|0.77|-0.36|443.20
+            79|0.78|-1.23|443.80 76|0.78|-0.74|444.38 64|0.78|-0.30|445.04 63|0.78|-0.12|445.57 74|0.78|-1.04|446.27 86|0.78|-0.08|446.95
+            87|0.78|0.79|447.51 83|0.78|0.08|448.11 84|0.78|0.52|448.69 89|0.78|0.21|449.29 93|0.78|0.51|449.86 96|0.78|0.26|450.47
+            99|0.78|0.63|451.03 101|0.78|1.03|451.64 102|0.78|0.57|452.25 103|0.78|0.02|453.05 117|0.78|-0.20|453.90 146|0.78|-1.01|454.54
+            187|0.78|-0.81|455.23 220|0.66|-0.38|455.80 254|0.78|-0.42|456.06 268|0.78|-0.89|456.62 276|0.78|0.04|457.22 281|0.19|-0.02|457.82
+            284|0.78|0.20|458.51 285|0.78|0.48|459.11 285|0.78|0.58|459.73 285|0.78|0.51|460.29 282|0.78|0.32|460.90 280|0.78|0.96|461.48
+            282|0.78|0.55|462.12 289|0.78|0.68|462.77 300|0.78|-0.05|463.54 322|0.78|-0.55|464.32 355|0.78|-0.42|464.97 32|0.78|-0.08|465.48
+            63|0.78|-0.80|466.14 83|0.78|-0.28|466.79 97|0.78|0.75|467.39 106|0.78|-0.10|468.04 110|0.78|0.37|468.70 111|0.78|0.23|469.39
+            110|0.78|0.59|470.07 101|0.78|0.45|470.76 97|0.78|1.00|471.40 98|0.78|0.59|472.00 100|0.78|0.79|472.66 106|0.78|0.25|473.58
+            117|0.78|-0.05|474.39 141|0.78|-0.72|475.09 179|0.78|-0.76|475.78 204|0.78|-0.59|476.42 232|0.78|-0.89|476.97 259|0.78|-0.22|477.67
+            271|0.78|0.95|478.28 275|0.78|0.58|478.93 273|0.78|0.67|479.52 270|0.78|0.11|480.14 269|0.78|0.52|480.77 267|0.78|0.45|481.43
+            265|0.78|0.76|481.98 269|0.78|0.68|482.59 274|0.78|0.19|483.19 278|0.78|0.26|483.81 282|0.78|0.26|484.50 292|0.78|-0.15|485.08
+            318|0.78|-0.19|485.65 339|0.78|-0.19|486.23 354|0.78|0.08|486.71 10|0.78|-0.07|487.32 25|0.78|-0.12|487.87 36|0.78|-0.35|488.48
+            34|0.78|0.05|489.03 35|0.78|-0.32|489.60 36|0.78|-0.30|490.16 34|0.78|-0.49|490.78 34|0.78|-0.56|491.34 31|0.78|-0.67|491.98
+            """,
+        )
+        val toDestination = locatorAt("NTP-1-M1608").apply { destination = PdrPlace("NTP", 3) }
+        val states = toDestination.replaySteps("NTP", recorded)
+        assertEquals(PdrPlace("NTP", 3), toDestination.place)
+        assertTrue("$states", states.filter { it.first >= 486.7 }.none { it.second })
+        // Bez odredišta (ili sa odredištem više) okret na istu stranu je i dalje podest sprata ka sledećem kraku.
+        val noDestination = locatorAt("NTP-1-M1608")
+        val before = noDestination.replaySteps("NTP", recorded)
+        assertEquals(PdrPlace("NTP", 3), noDestination.place)
+        assertTrue("$before", before.single { it.first == 487.87 }.second)
+    }
+
+    /**
+     * Teren 03.11.2026 popodne (hod-20261103-163638, 655-693 s, izlazak iz NTP-a): na vrhu S1 na III par sitnih koraka i okret (31°,
+     * 18° naspram kraka ~90°) - "koraci van kraka", tačka nazad u hodnik i ponovljenim koracima do dna kraka naviše. Silazak koji je
+     * odmah usledio (13 koraka sa znakom 0,4-1,2, pravcem kraka) nije prepoznat - na isto stepenište se ne ulazi dok se tačka ne
+     * udalji 3 m; korisnik je na II sprat tačku postavio ručno.
+     */
+    @Test
+    fun ntpS1_descentRightAfterOffFlightBounce_resumes() {
+        val recorded = timedSteps(
+            """
+            18|0.78|-0.18|656.23 17|0.76|-0.67|656.97 17|0.62|-0.58|657.55 27|0.56|-0.70|658.34 43|0.78|-0.69|659.27
+            52|0.78|-0.27|659.96 59|0.20|-0.27|660.57 67|0.26|-0.42|660.84 57|0.39|-0.81|661.32 31|0.49|-1.05|662.01 18|0.78|-0.75|662.77
+            16|0.70|-0.41|663.41 33|0.78|0.24|663.89 58|0.78|-0.47|664.65 72|0.78|0.37|665.32 78|0.78|0.86|665.93 78|0.78|0.98|666.59
+            78|0.78|0.89|667.20 81|0.78|1.23|667.83 79|0.78|1.21|668.38 75|0.78|0.90|669.02 76|0.78|0.55|669.57 76|0.78|0.98|670.15
+            74|0.78|0.61|670.75 70|0.78|0.78|671.35 68|0.78|0.90|671.95 71|0.78|1.18|672.57 66|0.78|0.41|673.07 53|0.78|0.49|673.60
+            38|0.78|-0.08|674.06 7|0.78|0.07|674.75 346|0.78|-0.27|675.32 322|0.70|-0.23|676.11
+            """,
+        )
+        // Posle ovoga je korisnik na međupodestu stajao 6 s i dvaput označio mesto na planu III - sprat se tu ne proverava.
+        val locator = locatorAt("NTP-3-M595")
+        val states = locator.replaySteps("NTP", recorded)
+        assertTrue("$states", states.filter { it.first in 667.0..676.2 }.all { it.second })
+        assertEquals(PdrPlace("NTP", 3), locator.place)
+    }
+
+    /**
      * Teren 02.11.2026 popodne (hod-20261102-162854, 595-609 s, F II -> I ka pasareli): "Ovde sam" usred kraka naniže, pa koraci
      * niz krak (82-99°), okret na međupodestu i drugi krak. Prvi koraci posle stajanja imaju slab znak silaska (0,05, −0,19, −0,61),
      * pa je provera vraćala tačku na sprat (dvaput) - korisnik: "ne funkcioniše baš stvarno ono ovde sam". Pravac kraka potvrđuje.

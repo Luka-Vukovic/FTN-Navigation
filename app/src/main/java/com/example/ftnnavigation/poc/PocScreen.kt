@@ -643,6 +643,9 @@ private val LABEL_TOUCH_SLOP = 8.dp
 
 private val ROOM_DOT_RADIUS = 5.dp
 
+/** Čvor rute do ovoliko od linije kraka je na njoj ([legBackTo]). */
+private val ROUTE_ON_LEG_TOLERANCE = 3.dp
+
 /** Natpis toaleta na planu (toaleti nemaju naziv). */
 private const val TOILET_LABEL = "WC"
 
@@ -768,12 +771,32 @@ private fun DrawScope.drawRoute(
     fun lineTo(o: Offset) = path.lineTo(o.x, o.y).also { pen = o }
     // Krak do međupodesta je već nacrtan od tačke na njemu ([legFromPosition]) - ne crta se ponovo od čvora.
     var legDone = false
-    if (position != null) {
-        moveTo(Offset(position.x * size.width, position.y * size.height))
-        drawing = true
-    }
     val nodes = route.nodes
+    // Prvi čvor se preskače: linija od pozicije ide krakom pravo do drugog ([legBackTo]).
+    var skip = 0
+    if (position != null) {
+        val here = Offset(position.x * size.width, position.y * size.height)
+        moveTo(here)
+        drawing = true
+        // Ruta kreće od čvora stepeništa iza tačke na traci kraka (račvanje AMF S1), a sledeći čvor je na traci između (bočna vrata
+        // Čitaonice): od tačke trakom do njega, ne do račvanja pa nazad.
+        val first = nodes.getOrNull(0)
+        val second = nodes.getOrNull(1)
+        if (first != null && second != null && first.isHere() && second.isHere()) {
+            val tolerance = ROUTE_ON_LEG_TOLERANCE.toPx()
+            stairLegs.entries.firstNotNullOfOrNull { (key, leg) ->
+                if (key.first != first.id) null else legBackTo(here, first.toOffset(), leg.map { it.toOffset() }, second.toOffset(), tolerance)
+            }?.let { back ->
+                back.forEach(::lineTo)
+                skip = 1
+            }
+        }
+    }
     for ((i, node) in nodes.withIndex()) {
+        if (i < skip) {
+            last = node
+            continue
+        }
         val from = last
         last = node
         val next = nodes.getOrNull(i + 1)
