@@ -762,47 +762,60 @@ private fun DrawScope.drawRoute(
     var drawing = false
     var previous: Node? = null
     var last: Node? = null
-    var nodes = route.nodes
+    // Poslednja nacrtana tačka linije.
+    var pen: Offset? = null
+    fun moveTo(o: Offset) = path.moveTo(o.x, o.y).also { pen = o }
+    fun lineTo(o: Offset) = path.lineTo(o.x, o.y).also { pen = o }
+    // Krak do međupodesta je već nacrtan od tačke na njemu ([legFromPosition]) - ne crta se ponovo od čvora.
+    var legDone = false
     if (position != null) {
-        val here = Offset(position.x * size.width, position.y * size.height)
-        path.moveTo(here.x, here.y)
+        moveTo(Offset(position.x * size.width, position.y * size.height))
         drawing = true
-        // Ruta počinje krakom stepeništa, a pozicija je već na liniji kraka (traka ka bočnom kraku AMF S1): od pozicije dalje
-        // krakom, ne nazad do čvora pa opet preko pozicije ([legFromPosition]).
-        val first = nodes.firstOrNull()
-        val next = nodes.getOrNull(1)
-        val leg = if (first != null && next != null && first.isHere() && !next.isHere()) stairLegs[first.id to next.id] else null
-        val ahead = leg?.let { legFromPosition(here, first!!.toOffset(), it.map { p -> p.toOffset() }) }
-        if (ahead != null) {
-            ahead.forEach { path.lineTo(it.x, it.y) }
-            drawing = false
-            last = first
-            nodes = nodes.drop(1)
-        }
     }
-    for (node in nodes) {
+    val nodes = route.nodes
+    for ((i, node) in nodes.withIndex()) {
         val from = last
         last = node
+        val next = nodes.getOrNull(i + 1)
         if (!node.isHere()) {
             // Napušta sprat stepeništem sa krakovima: linija još krakom do međupodesta ([stairLegs]).
-            if (previous != null) stairLegs[previous.id to node.id]?.forEach { path.lineTo(it.toOffset().x, it.toOffset().y) }
+            if (previous != null && !legDone) stairLegs[previous.id to node.id]?.forEach { lineTo(it.toOffset()) }
             drawing = false
+            legDone = false
             previous = null
             continue
         }
         val p = node.toOffset()
         if (drawing) {
-            previous?.let { bends[it.id to node.id] }?.let { path.lineTo(it.x * size.width, it.y * size.height) }
-            path.lineTo(p.x, p.y)
-        } else {
-            // Stiže na sprat stepeništem sa krakovima: linija od međupodesta niz/uz krak do čvora.
-            val head = from?.let { stairLegs[node.id to it.id] }?.reversed().orEmpty()
-            if (head.isEmpty()) {
-                path.moveTo(p.x, p.y)
+            // Sledi krak, a linija je već na njegovoj liniji (traka ka bočnom kraku AMF S1 - pozicija ili vrata Čitaonice; čvor
+            // promene sprata je račvanje iza): dalje krakom, ne nazad do čvora pa opet preko iste tačke.
+            val leg = if (next != null && !next.isHere()) stairLegs[node.id to next.id] else null
+            val ahead = pen?.let { at -> leg?.let { legFromPosition(at, p, it.map { q -> q.toOffset() }) } }
+            if (ahead != null) {
+                ahead.forEach(::lineTo)
+                legDone = true
             } else {
-                path.moveTo(head.first().toOffset().x, head.first().toOffset().y)
-                head.drop(1).forEach { path.lineTo(it.toOffset().x, it.toOffset().y) }
-                path.lineTo(p.x, p.y)
+                previous?.let { bends[it.id to node.id] }?.let { lineTo(Offset(it.x * size.width, it.y * size.height)) }
+                lineTo(p)
+            }
+        } else {
+            // Stiže na sprat stepeništem sa krakovima: linija od međupodesta niz/uz krak do čvora - ili samo do mesta na kraku
+            // odakle se ide dalje (sledeći čvor je na liniji kraka), bez odlaska do čvora i nazad.
+            val leg = from?.let { stairLegs[node.id to it.id] }
+            val cut = if (leg != null && next != null && next.isHere()) {
+                legFromPosition(next.toOffset(), p, leg.map { it.toOffset() })
+            } else {
+                null
+            }
+            when {
+                cut != null -> cut.reversed().let { pts -> moveTo(pts.first()); pts.drop(1).forEach(::lineTo) }
+                leg.isNullOrEmpty() -> moveTo(p)
+                else -> {
+                    val head = leg.reversed().map { it.toOffset() }
+                    moveTo(head.first())
+                    head.drop(1).forEach(::lineTo)
+                    lineTo(p)
+                }
             }
         }
         drawing = true
