@@ -53,6 +53,7 @@ enum class Side { LEVO, DESNO, PRAVO }
  * ili zgrade - već na novom mestu), da se na dodir prikaže njegov plan. [buildingId]: zgrada u koju se ulazi, iz koje
  * se izlazi, ili zgrada cilja; [floor]: sprat posle manevra (null - zgrada bez plana). [steps]: prolaz ide i preko
  * stepenika (pasarela F-bloka na podest). [up]: krak do podesta ([StepKind.KRAK]) naviše ili naniže (null - ne zna se).
+ * [alternative]: uz stepenice lift pored njih (uz lift stepenice), na spratu polaska - isto vodi na [floor] ([pairedVertical]).
  */
 data class RouteStep(
     val kind: StepKind,
@@ -65,7 +66,51 @@ data class RouteStep(
     val side: Side? = null,
     val steps: Boolean = false,
     val up: Boolean? = null,
+    val alternative: Node? = null,
 )
+
+/**
+ * Zgrade u kojima su stepenište i lift upareni, pa uputstvo nudi oba ([RouteStep.alternative]). Teren 03.11.2026, predlog
+ * korisnika: "u modu uobičajeno, kada korisnik treba da menja sprat u NTP-u, ponuditi istovremeno i S1 i L1, ili i S2 i L2, pošto
+ * oni stoje upareno i korisnik može otprilike da vidi koliko će čekati na lift". U NTP-u je svaki lift 3-9 m od svog stepeništa
+ * (L1 dvojni). NB nije tu: lift je u sredini stepeništa, a koristi se samo uz "Bez stepenica" ([RoutingProfile.liftOnlyAvoidingStairs]).
+ */
+val PAIRED_VERTICAL_BUILDINGS = setOf("NTP")
+
+/** Lift i stepenište su "pored" ako su im čvorovi na spratu polaska najviše ovoliko udaljeni. */
+private const val PAIRED_VERTICAL_M = 10.0
+
+/**
+ * Uz promenu sprata [from] -> [to] (stepenicama ako je [from] stepenište, inače liftom): najbliži čvor druge vrste na istom spratu
+ * iste zgrade, do [PAIRED_VERTICAL_M], koji takođe vodi na sprat [to]; za stepenice dno kraka u smeru promene (naniže "-D", ako
+ * ga ima). null: nema takvog.
+ */
+fun pairedVertical(graph: BuildingGraph, from: Node, to: Node): Node? {
+    if (from.buildingId !in PAIRED_VERTICAL_BUILDINGS || from.buildingId != to.buildingId || from.floor == to.floor) return null
+    val here = graph.position(from)
+    val prefix = "${from.buildingId}-${from.floor}-"
+    val candidates = if (from.type == NodeType.STEPENISTE) {
+        graph.nodes.filter { n ->
+            n.type == NodeType.LIFT && n.buildingId == from.buildingId && n.floor == from.floor &&
+                graph.neighbors(n.id).any { (m, type) -> type == EdgeType.LIFT && m.floor == to.floor }
+        }
+    } else {
+        graph.nodes.filter { n ->
+            n.type == NodeType.STEPENISTE && n.buildingId == from.buildingId && n.floor == from.floor && n.id.startsWith(prefix) &&
+                (to.floor > from.floor) != n.id.endsWith(DOWN_FOOT) &&
+                n.id.removePrefix(prefix).removeSuffix(DOWN_FOOT).let { key ->
+                    graph.node("${from.buildingId}-${to.floor}-$key") != null || graph.node("${from.buildingId}-${to.floor}-$key$DOWN_FOOT") != null
+                }
+        }.ifEmpty {
+            // Sprat bez dna kraka u smeru promene (prizemlje: samo krak naviše) - dno kraka koje ima.
+            graph.nodes.filter { n -> n.type == NodeType.STEPENISTE && n.buildingId == from.buildingId && n.floor == from.floor }
+                .filter { n -> graph.node("${from.buildingId}-${to.floor}-${n.id.removePrefix(prefix).removeSuffix(DOWN_FOOT)}") != null }
+        }
+    }
+    return candidates.map { it to distance(graph.position(it), here) }
+        .filter { it.second <= PAIRED_VERTICAL_M }
+        .minByOrNull { it.second }?.first
+}
 
 /**
  * Smer hoda krakom [a] -> [b] do podesta: sa dna kraka naviše (čvor stepeništa) gore, sa dna kraka naniže ("-D") dole; sa
@@ -129,9 +174,10 @@ private const val AHEAD_DEG = 30.0
  * Uputstvo korak po korak za [route]: izlazak iz sale, skretanja (levo/desno iz geometrije ivica, posle
  * pojednostavljenja), stepenice i lift sa spratom, ulaz, izlaz i spojni prolazi između zgrada, i cilj sa stranom
  * vrata sale. Udaljenosti su do sledećeg koraka. Smer na početku se ne zna (pozicija nema smer), pa prvi korak
- * nema levo/desno; isto posle stepenica i lifta.
+ * nema levo/desno; isto posle stepenica i lifta. [pairedVerticals]: uz stepenice i lift ponuditi i onaj drugi pored njih
+ * ([RouteStep.alternative]) - kad promena sprata nije ograničena ("Bez stepenica", "Bez lifta").
  */
-fun routeSteps(route: Route, graph: BuildingGraph, campus: CampusData): List<RouteStep> {
+fun routeSteps(route: Route, graph: BuildingGraph, campus: CampusData, pairedVerticals: Boolean = false): List<RouteStep> {
     val nodes = route.nodes
     if (nodes.isEmpty()) return emptyList()
     val places = nodes.map { placeOf(it, campus) }.toMutableList()
@@ -226,7 +272,10 @@ fun routeSteps(route: Route, graph: BuildingGraph, campus: CampusData): List<Rou
                 val kind = if (edge.type == EdgeType.LIFT) StepKind.LIFT else StepKind.STEPENICE
                 // Posle stepenica i lifta se pravac ne zna (krakovi, vrata lifta).
                 begin(
-                    RouteStep(kind, end, buildingId = end.buildingId, floor = end.floor, fromFloor = a.floor),
+                    RouteStep(
+                        kind, end, buildingId = end.buildingId, floor = end.floor, fromFloor = a.floor,
+                        alternative = if (pairedVerticals) pairedVertical(graph, a, end) else null,
+                    ),
                     listOf(end),
                     keepDirection = false,
                 )

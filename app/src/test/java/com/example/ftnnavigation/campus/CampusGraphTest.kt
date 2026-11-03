@@ -164,6 +164,23 @@ class CampusGraphTest {
         assertEquals("K-Z-DGG", resolveTarget("Departman za građevinarstvo i geodeziju", graph, campus)?.node?.id)
     }
 
+    /**
+     * Teren 03.11.2026 (NTP): odredište je zgrada u kojoj je korisnik -> najbliži izlaz. Izlazi NTP-a su svi ulazi vezani za kampus;
+     * iz predvorja "ULAZ - FTN" (ka Fruškogorskoj) najbliži nije glavni ulaz. Zgrada izabrana po nazivu je [RouteTarget.isBuilding],
+     * sala koja nije ucrtana (ruta do njene zgrade) nije.
+     */
+    @Test
+    fun buildingExits_nearestFromInside() {
+        val exits = buildingExits(graph, "NTP").map { it.id }.toSet()
+        assertEquals(setOf("NTP-0-ULAZ", "NTP-0-ULAZ-FTN", "NTP-0-ULAZ-PASAZ-I", "NTP-0-ULAZ-PASAZ-Z"), exits)
+        val nearest = exits.mapNotNull { graph.route("NTP-0-V1", it) }.minBy { it.durationSec }
+        assertEquals("NTP-0-ULAZ-FTN", nearest.nodes.last().id)
+        assertTrue(checkNotNull(resolveTarget(campus.building("NTP")!!.name!!, graph, campus)).isBuilding)
+        assertFalse(checkNotNull(resolveTarget("204", graph, campus)).isBuilding)
+        val unmapped = checkNotNull(resolveTarget("AH6A", graph, campus).takeIf { it?.approximate == true } ?: resolveTarget("Fizika", graph, campus))
+        assertFalse(unmapped.isBuilding)
+    }
+
     /** Početna i obaveštenje: ucrtana sala -> zgrada i sprat, inače samo naziv zgrade / mesta van kampusa. */
     @Test
     fun placeLocation_roomFloorOrBuildingName() {

@@ -346,14 +346,15 @@ class PdrLocatorTest {
 
     /**
      * Do kraja hodnika [gateId], pa dalje pravcem hodnika dok pozicija ne stigne na [targetId] (kraj hodnika druge
-     * zgrade ili ulaz na kampusu). Vraća razloge i broj koraka posle kraja hodnika.
+     * zgrade ili ulaz na kampusu; ili na krak odmah posle prolaza - trem Kule na podest S1 AMF-a). Vraća razloge i broj koraka
+     * posle kraja hodnika.
      */
     private fun PdrLocator.passThrough(gateId: String, targetId: String): Pair<List<PlaceReason>, Int> {
         val reasons = walk(gateId).toMutableList()
         val azimuth = magneticAzimuth(graph.position(inner(gateId)), graph.position(node(gateId)))
         val target = node(targetId)
         var steps = 0
-        while (!(place == placeOf(target) && distance(position(), graph.position(target)) < 0.01)) {
+        while (!(place == placeOf(target) && (onStairs || distance(position(), graph.position(target)) < 0.01))) {
             step(azimuth, stepM)?.let(reasons::add)
             check(++steps < 60) { "nije stigao do $targetId (na $place)" }
         }
@@ -468,6 +469,54 @@ class PdrLocatorTest {
         locator.destination = PdrPlace("AMF", -1)
         locator.passThrough("KULA-0-PROLAZ-AMF", "AMF-m1-PROLAZ-KULA")
         assertEquals(PdrPlace("AMF", -1), locator.place)
+    }
+
+    /**
+     * Iz trema na podest S1 pa srednjim krakom u suteren: krak (13 gazišta, u grafu 3,5 m) se hoda kratkim koracima, ne kao
+     * hodnik. Teren 03.11.2026 (Kula -> Biblioteka): tačka je krak prešla punim koracima i otišla hodnikom −1 12 m ispred korisnika.
+     */
+    @Test
+    fun kulaToAmf_throughPorch_downMiddleFlightOnTreads() {
+        val locator = locatorAt(inner("KULA-0-PROLAZ-AMF").id)
+        locator.destination = PdrPlace("AMF", -1)
+        locator.passThrough("KULA-0-PROLAZ-AMF", "AMF-m1-PROLAZ-KULA")
+        assertEquals(PdrPlace("AMF", -1), locator.place)
+        assertTrue("posle trema na kraku", locator.onStairs)
+        val down = pathAzimuth("AMF/S1", -1, 1, 0)
+        var steps = 0
+        while (locator.onStairs) {
+            locator.step(down, stepM)
+            check(++steps < 30) { "nije sišao sa kraka (na ${locator.place})" }
+        }
+        assertTrue("koraka na kraku: $steps", steps >= 12)
+        assertEquals(PdrPlace("AMF", -1), locator.place)
+        assertTrue("posle kraka kod dna S1", distance(locator.position(), graph.position(node("AMF-m1-S1"))) < 2.5)
+    }
+
+    /**
+     * Teren 03.11.2026 (NTP II): stajao pored S2 i osvrtao se - "koraci" premeštanja u mestu (razmaci 1,7 / 0,30 / 0,34 / 1,6 /
+     * 1,4 s) su tačku sa kratke kose ivice odveli na krak naniže ("ipak jeste dok stojim"). Isti put u hodu ulazi na krak.
+     */
+    @Test
+    fun ntpS2_twitchingInPlace_doesNotEnterFlight() {
+        fun run(gapsS: List<Double>): PdrLocator {
+            val locator = locatorAt("NTP-2-M1608")
+            var t = 0L
+            val north = magneticAzimuth(graph.position(node("NTP-2-M1608")), graph.position(node("NTP-2-M1470")))
+            repeat(4) {
+                t += 600_000_000L
+                locator.step(north, stepM, timeNs = t)
+            }
+            val toward = magneticAzimuth(graph.position(node("NTP-2-M1470")), graph.position(node("NTP-2-S2-D")))
+            for (gap in gapsS) {
+                t += (gap * 1e9).toLong()
+                locator.step(toward, stepM, timeNs = t)
+                if (locator.onStairs) break
+            }
+            return locator
+        }
+        assertFalse("trzaji u mestu", run(listOf(1.71, 0.30, 0.34, 1.58, 1.43)).onStairs)
+        assertTrue("hod", run(List(5) { 0.6 }).onStairs)
     }
 
     @Test
@@ -1880,6 +1929,26 @@ class PdrLocatorTest {
         assertTrue(legs.keys.all { (a, b) -> graph.edge(a, b)?.type == EdgeType.STEPENICE && node(a).floor != node(b).floor })
         assertTrue(legs.keys.none { (a, _) -> a.startsWith("KULA") })
         assertTrue("NB-0-S" to "NB-1-S-D" in legs)
+    }
+
+    /**
+     * Teren 03.11.2026 (snimak ekrana, AMF P ka Skriptarnici): tačka na traci ka desnom bočnom kraku S1 (čvor S1-D-DESNO), a ruta
+     * počinje na račvanju S1-D - linija od tačke dalje niz krak, ne nazad do račvanja pa pod pravim uglom opet preko tačke.
+     */
+    @Test
+    fun legFromPosition_onSideFlightLane_startsAtPosition() {
+        val legs = stairLegs(graph, stairPaths)
+        val fork = node("AMF-0-S1-D").let { Offset(it.x, it.y) }
+        val leg = checkNotNull(legs["AMF-0-S1-D" to "AMF-m1-S1"]).map { Offset(it.x, it.y) }
+        val lane = node("AMF-0-S1-D-DESNO").let { Offset(it.x, it.y) }
+        val ahead = checkNotNull(legFromPosition(lane, fork, leg))
+        assertEquals(lane.x, ahead.first().x, 1e-4f)
+        assertEquals(lane.y, ahead.first().y, 1e-4f)
+        assertEquals(leg.last(), ahead.last())
+        assertTrue("bez povratka na račvanje", ahead.none { (it - fork).getDistance() < 1e-4f })
+        // Iz hodnika ispred račvanja linija ide kroz čvor kao ranije.
+        val hall = node("AMF-0-H250_50").let { Offset(it.x, it.y) }
+        assertNull(legFromPosition(hall, fork, leg))
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.example.ftnnavigation.poc
 
+import androidx.compose.ui.geometry.Offset
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.EdgeType
 import com.example.ftnnavigation.graph.Node
@@ -209,6 +210,32 @@ fun stairLegs(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, St
         legs[upper.id to lower.id] = onAxis(upper, high[3], high[2]) + listOf(high[2])
     }
     return legs
+}
+
+/**
+ * Linija rute koja počinje krakom ([stairLegs]: čvor [node] pa tačke [leg]), a pozicija [position] je već na toj liniji (bliže njoj
+ * nego čvoru): tačke od pozicije dalje - projekcija pozicije na liniju, pa ostatak linije. null: pozicija nije na liniji (linija ide
+ * od pozicije do čvora pa krakom, kao ranije). Teren 03.11.2026 (AMF P, snimak ekrana, ruta ka Skriptarnici): tačka je bila na
+ * traci ka desnom bočnom kraku S1, a promena sprata je u grafu na račvanju S1-D 4 m iza - linija je išla od tačke nazad do
+ * račvanja, pa pod pravim uglom opet preko tačke na krak ("predložena putanja može biti zbunjujuća").
+ */
+fun legFromPosition(position: Offset, node: Offset, leg: List<Offset>): List<Offset>? {
+    val line = listOf(node) + leg
+    var best: Triple<Int, Offset, Float>? = null
+    for (i in 0 until line.size - 1) {
+        val a = line[i]
+        val b = line[i + 1]
+        val ab = b - a
+        val len2 = ab.x * ab.x + ab.y * ab.y
+        if (len2 <= 0f) continue
+        val t = (((position.x - a.x) * ab.x + (position.y - a.y) * ab.y) / len2).coerceIn(0f, 1f)
+        val q = a + ab * t
+        val d = (position - q).getDistance()
+        if (best == null || d < best.third) best = Triple(i, q, d)
+    }
+    val (index, q, d) = best ?: return null
+    if (d >= (position - node).getDistance() || (q - node).getDistance() < 1e-3f) return null
+    return listOf(q) + line.drop(index + 1)
 }
 
 /**

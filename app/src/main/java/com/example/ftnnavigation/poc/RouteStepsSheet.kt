@@ -162,6 +162,9 @@ private fun stepDetail(step: RouteStep): String? = when (step.kind) {
         Side.PRAVO -> stringResource(R.string.step_goal_ahead)
         null -> step.floor?.let { floorName(it) }?.takeIf { step.name == null }
     }
+    // Upareni lift / stepenište ([RouteStep.alternative], NTP): korisnik bira na licu mesta.
+    StepKind.STEPENICE -> step.alternative?.let { stringResource(R.string.step_alt_lift) }
+    StepKind.LIFT -> step.alternative?.let { stringResource(R.string.step_alt_stairs) }
     else -> null
 }
 

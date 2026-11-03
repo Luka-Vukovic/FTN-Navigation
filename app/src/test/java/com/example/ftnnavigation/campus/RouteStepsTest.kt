@@ -9,6 +9,7 @@ import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
+import com.example.ftnnavigation.graph.NtpPlan
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -65,6 +66,31 @@ class RouteStepsTest {
         // Nazad: iz sale izlazi se na zapad (vrata su zapadno od sale), pa desno - na sever.
         val back = routeSteps(small.route("R", "A")!!, small, campus)
         assertEquals(listOf(StepKind.IZADJI_IZ_SALE, StepKind.DESNO, StepKind.LEVO, StepKind.CILJ), back.kinds())
+    }
+
+    /**
+     * Predlog korisnika (teren 03.11.2026): u NTP-u uz stepenice ponuditi i lift pored njih (i obrnuto) - na licu mesta se vidi
+     * koliko bi se čekalo na lift. Upareni čvor je na spratu polaska i vodi na isti sprat; NB to nema (lift samo bez stepenica).
+     */
+    @Test
+    fun ntpStairs_offerLiftBeside_andBack() {
+        val vertical = setOf(StepKind.STEPENICE, StepKind.LIFT)
+        val route = checkNotNull(graph.route(NtpPlan.ENTRANCE_ID, roomId("NTP-307")))
+        val change = routeSteps(route, graph, campus, pairedVerticals = true).single { it.kind in vertical }
+        val other = checkNotNull(change.alternative) { "uz ${change.kind} nema para" }
+        assertEquals(if (change.kind == StepKind.STEPENICE) NodeType.LIFT else NodeType.STEPENISTE, other.type)
+        assertEquals(change.fromFloor, other.floor)
+        // Bez ponude (Bez stepenica / Bez lifta) i u NB-u nema para.
+        assertEquals(null, routeSteps(route, graph, campus).single { it.kind in vertical }.alternative)
+        val nb = checkNotNull(graph.route(NbPlan.ENTRANCE_ID, roomId("204")))
+        assertTrue(routeSteps(nb, graph, campus, pairedVerticals = true).all { it.alternative == null })
+        // Stepenicama naviše: lift pored, i vozi na isti sprat.
+        val lift = checkNotNull(pairedVertical(graph, graph.node("NTP-0-S2")!!, graph.node("NTP-1-S2-D")!!))
+        assertEquals("NTP-0-L2", lift.id)
+        assertTrue(graph.neighbors(lift.id).any { (n, type) -> type == EdgeType.LIFT && n.floor == 1 })
+        // Liftom naniže: stepenište pored lifta, dno kraka naniže; naviše dno kraka naviše.
+        assertEquals("NTP-3-S2-D", pairedVertical(graph, graph.node("NTP-3-L2")!!, graph.node("NTP-1-L2")!!)?.id)
+        assertEquals("NTP-0-S2", pairedVertical(graph, graph.node("NTP-0-L2")!!, graph.node("NTP-2-L2")!!)?.id)
     }
 
     /** Krak naniže i krak naviše povezani hodom po podestu sprata su jedan korak "stepenicama", sa oba sprata. */

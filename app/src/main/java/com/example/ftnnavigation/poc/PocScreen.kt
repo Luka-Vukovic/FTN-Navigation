@@ -116,6 +116,7 @@ import com.example.ftnnavigation.campus.quickDestinations
 import com.example.ftnnavigation.campus.roomBuildingNames
 import com.example.ftnnavigation.campus.nextManeuver
 import com.example.ftnnavigation.campus.routeSteps
+import com.example.ftnnavigation.campus.StepKind
 import com.example.ftnnavigation.campus.searchDestinations
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
@@ -255,8 +256,10 @@ fun PocScreen(
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     var showSteps by rememberSaveable { mutableStateOf(false) }
     // Ruta se menja sa svakim korakom (PDR) - uputstvo i sledeći manevar na kartici uvek kreću od trenutne pozicije.
-    val steps = remember(route, graph, campus) {
-        if (route != null && graph != null && campus != null) routeSteps(route, graph, campus) else emptyList()
+    // Uz stepenice i lift i onaj drugi pored njih (NTP), osim kad je promena sprata ograničena ("Bez stepenica", "Bez lifta").
+    val pairedVerticals = floorChange == FloorChange.UOBICAJENO || floorChange == FloorChange.NAJBRZE
+    val steps = remember(route, graph, campus, pairedVerticals) {
+        if (route != null && graph != null && campus != null) routeSteps(route, graph, campus, pairedVerticals) else emptyList()
     }
     // Zgrada čiji je natpis držan na mapi kampusa - pop-up sa opisom.
     var infoBuildingId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -310,6 +313,7 @@ fun PocScreen(
                             route = route,
                             routeBends = routeBends,
                             routeStairLegs = routeStairLegs,
+                            pairedVerticals = steps.mapNotNull { s -> s.alternative?.let { it to (s.kind == StepKind.STEPENICE) } },
                             position = state.position.takeIf { pdrHere },
                             rawPosition = state.rawPosition.takeIf { pdrHere && developerMode },
                             showGraph = developerMode,
@@ -485,6 +489,8 @@ private fun FloorPlan(
     route: Route?,
     routeBends: Map<Pair<String, String>, Offset>,
     routeStairLegs: Map<Pair<String, String>, List<PlanPoint>>,
+    /** Upareni lift / stepenište uz promenu sprata ([com.example.ftnnavigation.campus.RouteStep.alternative]); true = lift. */
+    pairedVerticals: List<Pair<Node, Boolean>>,
     position: Offset?,
     rawPosition: Offset?,
     showGraph: Boolean,
@@ -570,12 +576,22 @@ private fun FloorPlan(
                 )
                 val up = stringResource(R.string.route_floor_change_up, "%s")
                 val down = stringResource(R.string.route_floor_change_down, "%s")
+                val altLift = stringResource(R.string.route_floor_change_alt_lift)
+                val altStairs = stringResource(R.string.route_floor_change_alt_stairs)
+                val altStyle = changeStyle.copy(color = colors.primary)
                 Canvas(Modifier.fillMaxSize()) {
                     drawRoute(route, routeBends, routeStairLegs, buildingId, floor, position, colors.primary, colors.secondary, 1f / zoom.scale)
                     drawFloorChanges(
                         route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / zoom.scale, zoom.rotationDeg,
                     ) { from, to ->
                         (if (to > from) up else down).format(floorNames.getValue(to))
+                    }
+                    for ((node, lift) in pairedVerticals) {
+                        if (node.buildingId != buildingId || node.floor != floor) continue
+                        drawFloorBubble(
+                            Offset(node.x * size.width, node.y * size.height), if (lift) altLift else altStairs, colors.primary,
+                            textMeasurer, altStyle, 1f / zoom.scale, zoom.rotationDeg, filled = false,
+                        )
                     }
                 }
             }
@@ -746,11 +762,25 @@ private fun DrawScope.drawRoute(
     var drawing = false
     var previous: Node? = null
     var last: Node? = null
+    var nodes = route.nodes
     if (position != null) {
-        path.moveTo(position.x * size.width, position.y * size.height)
+        val here = Offset(position.x * size.width, position.y * size.height)
+        path.moveTo(here.x, here.y)
         drawing = true
+        // Ruta počinje krakom stepeništa, a pozicija je već na liniji kraka (traka ka bočnom kraku AMF S1): od pozicije dalje
+        // krakom, ne nazad do čvora pa opet preko pozicije ([legFromPosition]).
+        val first = nodes.firstOrNull()
+        val next = nodes.getOrNull(1)
+        val leg = if (first != null && next != null && first.isHere() && !next.isHere()) stairLegs[first.id to next.id] else null
+        val ahead = leg?.let { legFromPosition(here, first!!.toOffset(), it.map { p -> p.toOffset() }) }
+        if (ahead != null) {
+            ahead.forEach { path.lineTo(it.x, it.y) }
+            drawing = false
+            last = first
+            nodes = nodes.drop(1)
+        }
     }
-    for (node in route.nodes) {
+    for (node in nodes) {
         val from = last
         last = node
         if (!node.isHere()) {
@@ -807,20 +837,41 @@ private fun DrawScope.drawFloorChanges(
         var j = i + 1
         while (j + 1 < nodes.size && nodes[j + 1].buildingId == buildingId && nodes[j + 1].floor != nodes[j].floor) j++
         if (nodes[j].buildingId != buildingId) continue
-        val text = textMeasurer.measure(label(floor, nodes[j].floor), style.copy(fontSize = (style.fontSize.toPx() * k).toSp()))
-        val pad = 6.dp.toPx() * k
-        val center = Offset(here.x * size.width, here.y * size.height)
-        val topLeft = center + Offset(-text.size.width / 2f - pad, -text.size.height - 2 * pad - 14.dp.toPx() * k)
-        rotate(-rotationDeg, pivot = center) {
-            drawRoundRect(
-                color,
-                topLeft = topLeft,
-                size = Size(text.size.width + 2 * pad, text.size.height + 2 * pad),
-                cornerRadius = CornerRadius(8.dp.toPx() * k),
-            )
-            drawText(text, topLeft = topLeft + Offset(pad, pad))
-        }
+        drawFloorBubble(
+            Offset(here.x * size.width, here.y * size.height), label(floor, nodes[j].floor), color, textMeasurer, style, k, rotationDeg,
+        )
     }
+}
+
+/**
+ * Oblačić iznad tačke [center] (uspravan i na zarotiranoj mapi): popunjen bojom [color] (promena sprata na ruti), ili samo okvir
+ * ([filled] = false - upareni lift / stepenište pored, [com.example.ftnnavigation.campus.RouteStep.alternative]).
+ */
+private fun DrawScope.drawFloorBubble(
+    center: Offset,
+    label: String,
+    color: Color,
+    textMeasurer: TextMeasurer,
+    style: TextStyle,
+    k: Float,
+    rotationDeg: Float,
+    filled: Boolean = true,
+) {
+    val text = textMeasurer.measure(label, style.copy(fontSize = (style.fontSize.toPx() * k).toSp()))
+    val pad = 6.dp.toPx() * k
+    val topLeft = center + Offset(-text.size.width / 2f - pad, -text.size.height - 2 * pad - 14.dp.toPx() * k)
+    val bubble = Size(text.size.width + 2 * pad, text.size.height + 2 * pad)
+    val corner = CornerRadius(8.dp.toPx() * k)
+    rotate(-rotationDeg, pivot = center) {
+        if (filled) {
+            drawRoundRect(color, topLeft = topLeft, size = bubble, cornerRadius = corner)
+        } else {
+            drawRoundRect(Color.White, topLeft = topLeft, size = bubble, cornerRadius = corner)
+            drawRoundRect(color, topLeft = topLeft, size = bubble, cornerRadius = corner, style = Stroke(1.5.dp.toPx() * k))
+        }
+        drawText(text, topLeft = topLeft + Offset(pad, pad))
+    }
+    if (!filled) drawCircle(color, radius = 3.dp.toPx() * k, center = center)
 }
 
 /** Odredište: prsten u boji rute sa tačkom u sredini. */

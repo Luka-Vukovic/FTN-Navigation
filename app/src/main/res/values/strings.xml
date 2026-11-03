@@ -147,6 +147,8 @@
     <string name="floor_select">Sprat: %1$s</string>
     <string name="route_floor_change_up">↑ %1$s</string>
     <string name="route_floor_change_down">↓ %1$s</string>
+    <string name="route_floor_change_alt_lift">ili liftom</string>
+    <string name="route_floor_change_alt_stairs">ili stepenicama</string>
     <string name="building_with_floor">%1$s · %2$s</string>
     <string name="poc_hint_no_start">Dodirni „Ovde sam“ i označi gde si (napolju praćenje može i sa GPS-a)</string>
     <string name="poc_hint_pick_start">Dodirni mapu na mestu gde stojiš</string>
@@ -267,6 +269,8 @@
     <string name="step_stairs_up">Stepenicama naviše · %1$s</string>
     <string name="step_stairs_down">Stepenicama naniže · %1$s</string>
     <string name="step_lift">Liftom · %1$s</string>
+    <string name="step_alt_lift">ili liftom pored stepeništa</string>
+    <string name="step_alt_stairs">ili stepenicama pored lifta</string>
     <string name="step_flight">Krak stepenica do podesta</string>
     <string name="step_flight_up">Uz stepenice do podesta</string>
     <string name="step_flight_down">Niz stepenice do podesta</string>

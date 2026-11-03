@@ -311,6 +311,18 @@ private const val STAIR_ENTER_M = 1.5
 private const val STAIR_ENTER_DEG = 50f
 
 /**
+ * Ulazak u stepenište iz hodnika samo u hodu: bar jedan od poslednja dva razmaka koraka je korak hoda (od [STAIR_ENTER_MIN_GAP_NS]
+ * do [STAIR_ENTER_MAX_GAP_NS]). Teren 03.11.2026 (NTP II, stajao pored S2 i osvrtao se): "koraci" premeštanja u mestu (razmaci
+ * 1,7 / 0,30 / 0,34 / 1,6 / 1,4 s, okret 64°) - kapija ih je pustila kao slab hod u ruci, a tačka na kratkoj kosoj ivici do dna
+ * kraka je ušla na krak (korisnik: "ipak jeste dok stojim"). Na svim snimcima pravilo pogađa 13 od 394 ulaska (većinom dupli
+ * koraci 0,3 + 0,3 s - ulazak kasni korak). Probano i strože: "tri razmaka bez stajanja" odlaže ~100 ulazaka posle stajanja, a
+ * "dva razmaka, zajedno bar 0,8 s" odbija prve korake posle starta (17.10.2026, NTP III: 0,33 + 0,40 s) - replay svih snimaka
+ * gori (3,53 -> 3,55 m; lančane promene silazaka 17.10. i 29.10.).
+ */
+private const val STAIR_ENTER_MAX_GAP_NS = 1_300_000_000L
+private const val STAIR_ENTER_MIN_GAP_NS = 380_000_000L
+
+/**
  * Let - okret - let dok tačka nije na stepeništu računa se kao stepenište ako je prvi let počeo najviše ovoliko od
  * čvora stepeništa (tačka odluta: PDR korak je 0,8 m, a gazište ~0,3 m). Okret u hodniku tik uz stepenište sa letovima
  * od bar 6 koraka bi se ovde pogrešno video kao sprat - nije proveravano na terenu.
@@ -1251,6 +1263,9 @@ class PdrLocator(
     /** Znak stepenica ([StairGait]) poslednjih [GAIT_STEPS] koraka van stepeništa - za ulazak na krak naniže ([STAIR_ENTER_GAIT_DEG]). */
     private val recentScores = ArrayDeque<Float?>()
 
+    /** Vremena poslednja tri koraka van stepeništa (u zgradi) - ulazak u stepenište samo u hodu ([STAIR_ENTER_MAX_GAP_NS]). */
+    private val recentStepNs = ArrayDeque<Long>()
+
     private fun gaitDescends(scores: Collection<Float?>): Boolean =
         scores.size >= GAIT_STEPS && scores.count { it != null && it >= DESCENT_START_SCORE } >= GAIT_START_STEPS
 
@@ -1829,10 +1844,15 @@ class PdrLocator(
         if (place.isCampus) {
             clearSpiral()
             recentScores.clear()
+            recentStepNs.clear()
         }
         if (!place.isCampus) {
             recentScores.addLast(stairScore)
             if (recentScores.size > GAIT_STEPS) recentScores.removeFirst()
+            if (timeNs != null && redo == 0) {
+                recentStepNs.addLast(timeNs)
+                if (recentStepNs.size > 3) recentStepNs.removeFirst()
+            }
             val at = match?.let { local(it.shownX, it.shownY) } ?: local(raw.x, raw.y)
             watch.step(azimuthDeg, redo, timeNs, at)
             watch.trim(WATCH_STEPS)
@@ -2255,6 +2275,7 @@ class PdrLocator(
             val c = local(from.x, from.y)
             val edge = distance(s, c)
             if (distance(here, s) > min(STAIR_ENTER_M, edge / 2)) return false
+            if (!walkingCadence()) return false
             // Samo korakom ka stepeništu - tačka koja se od njega udaljava (tek označena pored stepeništa, pa hod ka hodniku)
             // nije na kraku (teren 09.10.2026 uveče, NTP III: posle 2 koraka od S1 tačka je opet ušla na krak).
             // Ili pravcem kraka: sa podesta sprata između dva kraka (silazak preko više spratova, NTP 10.10.2026) se na krak
@@ -2274,6 +2295,10 @@ class PdrLocator(
         beginClimb(stair, up = !node.id.endsWith(DOWN_FOOT_SUFFIX), progress, onFlight, azimuthDeg)
         return true
     }
+
+    /** Bar jedan od poslednja dva razmaka koraka je korak hoda ([STAIR_ENTER_MAX_GAP_NS]); bez vremena (ili manje koraka) - da. */
+    private fun walkingCadence(): Boolean =
+        recentStepNs.size < 3 || (1 until recentStepNs.size).any { recentStepNs[it] - recentStepNs[it - 1] in STAIR_ENTER_MIN_GAP_NS..STAIR_ENTER_MAX_GAP_NS }
 
     private fun beginClimb(stair: Stair, up: Boolean, progress: Double, onFlight: Boolean, azimuthDeg: Float, variant: Int = 0) {
         trace?.invoke(String.format(Locale.ROOT, "stepenište %s: ulaz (%s, varijanta %d, krak %.2f%s)", stair.key, if (up) "gore" else "dole",
@@ -3894,6 +3919,7 @@ class PdrLocator(
         when {
             passage.doneM >= passage.lengthM -> {
                 arriveOnFlight(passage.target)?.let { return it }
+                arriveOnLanding(passage.target)?.let { return it }
                 moveTo(passage.target)
                 if (passage.target.type == NodeType.ULAZ && !passage.target.isIndoor) exitedEntrance = passage.target
                 return PlaceReason.PROLAZ
@@ -3938,6 +3964,39 @@ class PdrLocator(
         pathOf(c)?.let { p ->
             val a = local(p[2].x, p[2].y)
             val b = local(p[3].x, p[3].y)
+            c.approach = normalizeDeg(azimuthOf(b.x - a.x, b.y - a.y) - headingBiasDeg + planUp.getValue(place.buildingId))
+        }
+        return PlaceReason.PROLAZ
+    }
+
+    /**
+     * Prolaz stiže na podest sa koga krak vodi NANIŽE na sprat prolaza (AMF −1: trem iz Kule -> podest S1 -> srednji krak u
+     * suteren; ivica podest - dno kraka je HOD sa stepenicima): tačka ide krakom naniže, kao da je sa višeg sprata stigla na
+     * međupodest i okrenula se ([resumeOnLanding]). Teren 03.11.2026 (Kula -> Biblioteka): tačka je srednji krak (13 gazišta, u
+     * grafu 3,5 m) prešla kao hodnik - punim koracima - i otišla hodnikom −1 12 m ispred korisnika, koji je po znaku ubrzanja
+     * tek silazio krakom. null: nije takav prolaz.
+     */
+    private fun arriveOnLanding(target: Node): PlaceReason? {
+        val landing = graph.neighbors(target.id).map { it.first }
+            .firstOrNull { it.type == NodeType.HODNIK && it.buildingId == target.buildingId && it.floor == target.floor } ?: return null
+        val foot = graph.neighbors(landing.id).map { it.first }.firstOrNull {
+            it.type == NodeType.STEPENISTE && it.floor == target.floor && graph.edge(landing.id, it.id)?.steps == true
+        } ?: return null
+        val stair = stairs[stairKey(foot)] ?: return null
+        val above = target.floor + 1
+        if (foot.id != stair.nodes[target.floor]?.id || (above !in stair.nodes && above !in stair.downNodes)) return null
+        if (pathsOf(stair, target.floor) == null) return null
+        trace?.invoke("prolaz ${target.id}: krakom naniže na sprat ${target.floor}")
+        moveTo(target)
+        place = PdrPlace(target.buildingId, above)
+        val sense = pathUpTurns[stair.key] ?: 1
+        val c = Climb(stair, StairWalk(), sense = sense).apply { up = false; part = ClimbPart.LANDING; fromPassage = true }
+        // Silazak: okret na međupodestu je suprotan okretu pri penjanju.
+        resumeOnLanding(c, -sense * 180f)
+        // Smer kraka sa crteža (od međupodesta ka spratu), u magnetskom azimutu kao koraci.
+        pathOf(c)?.let { p ->
+            val a = local(p[1].x, p[1].y)
+            val b = local(p[0].x, p[0].y)
             c.approach = normalizeDeg(azimuthOf(b.x - a.x, b.y - a.y) - headingBiasDeg + planUp.getValue(place.buildingId))
         }
         return PlaceReason.PROLAZ

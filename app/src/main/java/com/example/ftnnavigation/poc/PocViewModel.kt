@@ -24,6 +24,7 @@ import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.CampusGeo
 import com.example.ftnnavigation.campus.GpsFix
 import com.example.ftnnavigation.campus.RouteTarget
+import com.example.ftnnavigation.campus.buildingExits
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
 import com.example.ftnnavigation.campus.loadOpenAreas
@@ -411,7 +412,13 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     val route: Route? by derivedStateOf {
         val plan = plan
         // Plan dana: ruta sa mesta prethodne stavke (izračunata pri otvaranju), ne od pozicije.
-        if (plan != null) plan.leg.route else target?.let { routeTo(it.node.id) }
+        if (plan != null) return@derivedStateOf plan.leg.route
+        val target = target ?: return@derivedStateOf null
+        // Odredište je zgrada u kojoj je korisnik (pozicija na njenom planu): do najbližeg izlaza ([buildingExits]).
+        val graph = graph
+        val inside = state.rawPosition != null && !state.pdrPlace.isCampus && state.pdrPlace.buildingId == target.building?.id
+        val exits = if (graph != null && target.isBuilding && inside) buildingExits(graph, target.node.buildingId) else emptyList()
+        exits.mapNotNull { routeTo(it.id) }.minByOrNull { it.durationSec } ?: routeTo(target.node.id)
     }
 
     /** Plan dana na Mapi: rute dana redom, prikazana je jedna; null - Mapa prikazuje rutu do [destination]. */

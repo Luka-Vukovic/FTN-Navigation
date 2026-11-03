@@ -170,7 +170,21 @@ fun buildingOfRoom(room: String): String? {
  * Cilj rute: [node] je ucrtana sala ili zgrada. [approximate] = sala postoji u rasporedu, ali
  * nije ucrtana, pa ruta vodi samo do njene zgrade ([building]).
  */
-data class RouteTarget(val node: Node, val building: CampusBuilding?, val approximate: Boolean)
+data class RouteTarget(val node: Node, val building: CampusBuilding?, val approximate: Boolean) {
+    /** Odredište je sama zgrada (izabrana po nazivu), ne sala - ni sala koja nije ucrtana pa ruta vodi do njene zgrade. */
+    val isBuilding: Boolean get() = !approximate && building != null && node.id == building.nodeId
+}
+
+/**
+ * Izlazi iz zgrade [buildingId]: ulazi (ULAZ) njenog plana vezani za kampus. Odredište je zgrada u kojoj je korisnik -> ruta do
+ * najbližeg izlaza, ne do glavnog ulaza (čvor zgrade). Teren 03.11.2026 (NTP, n-exit): ruta je vodila do glavnog ulaza FTN-a, a
+ * korisnik: "Iz pozicije gde sam sada, verovatno bi mapa trebalo da nudi izlazak na ulaz koji nije glavni, nego ka Fruškogorskoj";
+ * na pitanje: "treba da vodi do najbližeg izlaza".
+ */
+fun buildingExits(graph: BuildingGraph, buildingId: String): List<Node> =
+    graph.nodes.filter { n ->
+        n.buildingId == buildingId && n.type == NodeType.ULAZ && graph.neighbors(n.id).any { (m, _) -> m.buildingId == CAMPUS_ID }
+    }
 
 /**
  * Odredište (naziv sale iz rasporeda ili naziv zgrade) u čvor grafa: sala iz grafa, zgrada po
