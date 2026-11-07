@@ -310,6 +310,12 @@ private const val STAIR_ENTER_M = 1.5
  */
 private const val STAIR_ENTER_DEG = 50f
 
+/** Ulazak na krak koji je u grafu HOD ivica: bar jedan od ovoliko poslednjih koraka pune dužine ([PdrLocator.onlyWeakSteps]). */
+private const val FLIGHT_ENTER_STEPS = 4
+
+/** ... i ne stariji od ovoga (posle stajanja se raniji hod ne računa). */
+private const val FLIGHT_ENTER_NS = 4_000_000_000L
+
 /**
  * Ulazak u stepenište iz hodnika samo u hodu: bar jedan od poslednja dva razmaka koraka je korak hoda (od [STAIR_ENTER_MIN_GAP_NS]
  * do [STAIR_ENTER_MAX_GAP_NS]). Teren 03.11.2026 (NTP II, stajao pored S2 i osvrtao se): "koraci" premeštanja u mestu (razmaci
@@ -1266,6 +1272,9 @@ class PdrLocator(
     /** Znak stepenica ([StairGait]) poslednjih [GAIT_STEPS] koraka van stepeništa - za ulazak na krak naniže ([STAIR_ENTER_GAIT_DEG]). */
     private val recentScores = ArrayDeque<Float?>()
 
+    /** Vreme i vrh poslednjih [FLIGHT_ENTER_STEPS] koraka - za ulazak na krak koji je u grafu HOD ivica ([onlyWeakSteps]). */
+    private val recentPeaks = ArrayDeque<Pair<Long, Float>>()
+
     /** Vremena poslednja tri koraka van stepeništa (u zgradi) - ulazak u stepenište samo u hodu ([STAIR_ENTER_MAX_GAP_NS]). */
     private val recentStepNs = ArrayDeque<Long>()
 
@@ -1766,7 +1775,7 @@ class PdrLocator(
      * koraka se ponavlja u tom pravcu (ispravljen smer). [timeNs]: vreme koraka (bilo koji sat) - pauza prekida let na
      * stepeništu. Vraća razlog ako je pozicija prešla na drugo mesto.
      */
-    fun step(azimuthDeg: Float, lengthM: Float, redoSteps: Int = 0, timeNs: Long? = null, stairScore: Float? = null): PlaceReason? {
+    fun step(azimuthDeg: Float, lengthM: Float, redoSteps: Int = 0, timeNs: Long? = null, stairScore: Float? = null, peak: Float? = null): PlaceReason? {
         var raw = raw ?: return null
         // Dodir na kraku: koraci pre dodira (zadržani dok je stajao - [HandlingGate]) su već u označenom mestu.
         tapFlight?.timeNs?.let { tapNs -> if (timeNs != null && timeNs < tapNs) return null }
@@ -1862,6 +1871,10 @@ class PdrLocator(
             if (timeNs != null && redo == 0) {
                 recentStepNs.addLast(timeNs)
                 if (recentStepNs.size > 3) recentStepNs.removeFirst()
+                if (peak != null) {
+                    recentPeaks.addLast(timeNs to peak)
+                    if (recentPeaks.size > FLIGHT_ENTER_STEPS) recentPeaks.removeFirst()
+                }
             }
             val at = match?.let { local(it.shownX, it.shownY) } ?: local(raw.x, raw.y)
             watch.step(azimuthDeg, redo, timeNs, at)
@@ -2274,8 +2287,20 @@ class PdrLocator(
         if (onFlight) {
             val o = local(other.x, other.y)
             if (abs(angleDiffDeg(headingOnPlan(azimuthDeg), azimuthOf(o.x - s.x, o.y - s.y))) >= 90f) return false
+            if (onlyWeakSteps()) {
+                // Bez hoda se ne ide ni krakom kao hodnikom: tačka ostaje gde je bila pre ovog koraka.
+                stepStarts.lastOrNull()?.let { start ->
+                    raw = start.raw
+                    match = start.match
+                    walkedX = start.walkedX
+                    walkedY = start.walkedY
+                }
+                return false
+            }
             progress = (distance(here, s) / distance(o, s)).coerceIn(0.0, 1.0)
         } else {
+            // Isto dno kraka, još na kratkoj ivici iz hodnika.
+            if (graph.neighbors(node.id).any { (n, _) -> n.floor == node.floor && graph.edge(node.id, n.id)?.steps == true } && onlyWeakSteps()) return false
             // Samo iz hodnika; preko međupodesta (iz prolaza NB - AMF ka holu) se silazi na sprat, ne ulazi u krak. Hodnik može
             // biti i sa druge strane čvora stepeništa (NTP S1-D od 16.10.2026: i iz hodnika kod lifta L1), ali ne traka ka
             // bočnom kraku (AMF S1 - tu silazak prepoznaje [sideDownFlight]).
@@ -2336,6 +2361,19 @@ class PdrLocator(
         offFlightStair = null
         beginClimb(stair, up = false, 0.0, onFlight = false, azimuthDeg)
         return true
+    }
+
+    /**
+     * Među poslednjih [FLIGHT_ENTER_STEPS] koraka u poslednjih [FLIGHT_ENTER_NS] nema nijednog pune dužine: premeštanje telefona u mestu,
+     * ne hod. Bez podatka o vrhu - ne. Teren 07.11.2026 (AMF -1, stajao kod vrata Biblioteke 2 m od dna srednjeg kraka S1, posle "Ovde
+     * sam" isto): 5 i 6 sitnih koraka (vrh 0,7-1,1, ukupno ~2 m) odnelo je tačku na krak - "tačka je prešla na stepenice već dok sam
+     * stajao". Na svim snimcima 78 ulazaka na krak koji je HOD ivica (AMF S1 sa -1, NB S iz prizemlja): skoro svi imaju bar jedan pun
+     * korak među poslednja četiri, bez njega su ova dva i stajanje 22.10. Samo za te krakove: na drugim stepeništima pravi ulasci često
+     * imaju samo slabe korake pre kraka (23 od 187 ulazaka sa promenom sprata).
+     */
+    private fun onlyWeakSteps(): Boolean {
+        val (lastNs, _) = recentPeaks.lastOrNull() ?: return false
+        return recentPeaks.none { (t, peak) -> lastNs - t <= FLIGHT_ENTER_NS && AccelStepDetector.isFullStep(peak) }
     }
 
     /** Bar jedan od poslednja dva razmaka koraka je korak hoda ([STAIR_ENTER_MAX_GAP_NS]); bez vremena (ili manje koraka) - da. */
@@ -3871,7 +3909,12 @@ class PdrLocator(
             // Vrata sa strane međupodesta ([Climb.gateFrom]): pravac je od međupodesta, ne od dna kraka (ivica je kosa).
             val side = landingClimb?.takeIf { it.exitGate?.second?.id == gate.node.id }?.gateFrom
             val inner = side?.let { m(it.x, it.y) } ?: m(other.x, other.y)
-            val beyond = along(free, end, inner, end)
+            // I duž ose plana, kad je poslednja ivica kosa (vrata su u zidu poravnatom sa planom): teren 07.11.2026, glavni ulaz NTP-a,
+            // ivica ~28° od ose. Smer ~6° pored hodnika ostavio je slobodnu poziciju ~2 m u stranu, pa je iza vrata duž ivice bila samo
+            // 0,5 m (duž ose 1,4 m); korisnik je odmah skrenuo uz zid, tačka je skliznula na hodnik BB - "nije se desio izlazak iz zgrade".
+            // Pomeranje čvora da ivica bude prava (build_ntp) je probano: kvari ulaske po tragu koraka (replay: promašaji 4 -> 23 m).
+            val square = if (abs(end.x - inner.x) >= abs(end.y - inner.y)) PointM(inner.x, end.y) else PointM(end.x, inner.y)
+            val beyond = if (side == null) maxOf(along(free, end, inner, end), along(free, end, square, end)) else along(free, end, inner, end)
             if (beyond < PASS_BEYOND_M) continue
             // Pravac hodnika ka izlazu, u metrima kampusa.
             val start = graph.position(gate.node)

@@ -1961,7 +1961,7 @@ class PdrLocatorTest {
         val fork = node("AMF-0-S1-D").let { Offset(it.x, it.y) }
         val leg = checkNotNull(legs["AMF-0-S1-D" to "AMF-m1-S1"]).map { Offset(it.x, it.y) }
         val top = node("AMF-0-S1-D-KRAK").let { Offset(it.x, it.y) }
-        val lane = node("AMF-0-S1-D-DESNO").let { Offset(it.x, it.y) }
+        val lane = node("AMF-0-S1-D-VRATA").let { Offset(it.x, it.y) }
         val back = checkNotNull(legBackTo(top, fork, leg, lane, tolerance = 1e-3f))
         assertEquals(top.x, back.first().x, 1e-4f)
         assertEquals(top.y, back.first().y, 1e-4f)
@@ -1974,6 +1974,62 @@ class PdrLocatorTest {
         assertNull(legBackTo(node("AMF-0-H250_50").let { Offset(it.x, it.y) }, fork, leg, lane, tolerance = 1e-3f))
         // Sledeći čvor iza tačke (tačka je između račvanja i njega) - kao ranije.
         assertNull(legBackTo(lane, fork, leg, top, tolerance = 1e-3f))
+    }
+
+    /** Teren 07.11.2026 (snimak ekrana, bočna vrata Čitaonice): "voleo bih da bude upravna na vrata, a ne kosa". */
+    @Test
+    fun roomDoorCorner_perpendicularToWall() {
+        val center = Offset(344.5f, 107f)
+        // Zid uspravan (hodnik levo od vrata): vodoravno do sredine, pa uspravno.
+        assertEquals(Offset(344.5f, 154f), roomDoorCorner(center, Offset(287f, 154f), Offset(277f, 154f)))
+        // Zid vodoravan (hodnik ispod vrata): uspravno do sredine, pa vodoravno.
+        assertEquals(Offset(300f, 107f), roomDoorCorner(center, Offset(300f, 207f), Offset(300f, 217f)))
+        // Vrata naspram sredine - pravo.
+        assertNull(roomDoorCorner(center, Offset(287f, 107f), Offset(277f, 107f)))
+    }
+
+    /**
+     * Teren 07.11.2026 (AMF -1): stajao kod vrata Biblioteke, 2 m od dna srednjeg kraka S1; sitni koraci premeštanja telefona (vrh 0,7-1,1)
+     * odneli su tačku na krak - "tačka je prešla na stepenice već dok sam stajao". Sitni koraci ne ulaze; prvi pravi korak ulazi.
+     */
+    @Test
+    fun amfMinusOne_weakStepsAtFootOfFlight_noEntry_realStepEnters() {
+        val locator = locatorAt("AMF-m1-H257_154")
+        val foot = graph.position(node("AMF-m1-S1"))
+        val azimuth = magneticAzimuth(graph.position(node("AMF-m1-H257_154")), foot)
+        var t = 0L
+        repeat(12) {
+            t += 500_000_000L
+            locator.step(azimuth, 0.4f, timeNs = t, peak = 0.8f)
+            assertFalse("korak $it", locator.onStairs)
+        }
+        assertTrue("ostaje pred krakom: ${distance(locator.position(), foot)} m", distance(locator.position(), foot) < 1.5)
+        t += 500_000_000L
+        locator.step(azimuth, stepM, timeNs = t, peak = 2.4f)
+        assertTrue(locator.onStairs)
+    }
+
+    /**
+     * Teren 07.11.2026 (hod-20261107-123321, 1308-1345 s, smer kakav je imao telefon): izlazak kroz glavni ulaz NTP-a, "nije se desio
+     * izlazak iz zgrade". Smer ~6° pored hodnika ostavio je slobodnu poziciju ~2 m u stranu, a poslednja ivica pred vratima je kosa - duž
+     * nje nije "prošao vrata", pa je tačka skliznula na hodnik BB. Prolazak se meri i duž ose plana (upravno na zid).
+     */
+    @Test
+    fun ntpMainEntrance_exitWithHeadingOffCorridor_thenTurnAlongWall() {
+        val recorded = timedSteps(
+            """
+            157|0.78|0.29|1308.91 159|0.78|0.59|1309.53 161|0.78|0.84|1310.15 166|0.78|0.75|1310.76 171|0.78|0.69|1311.35 172|0.78|0.42|1311.99 173|0.78|0.97|1312.50
+            173|0.78|0.41|1313.18 172|0.78|0.80|1313.72 169|0.78|0.52|1314.35 168|0.78|0.95|1314.97 170|0.78|0.66|1315.56 171|0.78|0.65|1316.13 176|0.78|0.16|1316.71
+            180|0.78|0.50|1317.27 179|0.78|0.59|1317.84 180|0.78|0.53|1318.46 179|0.78|0.60|1319.04 177|0.78|0.33|1319.62 177|0.78|0.39|1320.23 178|0.78|0.40|1320.81
+            178|0.78|0.25|1321.47 178|0.78|0.56|1322.05 177|0.78|0.78|1322.65 174|0.78|0.49|1323.28 174|0.78|0.36|1323.92 174|0.78|0.98|1324.50 178|0.78|-0.27|1325.25
+            189|0.78|-0.84|1326.49 195|0.78|-0.46|1327.21 179|0.71|-0.70|1327.91 146|0.78|-0.08|1328.60 118|0.78|-0.39|1329.20 100|0.78|-0.46|1329.90 90|0.78|0.15|1330.59
+            84|0.78|-0.25|1331.22 90|0.29|0.55|1331.79 93|0.71|0.12|1332.56 90|0.78|0.37|1333.24 96|0.78|0.36|1333.97 97|0.78|0.22|1334.55 93|0.78|-0.33|1335.30
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
+        locator.setPosition(PdrPlace("NTP", 0), Offset(0.5330179f, 0.6776241f), measure = false)
+        val reasons = recorded.mapNotNull { locator.walk("NTP", it) }
+        assertTrue("$reasons na ${locator.place}", locator.place.isCampus)
     }
 
     /** Lokator na čvoru [id] (kao posle starta) i koraci [recorded] u zgradi [buildingId]; za svaki korak (vreme, na stepeništu). */

@@ -196,13 +196,16 @@ class AmfKulaGraphTest {
         val fork = graph.node("AMF-0-S1-D")!!
         val lanes = graph.neighbors(fork.id).map { it.first.id }.toSet()
         assertTrue(lanes.toString(), lanes.containsAll(listOf("AMF-0-S1-D-DESNO", "AMF-0-S1-D-LEVO")))
-        for ((lane, top) in listOf("AMF-0-S1-D-DESNO" to "AMF-0-S1-D-KRAK", "AMF-0-S1-D-LEVO" to "AMF-0-S1-D-KRAK-L")) {
+        for ((lane, top) in listOf("AMF-0-S1-D-VRATA" to "AMF-0-S1-D-KRAK", "AMF-0-S1-D-LEVO" to "AMF-0-S1-D-KRAK-L")) {
             assertNotNull("$lane - $top", graph.edge(lane, top))
             // Traka je uz zid, na strani svog kraka.
             assertEquals(graph.node(top)!!.x, graph.node(lane)!!.x, 1e-4f)
         }
         val reading = graph.route("AMF-0-S1-D-DESNO", room("Čitaonica").id)!!.nodes.map { it.id }
-        assertEquals(listOf("AMF-0-S1-D-DESNO", "AMF-0-V287_154", room("Čitaonica").id), reading)
+        assertEquals(listOf("AMF-0-S1-D-DESNO", "AMF-0-S1-D-VRATA", "AMF-0-V287_154", room("Čitaonica").id), reading)
+        // Teren 07.11.2026: "voleo bih da bude upravna na vrata, a ne kosa" - čvor trake je naspram bočnih vrata.
+        assertEquals(graph.node("AMF-0-V287_154")!!.y, graph.node("AMF-0-S1-D-VRATA")!!.y, 1e-4f)
+        assertEquals(graph.node("AMF-0-S1-D-DESNO")!!.x, graph.node("AMF-0-S1-D-VRATA")!!.x, 1e-4f)
     }
 
     /** Teren 01.10.2026: trem iz Kule stiže na međunivo - odatle dole na -1 ili gore u prizemlje Amfiteatara. */

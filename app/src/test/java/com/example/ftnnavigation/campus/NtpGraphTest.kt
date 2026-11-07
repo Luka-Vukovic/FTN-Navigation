@@ -80,6 +80,19 @@ class NtpGraphTest {
         assertEquals(setOf("AMF/S1"), graph.verticals(chosen))
     }
 
+    /**
+     * Teren 07.11.2026 (izlazak posle lifta L1): zapadni kraj PASAŽ-a je od lifta najbliži (35,7 m, glavni ulaz 41,6 m), a korisnik: "ne
+     * bih tu izlazio, plus izgleda da je zaključano". Ruta do najbližeg izlaza ga ne nudi; rute kroz njega ostaju moguće.
+     */
+    @Test
+    fun nearestExit_fromLiftL1_notWestEndOfPasaz() {
+        val exits = buildingExits(graph, NtpPlan.BUILDING_ID).map { it.id }
+        assertEquals(setOf("NTP-0-ULAZ", "NTP-0-ULAZ-FTN", "NTP-0-ULAZ-PASAZ-I"), exits.toSet())
+        assertEquals("NTP-0-ULAZ", exits.mapNotNull { graph.route("NTP-0-L1B", it) }.minBy { it.durationSec }.nodes.last().id)
+        assertNotNull(graph.route("NTP-0-L1B", "NTP-0-ULAZ-PASAZ-Z"))
+        assertTrue(graph.neighbors("NTP-0-ULAZ-PASAZ-Z").any { (n, _) -> n.id == "K-U-NTP-2" })
+    }
+
     @Test
     fun mainEntrance_isBuildingNode() {
         assertEquals(NtpPlan.ENTRANCE_ID, ntp.entranceId)

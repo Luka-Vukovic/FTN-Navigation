@@ -104,6 +104,9 @@ class AccelStepDetector(private val onStep: (timestampNs: Long, peak: Float) -> 
         /** Deo pune dužine za korak sa vrhom tik iznad praga. */
         private const val MIN_STEP_FACTOR = 0.2f
 
+        /** Korak pune dužine: vrh bar [FULL_STEP_PEAK] (ispod toga je spor hod ili premeštanje telefona u mestu). */
+        fun isFullStep(peak: Float): Boolean = peak >= FULL_STEP_PEAK
+
         /** Deo pune dužine koraka po visini vrha: 1 od [FULL_STEP_PEAK], linearno do [MIN_STEP_FACTOR] na pragu. */
         fun stepLengthFactor(peak: Float): Float {
             if (peak >= FULL_STEP_PEAK) return 1f

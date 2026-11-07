@@ -273,6 +273,21 @@ fun legBackTo(position: Offset, node: Offset, leg: List<Offset>, next: Offset, t
 }
 
 /**
+ * Teme linije rute između vrata [door] i čvora sobe [room] (sredina sobe): iz vrata upravno na zid, pa do sredine pod pravim uglom. Zid se
+ * vidi iz pravca hodnika ka vratima ([outside] - tačka pre vrata, on je upravan na zid). null: vrata su naspram sredine sobe (bez temena).
+ * Teren 07.11.2026 (snimak ekrana, bočna vrata Čitaonice): "voleo bih da bude upravna na vrata, a ne kosa".
+ */
+fun roomDoorCorner(room: Offset, door: Offset, outside: Offset): Offset? {
+    val alongX = abs(door.x - outside.x) >= abs(door.y - outside.y)
+    val corner = if (alongX) Offset(room.x, door.y) else Offset(door.x, room.y)
+    val minLeg = (room - door).getDistance() * MIN_CORNER_LEG
+    return corner.takeIf { (it - door).getDistance() > minLeg && (it - room).getDistance() > minLeg }
+}
+
+/** Kraći krak temena od ovog dela rastojanja vrata - sredina: vrata su praktično naspram sredine, ide se pravo. */
+private const val MIN_CORNER_LEG = 0.1f
+
+/**
  * Hod po stepeništu od ulaska: smer svakog koraka. Letovi su nizovi od bar [FLIGHT_STEPS] koraka istog smera; sprat se
  * menja samo okretom između dva leta. Okret na podestu pre prvog leta (korisnik se okreće ka letu) se ne broji
  * (03.10.2026, F III: okret od 200° ulevo kod stepeništa pre silaska bio bi "sprat", i to sa pogrešnom stranom).

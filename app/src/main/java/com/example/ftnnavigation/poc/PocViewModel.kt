@@ -697,7 +697,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val lengthM = locator.baseStepM(stepLengthM) * AccelStepDetector.stepLengthFactor(peak)
         learnStep(locator, step.headingDeg, peak)
         // Vreme koraka (senzor, isti sat kao elapsedRealtimeNanos) - zadržani koraci ([HandlingGate]) stižu kasnije.
-        val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs, stairGait.score(timeNs))
+        val reason = locator.step(step.headingDeg, lengthM, step.redoSteps, timeNs, stairGait.score(timeNs), peak)
         if (!locator.onStairs) stairGait.flat(timeNs)
         walkingDirection.nearStairs = locator.nearStairs
         walkingDirection.onStairs = locator.onStairs

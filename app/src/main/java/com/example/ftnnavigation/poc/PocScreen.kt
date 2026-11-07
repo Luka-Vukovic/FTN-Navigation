@@ -778,17 +778,22 @@ private fun DrawScope.drawRoute(
         val here = Offset(position.x * size.width, position.y * size.height)
         moveTo(here)
         drawing = true
-        // Ruta kreće od čvora stepeništa iza tačke na traci kraka (račvanje AMF S1), a sledeći čvor je na traci između (bočna vrata
-        // Čitaonice): od tačke trakom do njega, ne do račvanja pa nazad.
+        // Ruta kreće od čvora stepeništa iza tačke na traci kraka (račvanje AMF S1), a sledeći čvorovi su na traci između (bočna vrata
+        // Čitaonice): od tačke trakom do poslednjeg od njih, ne do račvanja pa nazad.
         val first = nodes.getOrNull(0)
-        val second = nodes.getOrNull(1)
-        if (first != null && second != null && first.isHere() && second.isHere()) {
+        if (first != null && first.isHere()) {
             val tolerance = ROUTE_ON_LEG_TOLERANCE.toPx()
-            stairLegs.entries.firstNotNullOfOrNull { (key, leg) ->
-                if (key.first != first.id) null else legBackTo(here, first.toOffset(), leg.map { it.toOffset() }, second.toOffset(), tolerance)
-            }?.let { back ->
-                back.forEach(::lineTo)
-                skip = 1
+            fun backTo(index: Int): List<Offset>? {
+                val to = nodes.getOrNull(index)?.takeIf { it.isHere() } ?: return null
+                return stairLegs.entries.firstNotNullOfOrNull { (key, leg) ->
+                    if (key.first != first.id) null else legBackTo(here, first.toOffset(), leg.map { it.toOffset() }, to.toOffset(), tolerance)
+                }
+            }
+            var last = 0
+            while (backTo(last + 1) != null) last++
+            if (last > 0) {
+                backTo(last)?.forEach(::lineTo)
+                skip = last
             }
         }
     }
@@ -819,6 +824,14 @@ private fun DrawScope.drawRoute(
                 legDone = true
             } else {
                 previous?.let { bends[it.id to node.id] }?.let { lineTo(Offset(it.x * size.width, it.y * size.height)) }
+                // Iz vrata u sobu i iz sobe na vrata: upravno na zid, pa pod pravim uglom do sredine sobe ([roomDoorCorner]).
+                val before = previous
+                when {
+                    node.type == NodeType.PROSTORIJA && before?.type == NodeType.VRATA ->
+                        nodes.getOrNull(i - 2)?.takeIf { it.isHere() }?.let { roomDoorCorner(p, before.toOffset(), it.toOffset()) }?.let(::lineTo)
+                    node.type == NodeType.VRATA && before?.type == NodeType.PROSTORIJA ->
+                        next?.takeIf { it.isHere() }?.let { roomDoorCorner(before.toOffset(), p, it.toOffset()) }?.let(::lineTo)
+                }
                 lineTo(p)
             }
         } else {

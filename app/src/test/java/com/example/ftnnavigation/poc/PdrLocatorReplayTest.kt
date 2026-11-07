@@ -197,7 +197,7 @@ class PdrLocatorReplayTest {
                 stepLearner.reset()
             }
             lastScore = gait?.score(s.timeNs)
-            val reason = locator.step(s.walk.headingDeg, lengthM, s.walk.redoSteps, s.timeNs, lastScore)
+            val reason = locator.step(s.walk.headingDeg, lengthM, s.walk.redoSteps, s.timeNs, lastScore, s.peak)
             if (!locator.onStairs) gait?.flat(s.timeNs)
             direction?.nearStairs = locator.nearStairs
             direction?.onStairs = locator.onStairs
@@ -399,6 +399,9 @@ class PdrLocatorReplayTest {
                         val before = locator.position()
                         val missLine = missRow(file, sec(t), steps, anchorKind, locator, place, Offset(f[5].toFloat(), f[6].toFloat()))
                         val check = locator.setPosition(place, Offset(f[5].toFloat(), f[6].toFloat()), timeNs = t)
+                        // PDR_PHONE_BIAS=1: ispravka smera posle označavanja kakvu je imao telefon (replay ume da nauči drugačiju, npr. 6° na
+                        // 07.11.2026, pa izlazak iz NTP-a koji telefon nije prepoznao u replay-u prolazi).
+                        if (System.getenv("PDR_PHONE_BIAS") == "1") locator.restoreBias(f[7].toFloat(), f.getOrNull(8)?.toFloatOrNull() ?: 0f, outside = place.isCampus)
                         direction?.nearStairs = locator.nearStairs
                         direction?.onStairs = locator.onStairs
                         // Označeno mesto zalepljeno za graf (ono što aplikacija posle prikazuje).

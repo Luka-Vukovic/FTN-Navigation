@@ -172,7 +172,8 @@ class CampusGraphTest {
     @Test
     fun buildingExits_nearestFromInside() {
         val exits = buildingExits(graph, "NTP").map { it.id }.toSet()
-        assertEquals(setOf("NTP-0-ULAZ", "NTP-0-ULAZ-FTN", "NTP-0-ULAZ-PASAZ-I", "NTP-0-ULAZ-PASAZ-Z"), exits)
+        // Bez zapadnog kraja PASAŽ-a (teren 07.11.2026, [NtpGraphTest.nearestExit_fromLiftL1_notWestEndOfPasaz]).
+        assertEquals(setOf("NTP-0-ULAZ", "NTP-0-ULAZ-FTN", "NTP-0-ULAZ-PASAZ-I"), exits)
         val nearest = exits.mapNotNull { graph.route("NTP-0-V1", it) }.minBy { it.durationSec }
         assertEquals("NTP-0-ULAZ-FTN", nearest.nodes.last().id)
         assertTrue(checkNotNull(resolveTarget(campus.building("NTP")!!.name!!, graph, campus)).isBuilding)
