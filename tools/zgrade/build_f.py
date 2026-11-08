@@ -126,8 +126,9 @@ def floor_0():
     return {
         "title": "Prizemlje",
         # Niše su zatvoreni mali hodnici sa jednim vratima ka glavnom hodniku (korisnik, 10.10.2026 uveče; na planu: niša
-        # 010A-C vrata desno, x 284-294; niša 011C/D vrata levo, x 383-393).
-        "paths": [poly((77, 96), (597, 96)), poly((228, 69), (296, 69)), poly((289, 69), (289, 96)),
+        # 010A-C vrata desno, x 284-294; niša 011C/D vrata levo, x 383-393). Teren 08.11.2026 (zadatak F 010), korisnik: "Vrata do
+        # mini-hodnika stoje centralno" - niša 010A-C ima vrata na sredini (x 262), ne desno kao na planu.
+        "paths": [poly((77, 96), (597, 96)), poly((228, 69), (296, 69)), poly((262, 69), (262, 96)),
                   poly((378, 71), (422, 71)), poly((388, 71), (388, 96))] + hall(385, 96),
         "corridors": [
             poly((74, 79), (600, 79), (600, 101), (560, 101), (560, 113), (74, 113)),  # hodnik (zapadni kraj ka toaletu)
@@ -243,23 +244,46 @@ def floor_2():
 
 
 def floor_3():
+    """
+    III sprat (teren 08.11.2026, korisnik na licu mesta + evakuacioni plan teren/izveštaj2/IMG_20261002_104108, ispravljen na 600 x 163:
+    pregrade i vrata očitani ponovo). Korisnik: "Mala prostorija pored stepenica je 300A, odmah pored je 300B, pa tek onda kreće
+    brojanje od 301. Naspram vrata 300A, stoje vrata 316. Druga strana kreće od 308, posle 309 ide 312A ..., pa se nastavlja brojanje
+    normalno, ali je 313 podeljeno 313A i 313. Prati evakuacioni plan." i (t-f319) "Nema prostorije između 318 i 319, 320 stoji čeono,
+    a sa druge strane su redom prostorije 324, 325, 326."
+    - Donji red od stepeništa ka zapadu: 300A (uz stepenište, ispod hola; vrata iz hola), 300B, 301 ... 307 (zapadni kraj).
+    - Gornji red od zapada: 308, 309, 312A, dve uske sobe BEZ BROJA (nije rečeno - za teren), 313A, 313, 314, 315, 316 (naspram 300A),
+      317, 318 (uska, 450-474 - do tada bez broja, a 318 je bila soba 400-450), 319 (474-549, ruta je tu stala - korisnik stigao).
+    - 320: na kraju hodnika pregrada sa vratima preko hodnika (x 525) - "čeono"; iza nje predvorje i dve sobe (bez broja).
+    - Istočno od stepeništa dole: 326, 325, 324 (vrata na hodnik po planu x 488, 503, 519; ispod 325/324 na planu simboli WC-a -
+      toalet III sprata do tada je bio PRETPOSTAVKA na tom mestu, sada ga nema).
+    Do tada (02.10.-08.11.) brojevi po obrascu sa table: 301-308 donji red, 309-320 gornji - pomereno za jednu-dve sobe.
+    """
     return {
         "title": "III sprat",
-        # Uži hodnik levo: prelaz na širi pod pravim uglom (27.10.2026; do tada koso 374 -> 390).
-        "paths": [poly((3, 90), (382, 90), (382, 98), (597, 98))] + hall(392, 98),
+        # Uži hodnik levo: prelaz na širi pod pravim uglom (27.10.2026; do tada koso 374 -> 390). Hodnik se završava na pregradi 320.
+        "paths": [poly((3, 90), (382, 90), (382, 98), (525, 98)), poly((385, 98), (385, 140))],
         "corridors": [
-            poly((0, 82), (600, 82), (600, 114), (398, 114), (398, 160), (387, 160), (387, 132), (374, 132),
-                 (374, 98), (0, 98)),
+            poly((0, 82), (525, 82), (525, 115), (398, 115), (398, 140), (373, 140), (373, 98), (0, 98)),
             poly((446, 114), (465, 114), (465, 160), (446, 160)),  # podest stepeništa
         ],
         "rooms": [
-            *rooms(3, 0, 82, [(0, 52, None), (52, 101, 9), (101, 126, 10), (126, 151, 11), (151, 175, 12),
-                              (175, 201, 13), (201, 251, 14), (251, 300, 15), (300, 350, 16), (350, 400, 17),
-                              (400, 450, 18), (450, 474, None), (474, 548, 19), (548, 600, 20)]),
-            *rooms(3, 98, 163, [(0, 52, 8), (52, 101, 7), (101, 151, 6), (151, 201, 5), (201, 251, 4),
-                                (251, 301, 3), (301, 350, 2), (350, 374, 1)]),
-            R(374, 387, 132, 163),  # ostava kod stepeništa
-            *rooms(3, 114, 163, [(465, 496, 26), (496, 537, TOALET), (559, 600, None)]),
+            # 08.11.2026 uveče (korisnik): dve uske sobe između 312A i 313A su 310 i 311; "318 definitivno nije uska soba ... ta uska soba
+            # je spojena sa širokom levo" (ulaz u učionicu je na prednjem kraju) - 318 = 400-474 sa oba vrata sa plana.
+            *rooms(3, 0, 82, [(0, 50, 8), (50, 100, 9), (100, 124, "F 312A"), (124, 149, 10), (149, 174, 11),
+                              (174, 199, "F 313A"), (199, 250, 13), (250, 300, 14), (300, 350, 15), (350, 400, 16),
+                              (400, 475, 18), (475, 549, 19), (549, 600, None)]),
+            *rooms(3, 98, 163, [(0, 50, 7), (50, 100, 6), (100, 149, 5), (149, 199, 4), (199, 250, 3),
+                                (250, 300, 2), (300, 350, 1)]),
+            R(350, 373, 98, 135, "F 300B"), R(350, 373, 135, 163), R(373, 397, 140, 163, "F 300A"),
+            # Istočni kraj po planu (korisnik: "bolje ispratiš desni deo ... ne moraju sve prostorije da budu pravougaone"): iza pregrade
+            # (x 525) predvorje 320 u obliku slova L - do zida N i naniže između kosog zida (325/324) i sobe desno; iz njega vrata u sobu
+            # gore desno (549-600) i dole desno (561-600, vrata sa leve strane). Kosi zid od ugla hodnika (525, 115) do (539, 130).
+            {**R(525, 600, 82, 114, "F 320"),  # rect = gornji deo (čvor i natpis u predvorju, ne u sobi desno)
+             "poly": [(525, 82), (600, 82), (600, 114), (561, 114), (561, 163), (539, 163), (539, 130), (525, 115)]},
+            R(465, 497, 115, 163, "F 326"), R(497, 514, 115, 142, "F 325"),
+            {**R(514, 539, 115, 142, "F 324"), "poly": [(514, 115), (525, 115), (539, 130), (539, 142), (514, 142)]},
+            R(497, 539, 142, 163),  # WC kabine ispod 325/324 (simboli na planu)
+            R(561, 600, 114, 163),
         ],
         # Poslednji sprat: samo krak naniže (južni); međupodest ispod je uži (do sobe 326).
         "flights": {"S": flights(398, 446, land=465, draw_up=False)},
@@ -272,7 +296,8 @@ def floor_3():
 # II: prekidi se ne vide, pa strelice evakuacije (na I spratu stoje tačno ispred vrata, do 1 px). Samo gde je razlika veća od ~0,4 m;
 # ostale sobe imaju vrata na sredini zida i to se slaže sa planom. Sobe sa dve strelice (63, 87 i 212, 237) su od 02.11.2026 po dve
 # sobe sa svojim vratima: 209 | 210 i 215 | 216 (do tada 209 sa vratima uz kraj hodnika i 214 sa dvoja vrata; vidi floor_2).
-# III: ispred 320 je pregrada sa vratima preko hodnika (x ~525) - nije nacrtana; II: kraj kod 223 je nejasan - ostaje.
+# III: ispred 320 je pregrada sa vratima preko hodnika (x ~525) - od 08.11.2026 nacrtana (320 je predvorje iza nje); II: kraj kod 223 je
+# nejasan - ostaje.
 DOORS = {
     1: {"F 124": [(388, 82)], "F 125": [(486, 82)], "F 126": [(583, 82)],
         "F 1": [(494, 113)], "F 2": [(556, 113)], "F 3": [(590, 113)]},
@@ -280,8 +305,13 @@ DOORS = {
         "F 224": [(511, 82)],
         "F 207": [(64, 114)], "F 206": [(137, 114)], "F 205": [(163, 114)], "F 204": [(212, 114)], "F 202": [(314, 114)],
         "F 226": [(493, 114)], "F 227": [(556, 114)], "F 228": [(591, 114)]},
-    3: {"F 309": [(71, 82)], "F 319": [(486, 82)], "F 320": [(558, 82)],
-        "F 308": [(40, 98)], "F 307": [(72, 98)], "F 326": [(487, 114)]},
+    # III: vrata ponovo očitana sa ispravljenog plana 08.11.2026 (prekidi u zidu i lukovi), za sve sobe.
+    3: {"F 308": [(40, 82)], "F 309": [(71, 82)], "F 312A": [(113, 82)], "F 310": [(137, 82)], "F 311": [(161, 82)],
+        "F 313A": [(186, 82)], "F 313": [(225, 82)], "F 314": [(275, 82)], "F 315": [(325, 82)], "F 316": [(373, 82)],
+        "F 318": [(422, 82), (463, 82)], "F 319": [(485, 82)], "F 320": [(525, 99)],
+        "F 307": [(40, 98)], "F 306": [(71, 98)], "F 305": [(124, 98)], "F 304": [(175, 98)], "F 303": [(226, 98)],
+        "F 302": [(276, 98)], "F 301": [(325, 98)], "F 300B": [(367, 98)], "F 300A": [(382, 140)],
+        "F 326": [(487, 115)], "F 325": [(502, 115)], "F 324": [(518, 115)]},
 }
 
 

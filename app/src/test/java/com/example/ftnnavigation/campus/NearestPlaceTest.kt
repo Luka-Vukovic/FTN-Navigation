@@ -31,7 +31,9 @@ class NearestPlaceTest {
         // NB: suteren 2, prizemlje 1, I-IV po 2; AMF suteren 2; Kula 8 spratova po 2; F prizemlje (evakuacioni plan, teren 10.10.2026) i I-III; NTP prizemlje 1, I-IV
         // uz liftove i blok u donjem srednjem redu (i na III - teren 08.10.2026; do tada je tu bio NTP-315).
         assertEquals(
-            mapOf("NB" to 11, "AMF" to 2, "KULA" to 16, "F" to 4, "NTP" to 9, "ITC" to 8),
+            // Kula (08.11.2026, evakuacioni planovi): blok toaleta ispod stepeništa na svakom spratu (jedan čvor). F III: na mestu
+            // pretpostavljenog toaleta su sobe 324 i 325 (korisnik).
+            mapOf("NB" to 11, "AMF" to 2, "KULA" to 10, "F" to 3, "NTP" to 9, "ITC" to 8),
             toilets.groupingBy { it.buildingId }.eachCount(),
         )
         for (toilet in toilets) {
@@ -66,7 +68,8 @@ class NearestPlaceTest {
 
     @Test
     fun nearestToilet_onSameFloor() {
-        for ((room, building, floor) in listOf(Triple("204", "NB", 2), Triple("Biblioteka", "AMF", -1), Triple("Kula 905", "KULA", 9))) {
+        // Biblioteka: od 08.11.2026 Kula P ima blok toaleta (evakuacioni plan) - kroz trem bliži od toaleta AMF −1 (kod B007 i GRID-1).
+        for ((room, building, floor) in listOf(Triple("204", "NB", 2), Triple("Biblioteka", "KULA", 0), Triple("Kula 905", "KULA", 9))) {
             val toilet = nearest(PlaceKind.TOALET, from(room)).first().node
             assertEquals(room, building to floor, toilet.buildingId to toilet.floor)
         }

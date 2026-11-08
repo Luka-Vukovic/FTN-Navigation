@@ -276,6 +276,16 @@ private const val AT_GATE_M = 0.3
 /** Izlazak kroz kraj hodnika: slobodna PDR pozicija je bar ovoliko iza čvora, napolje. */
 private const val PASS_BEYOND_M = 1.0
 
+/** Izlazak kroz spoljna vrata kad tačka kasni ([PdrLocator] leaveThroughOuterDoor): slobodna pozicija iza linije zida bar ovoliko... */
+private const val OUTER_DOOR_BEYOND_M = 0.3
+
+/** ... ona i tačka na grafu najviše ovoliko od vrata... */
+private const val OUTER_DOOR_NEAR_M = 5.0
+
+/** ... i bar jedan od poslednjih [OUTER_DOOR_STEPS] koraka do ovoliko od pravca kroz zid. */
+private const val OUTER_DOOR_HEADING_DEG = 30f
+private const val OUTER_DOOR_STEPS = 3
+
 /** Posle prelaza bar ovoliko koraka bez novog prelaza (da tačka ne skače napred-nazad na vratima). */
 private const val MIN_STEPS_BETWEEN_CHANGES = 4
 
@@ -618,11 +628,26 @@ private const val EXIT_OVERFLOW_STEPS = 3
  */
 private const val FLIGHT_PASSAGE_STEPS = 6
 
-/** Iz prolaza na međupodest ([PdrLocator] arriveOnFlight): najviše ovoliko koraka okreta ka kraku pre nego što krak počne. */
-private const val APPROACH_STEPS = 6
+/**
+ * Iz prolaza na međupodest ([PdrLocator] arriveOnFlight): najviše ovoliko koraka do kraka i okreta ka njemu pre nego što krak počne.
+ * Teren 08.11.2026 (pasarela -> F I): 3 koraka pravo do podesta, pa okret ulevo kroz 4 koraka (319, 307, 288, 270°, krak ~260°).
+ */
+private const val APPROACH_STEPS = 8
 
 /** Prolaz sa strane međupodesta pri silasku ([PdrLocator] sideGateDown): hod posle okreta do ovoliko od pravca ka njemu. */
 private const val SIDE_GATE_DEG = 45f
+
+/**
+ * Posle prolaza na međupodest bez odredišta ([PdrLocator] PassageDescent): medijana znaka stepenica 3 koraka od ovoliko = silazak (na kraku
+ * naniže ~0,8-1,8; teren 08.11.2026 i hodnik −1 ima pojedinačne korake do ~1,1, ali medijana uglavnom ~0,5)...
+ */
+private const val PASSAGE_DESCENT_SCORE = 0.75f
+
+/** ... u prvih ovoliko koraka posle dolaska. */
+private const val PASSAGE_DESCENT_STEPS = 8
+
+/** Penjanje: prolaz sprata pored međupodesta ([PdrLocator] landingGateBeside) najviše ovoliko od kraja prvog kraka (F P: 1,3 m). */
+private const val LANDING_BESIDE_GATE_M = 3.0
 
 /** Vidi [PdrLocator] turningToSideGate: prolaz sa strane (ne pravo ispred kraka), smer još na putu ka njemu, koraci čekanja. */
 private const val SIDE_GATE_MIN_DEG = 45f
@@ -1112,6 +1137,8 @@ class PdrLocator(
         var doneM: Double,
         /** Prolaz sa međupodesta (AMF S1: trem ka Kuli) - hod po stepeništu pre njega, za povratak na međupodest. */
         val resume: Climb? = null,
+        /** Niži nivo istog međupodesta ([PassageDescent]) - kad nivo nije izabran po odredištu. */
+        val descent: Node? = null,
     ) {
         val lengthM = distance(start, end)
 
@@ -1121,6 +1148,44 @@ class PdrLocator(
     }
 
     private var passage: Passage? = null
+
+    /**
+     * Prolaz je stigao na međupodest na nivo najbliži spratu sa koga se dolazi, jer odredište nije u toj zgradi ([targetOf]), a sa
+     * podesta krak vodi i na niži nivo ([alt], prolaz tog nivoa). Ako prvi koraci posle dolaska po ubrzanju jasno liče na silazak
+     * ([PASSAGE_DESCENT_SCORE], [PASSAGE_DESCENT_STEPS]), tačka prelazi na niži nivo i ti koraci se ponove niz krak. Teren 08.11.2026
+     * (Kula P -> trem -> AMF, bez odredišta): korisnik je sa podesta S1 sišao srednjim krakom na −1 i izašao kroz glavni ulaz, a tačka je
+     * otišla bočnim krakom u prizemlje i ostala na kraju hodnika ("prešla je na P u AMF, a odatle ne može da izađe"). Sa podesta srednji
+     * krak naniže i bočni naviše idu istim pravcem (sever), pa smer ne razlikuje nivoe.
+     */
+    private class PassageDescent(val alt: Node, val walkedX: Double, val walkedY: Double) {
+        val steps = ArrayList<PendingStep>()
+        val scores = ArrayList<Float?>()
+    }
+
+    private var passageDescent: PassageDescent? = null
+
+    /** Vidi [PassageDescent]; null: korak ide dalje uobičajeno. */
+    private fun descendAfterPassage(azimuthDeg: Float, lengthM: Float, timeNs: Long?, stairScore: Float?): PlaceReason? {
+        val d = passageDescent ?: return null
+        d.steps += PendingStep(azimuthDeg, lengthM, 0, timeNs)
+        d.scores += stairScore
+        // Prvi korak posle dolaska je često još kraj prolaza (trem se spušta ka podestu - znak je i tamo visok).
+        val recent = d.scores.drop(1).takeLast(GAIT_STEPS)
+        val median = recent.takeIf { it.size == GAIT_STEPS && it.none { s -> s == null } }?.map { it!! }?.sorted()?.get(GAIT_STEPS / 2)
+        if (median == null || median < PASSAGE_DESCENT_SCORE) {
+            if (d.steps.size >= PASSAGE_DESCENT_STEPS) passageDescent = null
+            return null
+        }
+        passageDescent = null
+        trace?.invoke("posle prolaza silazak po ubrzanju (${d.steps.size} koraka) - ${d.alt.id}")
+        climb = null
+        landingClimb = null
+        walkedX = d.walkedX
+        walkedY = d.walkedY
+        var reason = arriveOnLanding(d.alt) ?: return null
+        for (s in d.steps) step(s.azimuthDeg, s.lengthM, 0, s.timeNs)?.let { reason = it }
+        return reason
+    }
 
     private val stairs: Map<String, Stair> = stairsOf(graph)
 
@@ -1277,6 +1342,9 @@ class PdrLocator(
 
     /** Vremena poslednja tri koraka van stepeništa (u zgradi) - ulazak u stepenište samo u hodu ([STAIR_ENTER_MAX_GAP_NS]). */
     private val recentStepNs = ArrayDeque<Long>()
+
+    /** Smer (na planu) poslednjih [OUTER_DOOR_STEPS] koraka u zgradi - za [leaveThroughOuterDoor]. */
+    private val recentPlanHeadings = ArrayDeque<Float>()
 
     private fun gaitDescends(scores: Collection<Float?>): Boolean =
         scores.size >= GAIT_STEPS && scores.count { it != null && it >= DESCENT_START_SCORE } >= GAIT_START_STEPS
@@ -1672,6 +1740,7 @@ class PdrLocator(
         raw = null
         match = null
         passage = null
+        passageDescent = null
         anchor = null
         anchorPlace = null
         exitDetector = null
@@ -1796,6 +1865,7 @@ class PdrLocator(
             if (climb == null && startTapClimb(tap, azimuthDeg, timeNs)) return climbStep(climb!!, azimuthDeg, redoSteps, timeNs, stairScore)
             if (match == null) match = matcherFor(place)?.start(raw.x, raw.y)
         }
+        if (passageDescent != null) descendAfterPassage(azimuthDeg, lengthM, timeNs, stairScore)?.let { return it }
         climb?.let { return climbStep(it, azimuthDeg, redoSteps, timeNs, stairScore) }
         landingClimb?.let { c ->
             turnAtGate(c, azimuthDeg)?.let { return it }
@@ -1864,10 +1934,13 @@ class PdrLocator(
             clearSpiral()
             recentScores.clear()
             recentStepNs.clear()
+            recentPlanHeadings.clear()
         }
         if (!place.isCampus) {
             recentScores.addLast(stairScore)
             if (recentScores.size > GAIT_STEPS) recentScores.removeFirst()
+            recentPlanHeadings.addLast(headingOnPlan(azimuthDeg))
+            if (recentPlanHeadings.size > OUTER_DOOR_STEPS) recentPlanHeadings.removeFirst()
             if (timeNs != null && redo == 0) {
                 recentStepNs.addLast(timeNs)
                 if (recentStepNs.size > 3) recentStepNs.removeFirst()
@@ -1888,7 +1961,7 @@ class PdrLocator(
             else spiralNearby(azimuthDeg)?.let { return it }
         }
         if (++stepsSinceChange < MIN_STEPS_BETWEEN_CHANGES) return null
-        return if (place.isCampus) enterBuilding(lengthM.toDouble() * (redo + 1)) else leaveThroughGateway()
+        return if (place.isCampus) enterBuilding(lengthM.toDouble() * (redo + 1)) else leaveThroughGateway() ?: leaveThroughOuterDoor()
     }
 
     /**
@@ -2111,6 +2184,7 @@ class PdrLocator(
         raw = point
         match = matcherFor(place)?.start(point.x, point.y)
         passage = null
+        passageDescent = null
         climb = null
         tapFlight = null
         spiralWalk = null
@@ -3121,8 +3195,13 @@ class PdrLocator(
             ClimbPart.FIRST, ClimbPart.SECOND -> {
                 // Iz prolaza na međupodest pa okret ka kraku (F-blok 31.10.2026: sa pasarele levo za 90°, 4-5 koraka): tačka
                 // čeka na početku kraka dok smer ne legne na krak.
+                // Čeka i dok se okret ka kraku nastavlja (korak bliže kraku za više od [STRAIGHT_STEP_DEG]): teren 08.11.2026 (pasarela ->
+                // F I -> III) - smer kraka uzet usred okreta (307°, krak ~260°), pa je nastavak okreta na kraku uzet za okret na podestu
+                // sprata i tačka je izašla na I sprat dok se korisnik penjao na II.
                 c.approach?.let { flight ->
-                    if (abs(angleDiffDeg(heading, flight)) > TURN_START_DEG && ++c.approachSteps <= APPROACH_STEPS) return false
+                    val off = angleDiffDeg(heading, flight)
+                    val turning = abs(off) > TURN_START_DEG || (abs(turn) > STRAIGHT_STEP_DEG && off * turn < 0)
+                    if (turning && ++c.approachSteps <= APPROACH_STEPS) return false
                     c.approach = null
                     c.flightHeading = heading
                 }
@@ -3264,7 +3343,8 @@ class PdrLocator(
                 // Amfiteatri), inače nema kuda - nije se ni penjao (okret u hodniku pored stepeništa) -> nazad na dno kraka.
                 if (c.straight < LANDING_EXIT_STEPS) return false
                 if (c.part == ClimbPart.LANDING) {
-                    val gate = if (c.up) c.stair.nodes[place.floor]?.let { landingGate(c.stair, it) } else sideGateDown(c, heading)
+                    val gate = if (c.up) c.stair.nodes[place.floor]?.let { landingGate(c.stair, it) } ?: landingGateBeside(c, heading)
+                    else sideGateDown(c, heading)
                     if (gate == null && abs(c.turned) >= LANDING_ACROSS_TURN_DEG && c.straight < LANDING_ACROSS_STEPS) return false
                     if (gate == null && !c.up && turningToSideGate(c, heading)) return false
                     if (gate != null && !c.up) {
@@ -3399,6 +3479,28 @@ class PdrLocator(
         val g = local(gate.second.x, gate.second.y)
         if (distance(turn, g) < 0.5) return null
         return gate.takeIf { abs(angleDiffDeg(headingOnPlan(heading), azimuthOf(g.x - turn.x, g.y - turn.y))) <= SIDE_GATE_DEG }
+    }
+
+    /**
+     * Penjanje, međupodest: prolaz ovog sprata do [LANDING_BESIDE_GATE_M] od mesta okreta (kraj prvog kraka), ka kome hoda (do
+     * [SIDE_GATE_DEG]) - u grafu nije na putu preko podesta ([landingGate]). F prizemlje: pasarela je vezana pravo za hodnik (replay
+     * 04.10.2026 - ravnim hodom iz hodnika), a teren 08.11.2026 (F 010 -> Skriptarnica): krakom naviše na podest pa desno na pasarelu -
+     * posle 8 koraka "pravo" tačka je vraćena na dno kraka i tamo stajala ("Zaglavila se tačka na stepeništu, podestu F-bloka").
+     * Vraća (čvor pre prolaza, čvor prolaza) ili null.
+     */
+    private fun landingGateBeside(c: Climb, heading: Float): Pair<Node, Node>? {
+        val path = pathOf(c) ?: return null
+        val turn = local(path[1].x, path[1].y)
+        val onPlan = headingOnPlan(heading)
+        return gateways[place].orEmpty().filter { !it.viaFlight }.mapNotNull { gw ->
+            val g = local(gw.node.x, gw.node.y)
+            val d = distance(turn, g)
+            if (d > LANDING_BESIDE_GATE_M || d < 0.3) return@mapNotNull null
+            if (abs(angleDiffDeg(onPlan, azimuthOf(g.x - turn.x, g.y - turn.y))) > SIDE_GATE_DEG) return@mapNotNull null
+            val inner = graph.neighbors(gw.node.id).map { it.first }
+                .firstOrNull { it.buildingId == gw.node.buildingId && it.floor == gw.node.floor } ?: return@mapNotNull null
+            (inner to gw.node) to d
+        }.minByOrNull { it.second }?.first
     }
 
     /**
@@ -3923,8 +4025,55 @@ class PdrLocator(
             val outward = PointM((start.x - back.x) / length, (start.y - back.y) / length)
             val resume = landingClimb?.takeIf { it.exitGate?.second?.id == gate.node.id }
             val target = targetOf(gate)
-            val passage = Passage(place, target, start, graph.position(target), outward, beyond, resume)
+            // Nivo po spratu sa koga se dolazi (ne po odredištu): niži nivo istog međupodesta ostaje moguć ([PassageDescent]).
+            val descent = if (destination?.buildingId == gate.target.buildingId) null
+            else (listOf(gate.target) + gate.alternatives).filter { it.floor < target.floor }.maxByOrNull { it.floor }
+            passageDescent = null
+            val passage = Passage(place, target, start, graph.position(target), outward, beyond, resume, descent)
             trace?.invoke("prolaz ${gate.node.id} -> ${target.id}${if (resume != null) " (sa međupodesta)" else ""}")
+            landingClimb = null
+            this.passage = passage
+            stepStarts.clear()
+            return updatePassage(passage)
+        }
+        return null
+    }
+
+    /**
+     * Izlazak kroz spoljna vrata (ulaz zgrade ka kampusu) kad tačka na grafu kasni za korisnikom: slobodna PDR pozicija je iza linije
+     * zida sa vratima (duž ose plana) bar [OUTER_DOOR_BEYOND_M], i ona i tačka na grafu su do [OUTER_DOOR_NEAR_M] od vrata, a bar
+     * jedan od poslednjih [OUTER_DOOR_STEPS] koraka ide napolje (do [OUTER_DOOR_HEADING_DEG] od pravca kroz zid). Teren 08.11.2026
+     * (glavni ulaz NTP-a, kao 07.11.): tačka je bila 1,5 m iza korisnika, na čvoru hodnika pred vratima; on je izašao i odmah skrenuo
+     * uz zid, tačka je otišla hodnikom BB, a slobodna pozicija je prešla liniju zida samo 0,5 m ([leaveThroughGateway] traži da tačka
+     * stoji na vratima i 1 m) - "izađem dva koraka pre tačke, skrenemo, i onda zato tačka nikad ne izađe".
+     */
+    private fun leaveThroughOuterDoor(): PlaceReason? {
+        val match = match ?: return null
+        val scale = graph.placement(place.buildingId).scale
+        fun m(x: Float, y: Float) = PointM(x * scale.widthM.toDouble(), y * scale.heightM.toDouble())
+        val onEdge = m(match.point.x, match.point.y)
+        val free = m(match.x, match.y)
+        for (gate in gateways[place].orEmpty()) {
+            if (gate.viaFlight || gate.target.type != NodeType.ULAZ || gate.target.isIndoor) continue
+            val end = m(gate.node.x, gate.node.y)
+            if (distance(onEdge, end) > OUTER_DOOR_NEAR_M || distance(free, end) > OUTER_DOOR_NEAR_M) continue
+            val other = graph.neighbors(gate.node.id).map { it.first }
+                .firstOrNull { it.buildingId == gate.node.buildingId && it.floor == gate.node.floor } ?: continue
+            val inner = m(other.x, other.y)
+            val square = if (abs(end.x - inner.x) >= abs(end.y - inner.y)) PointM(inner.x, end.y) else PointM(end.x, inner.y)
+            if (distance(square, end) < 0.1) continue
+            val beyond = along(free, end, square, end)
+            if (beyond < OUTER_DOOR_BEYOND_M) continue
+            val out = azimuthOf(end.x - square.x, end.y - square.y)
+            if (recentPlanHeadings.none { abs(angleDiffDeg(it, out)) <= OUTER_DOOR_HEADING_DEG }) continue
+            val start = graph.position(gate.node)
+            val back = graph.position(other)
+            val length = distance(back, start).takeIf { it > 0 } ?: continue
+            val outward = PointM((start.x - back.x) / length, (start.y - back.y) / length)
+            val target = targetOf(gate)
+            // Već je iza vrata: prolaz počinje kao da je prešao do njih.
+            val passage = Passage(place, target, start, graph.position(target), outward, maxOf(beyond, PASS_BEYOND_M), null)
+            trace?.invoke(String.format(Locale.ROOT, "spoljna vrata ${gate.node.id} -> ${target.id} (iza zida %.1f m)", beyond))
             landingClimb = null
             this.passage = passage
             stepStarts.clear()
@@ -4020,6 +4169,7 @@ class PdrLocator(
                 arriveOnFlight(passage.target)?.let { return it }
                 arriveOnLanding(passage.target)?.let { return it }
                 moveTo(passage.target)
+                passageDescent = passage.descent?.let { PassageDescent(it, walkedX, walkedY) }
                 if (passage.target.type == NodeType.ULAZ && !passage.target.isIndoor) exitedEntrance = passage.target
                 return PlaceReason.PROLAZ
             }

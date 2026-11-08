@@ -70,7 +70,10 @@ class FGraphTest {
         val rooms = schedule.timetables.flatMap { it.classes }.map { it.room }.distinct()
             .filter { buildingOfRoom(it) == FPlan.BUILDING_ID }
         assertTrue(rooms.toString(), rooms.containsAll(listOf("F 315", "F 317", "F 318", "F 319", "F-208")))
-        for (name in rooms) {
+        // F 317 (08.11.2026): po korisniku je 316 naspram 300A, a 318 odmah do nje (široka soba sa uskom) - 317 nije u gornjem redu, mesto
+        // nepoznato (za teren) - ruta do zgrade.
+        assertTrue(checkNotNull(resolveTarget("F 317", graph, campus)).approximate)
+        for (name in rooms - "F 317") {
             val target = checkNotNull(resolveTarget(name, graph, campus)) { name }
             assertFalse(name, target.approximate)
             assertEquals(name, FPlan.BUILDING_ID, target.node.buildingId)
@@ -85,7 +88,10 @@ class FGraphTest {
      */
     @Test
     fun numbering_fromFloorSigns() {
-        for ((floor, numbers) in mapOf(1 to listOf(101, 113, 114, 126), 2 to listOf(200, 208, 209, 225), 3 to listOf(301, 308, 309, 320))) {
+        // III od 08.11.2026 po korisniku na licu mesta: 300A uz stepenište, 307 na kraju, gore od kraja 308 ... 319, pa 320 na zapadnom
+        // kraju hodnika (predvorje iza pregrade).
+        for ((floor, numbers) in mapOf(1 to listOf("101", "113", "114", "126"), 2 to listOf("200", "208", "209", "225"),
+            3 to listOf("300A", "307", "308", "320"))) {
             val (first, eastEnd, southFirst, westEnd) = numbers.map { room("F $it") }
             // Dno kraka naniže (od 31.10.2026 stepenište ima krakove; III sprat nema krak naviše ni čvor F-3-S).
             val stairs = checkNotNull(graph.node("F-$floor-S-D"))
@@ -133,6 +139,31 @@ class FGraphTest {
         assertEquals(17, upper.map { it.id }.distinct().size)
         // Redom od istoka (levo na planu) ka zapadu.
         assertEquals(upper, upper.sortedBy { it.x })
+    }
+
+    /**
+     * Teren 08.11.2026 (korisnik na III spratu): dole od stepeništa 300A, 300B, pa 301-307 ka kraju; gore od istog kraja 308, 309,
+     * 312A, ..., 313A, 313-319; vrata 316 naspram 300A; između 318 i 319 nema sobe; 320 "čeono" na kraju hodnika (pregrada);
+     * istočno od stepeništa 326, 325, 324. Toaleta na III više nema (na tom mestu su 324 i 325).
+     */
+    @Test
+    fun thirdFloor_numbersFromSurvey() {
+        fun doorOf(name: String) = graph.neighbors(room(name).id).single().first
+        val lower = listOf("F 300A", "F 300B") + (301..307).map { "F $it" }
+        assertEquals(lower, lower.sortedByDescending { room(it).x })
+        // Uske sobe između 312A i 313A su 310 i 311; 318 je široka soba spojena sa uskom (korisnik, 08.11. uveče).
+        val upper = listOf("F 308", "F 309", "F 312A", "F 310", "F 311", "F 313A", "F 313", "F 314", "F 315", "F 316", "F 318", "F 319")
+        assertEquals(upper, upper.sortedBy { room(it).x })
+        assertTrue(abs(doorOf("F 316").x - doorOf("F 300A").x) < 0.02f)
+        val third = graph.nodes.filter { it.buildingId == FPlan.BUILDING_ID && it.floor == 3 }
+        val between = third.filter {
+            it.type == NodeType.PROSTORIJA && it.y <= room("F 319").y + 0.01f && it.x > room("F 318").x && it.x < room("F 319").x
+        }
+        assertTrue(between.toString(), between.isEmpty())
+        assertEquals(doorOf("F 320").id, third.filter { it.type == NodeType.VRATA }.maxBy { it.x }.id)
+        val east = listOf("F 326", "F 325", "F 324")
+        assertEquals(east, east.sortedBy { room(it).x })
+        assertTrue(third.none { it.amenity != null })
     }
 
     /** Iz Amfiteatara na III sprat F-bloka: pasarelom (bez staza) pa stepeništem. */

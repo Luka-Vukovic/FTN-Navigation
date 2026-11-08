@@ -22,7 +22,7 @@
         <!-- Hodnici -->
         <path
             android:fillColor="#FFE8EEF4"
-            android:pathData="M207,432 L287,432 L287,511 L207,511 Z M263,402 L333,402 L333,462 L263,462 Z M335,404 L420,404 L420,440 L335,440 Z" />
+            android:pathData="M208,432 L285,432 L285,501 L208,501 Z M263,402 L333,402 L333,461 L263,461 Z M285,475 L335,475 L335,482 L285,482 Z M335,404 L420,404 L420,440 L335,440 Z" />
 
         <!-- Spiralno stepenište -->
         <path
@@ -50,17 +50,17 @@
             android:strokeColor="#FF455A64"
             android:strokeWidth="1.5"
             android:fillColor="#FFFFCC80"
-            android:pathData="M224,447 L263,447 L263,478 L224,478 Z" />
+            android:pathData="M229,452 L263,452 L263,475 L229,475 Z" />
         <path
             android:strokeColor="#FF455A64"
             android:strokeWidth="0.8"
-            android:pathData="M224,447 L263,478 M263,447 L224,478" />
+            android:pathData="M229,452 L263,475 M263,452 L229,475" />
 
         <!-- Prostorije -->
         <path
             android:strokeColor="#FF455A64"
             android:strokeWidth="1.5"
-            android:pathData="M155,375 L192,375 L192,432 L155,432 Z M192,375 L227,375 L227,432 L192,432 Z M227,375 L263,375 L263,432 L227,432 Z M263,375 L298,375 L298,402 L263,402 Z M298,375 L333,375 L333,402 L298,402 Z M155,432 L207,432 L207,472 L155,472 Z M155,472 L207,472 L207,511 L155,511 Z M155,511 L228,511 L228,554 L155,554 Z M228,511 L263,511 L263,554 L228,554 Z M263,511 L333,511 L333,554 L263,554 Z M287,465 L333,465 L333,482 L287,482 Z M287,482 L333,482 L333,511 L287,511 Z" />
+            android:pathData="M155,375 L192,375 L192,432 L155,432 Z M192,375 L227,375 L227,432 L192,432 Z M227,375 L263,375 L263,432 L227,432 Z M263,375 L298,375 L298,402 L263,402 Z M298,375 L333,375 L333,402 L298,402 Z M155,432 L208,432 L208,465 L155,465 Z M155,465 L208,465 L208,501 L155,501 Z M155,501 L228,501 L228,554 L155,554 Z M228,501 L263,501 L263,554 L228,554 Z M263,501 L335,501 L335,554 L263,554 Z M285,482 L335,482 L335,501 L285,501 Z M285,461 L333,461 L333,475 L285,475 Z" />
 
         <!-- Spoljni zid -->
         <path

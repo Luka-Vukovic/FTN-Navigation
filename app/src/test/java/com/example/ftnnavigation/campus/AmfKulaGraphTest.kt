@@ -129,7 +129,7 @@ class AmfKulaGraphTest {
         val ids = checkNotNull(graph.route("NB-1-H677_423", room("Skriptarnica").id)).nodes.map { it.id }
         assertTrue(ids.toString(), "NB-0-S" in ids && "KULA-0-PROLAZ-NB" in ids)
         assertFalse(ids.toString(), ids.any { it.startsWith("KULA-1-") })
-        assertTrue(checkNotNull(graph.route(room("101").id, room("Kula 203").id)).nodes.any { it.id == "KULA-2-S" })
+        assertTrue(checkNotNull(graph.route(room("101").id, room("Dekanat").id)).nodes.any { it.id == "KULA-2-S" })
     }
 
     /** Sala nije usputni čvor: do AR sala ide se hodnicima (preko Kule), ne kroz amfiteatar. */
@@ -151,6 +151,28 @@ class AmfKulaGraphTest {
         assertEquals("905", KulaPlan.label(target.name!!))
     }
 
+    /**
+     * Teren 08.11.2026: Kula P, II, III i IV po evakuacionim planovima, ostali spratovi po obrascu. II: dole 208-212 i mala 213 desno od
+     * donjeg hodnika (do tada 213 na mestu 212), Dekanat gore u sredini. Krajnje sobe bez vrata na hodnik se ulaze kroz susednu sobu.
+     * P: kod FtnGO "018" su toaleti. IV-IX: mala soba desno je n13 (FtnGO n15).
+     */
+    @Test
+    fun kula_evacuationPlans() {
+        val lower2 = (208..212).map { room("Kula $it") }
+        assertEquals(lower2, lower2.sortedBy { it.x })
+        assertTrue(room("Kula 213").y < lower2.first().y && room("Kula 213").x > room("Kula 211").x)
+        assertEquals(2, room("Dekanat").floor)
+        for ((target, inside) in listOf("Kula 401" to "KULA-4-H280_416", "Kula 412" to "KULA-4-H280_512",
+            "Kula 405" to "KULA-4-H175_440", "Kula 306B" to "KULA-3-H271_512")) {
+            val ids = checkNotNull(graph.route(KulaPlan.ENTRANCE_ID, room(target).id)).nodes.map { it.id }
+            assertTrue("$target: $ids", inside in ids)
+        }
+        assertNull(graph.room("Kula 018"))
+        assertTrue(graph.nodes.any { it.buildingId == KulaPlan.BUILDING_ID && it.floor == 0 && it.amenity != null })
+        assertNotNull(graph.room("Kula 913"))
+        assertNull(graph.room("Kula 415"))
+    }
+
     /** Kula spaja NB i Amfiteatre: iz prizemlja NB-a kroz Kulu i trem, bez izlaska na staze. */
     @Test
     fun kulaConnectsNbAndAmf() {
@@ -164,8 +186,9 @@ class AmfKulaGraphTest {
     @Test
     fun kulaHall_fromNbPassageStraightToPorch() {
         val route = checkNotNull(graph.route("KULA-0-PROLAZ-NB", "KULA-0-PROLAZ-AMF")).nodes.map { it.id }
-        // H274_413: od 27.10.2026 odatle pravo do prstena oko lifta (pravi ugao) - put preko hola je isti.
-        assertEquals(listOf("KULA-0-PROLAZ-NB", "KULA-0-H320_413", "KULA-0-H274_413", "KULA-0-H236_413", "KULA-0-PROLAZ-AMF"), route)
+        // H274_413: od 27.10.2026 odatle pravo do prstena oko lifta (pravi ugao) - put preko hola je isti. Trem od 08.11.2026 na x 245
+        // (vrata na evakuacionom planu x 233-256; do tada 236 sa FtnGO-a).
+        assertEquals(listOf("KULA-0-PROLAZ-NB", "KULA-0-H320_413", "KULA-0-H274_413", "KULA-0-H245_413", "KULA-0-PROLAZ-AMF"), route)
     }
 
     /**

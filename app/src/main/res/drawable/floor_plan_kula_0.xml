@@ -22,12 +22,12 @@
         <!-- Hodnici -->
         <path
             android:fillColor="#FFE8EEF4"
-            android:pathData="M225,375 L333,375 L333,465 L225,465 Z M224,465 L285,465 L285,511 L224,511 Z M205,490 L224,490 L224,511 L205,511 Z M228,511 L258,511 L258,554 L228,554 Z M205,300 L280,300 L280,375 L205,375 Z M335,397 L420,397 L420,430 L335,430 Z" />
+            android:pathData="M228,375 L333,375 L333,431 L228,431 Z M228,431 L285,431 L285,457 L228,457 Z M263,457 L285,457 L285,482 L263,482 Z M228,482 L296,482 L296,509 L228,509 Z M209,418 L228,418 L228,447 L209,447 Z M209,489 L228,489 L228,509 L209,509 Z M229,509 L262,509 L262,554 L229,554 Z M205,300 L280,300 L280,375 L205,375 Z M335,397 L420,397 L420,430 L335,430 Z" />
 
         <!-- Ulazi -->
         <path
             android:fillColor="#FFC8E6C9"
-            android:pathData="M228,554 L258,554 L258,560 L228,560 Z" />
+            android:pathData="M229,554 L262,554 L262,560 L229,560 Z" />
 
         <!-- Spiralno stepenište -->
         <path
@@ -55,17 +55,17 @@
             android:strokeColor="#FF455A64"
             android:strokeWidth="1.5"
             android:fillColor="#FFFFCC80"
-            android:pathData="M224,447 L263,447 L263,478 L224,478 Z" />
+            android:pathData="M229,457 L263,457 L263,482 L229,482 Z" />
         <path
             android:strokeColor="#FF455A64"
             android:strokeWidth="0.8"
-            android:pathData="M224,447 L263,478 M263,447 L224,478" />
+            android:pathData="M229,457 L263,482 M263,457 L229,482" />
 
         <!-- Prostorije -->
         <path
             android:strokeColor="#FF455A64"
             android:strokeWidth="1.5"
-            android:pathData="M155,375 L210,375 L210,430 L155,430 Z M210,375 L225,375 L225,430 L210,430 Z M155,432 L205,432 L205,472 L155,472 Z M155,472 L205,472 L205,511 L155,511 Z M205,447 L224,447 L224,490 L205,490 Z M155,511 L228,511 L228,554 L155,554 Z M258,511 L335,511 L335,554 L258,554 Z M285,465 L333,465 L333,482 L285,482 Z M297,482 L333,482 L333,511 L297,511 Z" />
+            android:pathData="M155,375 L209,375 L209,431 L155,431 Z M209,375 L228,375 L228,418 L209,418 Z M155,431 L208,431 L208,471 L155,471 Z M155,471 L208,471 L208,509 L155,509 Z M208,447 L228,447 L228,489 L208,489 Z M155,509 L228,509 L228,554 L155,554 Z M262,509 L335,509 L335,554 L262,554 Z M296,480 L335,480 L335,509 L296,509 Z M285,466 L326,466 L326,480 L285,480 Z" />
 
         <!-- Spoljni zid -->
         <path
