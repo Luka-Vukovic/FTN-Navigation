@@ -745,6 +745,16 @@ data class LiftPrompt(val lift: Node, val fromFloor: Int, val floors: List<Int>,
 /** Vožnja liftom u zgradi [buildingId] sa sprata [fromFloor] na [toFloor] (toast). */
 data class LiftChange(val buildingId: String, val fromFloor: Int, val toFloor: Int)
 
+/**
+ * Pitanje "na koji nivo?" posle prolaza na međupodest bez odredišta ([PdrLocator.levelPrompt]): sa podesta krak vodi na [upper]
+ * (tačka je tamo) i na [lower] u zgradi [buildingId]. AMF S1 posle trema iz Kule: prizemlje bočnim krakom naviše ili suteren srednjim
+ * naniže.
+ */
+data class LevelPrompt(val buildingId: String, val upper: Int, val lower: Int)
+
+/** Koraci od pitanja za nivo ([LevelPrompt]) najviše ovoliko - posle toga se pitanje sklanja (odgovor više ne bi pomogao). */
+private const val LEVEL_PROMPT_STEPS = 80
+
 /** Šta je vožnja promenila: tačka je na liftu novog sprata, ili sprat nije siguran pa se pita ([PdrLocator.liftPrompt]). */
 sealed interface LiftOutcome {
     data class Moved(val change: LiftChange) : LiftOutcome
@@ -1201,6 +1211,8 @@ class PdrLocator(
             return null
         }
         passageDescent = null
+        // Silazak prepoznat sam - pitanje za nivo više ne treba.
+        clearLevel()
         trace?.invoke("posle prolaza silazak po ubrzanju (${d.steps.size} koraka) - ${d.alt.id}")
         climb = null
         landingClimb = null
@@ -1528,6 +1540,22 @@ class PdrLocator(
     private val liftSteps = mutableListOf<PendingStep>()
 
     /**
+     * Pitanje za nivo posle prolaza na međupodest čeka odgovor ([LevelPrompt]); null = nema pitanja. Teren 09.11.2026 popodne (k-trem):
+     * iz Kule kroz trem bez odredišta pravo niz srednji krak S1 na −1, a tačka je otišla bočnim krakom u prizemlje ("bode oči"). Nivoi
+     * se tu ne razlikuju ni po pravcu hoda ni po mapi (vidi CLAUDE.md "Šta nije radilo": "pravo napred", dve pretpostavke), a znak
+     * stepenica ([PassageDescent]) je ponekad slab - korisnik bira (korisnik: "Oba, prvo pitanje na ekranu").
+     */
+    var levelPrompt: LevelPrompt? = null
+        private set
+
+    /** Pitanje za nivo: dolazak ([main] - tačka je tu, [alt] - niži nivo), PDR put pri dolasku i koraci od tada. */
+    private class LevelChoice(val main: Node, val alt: Node, val walkedX: Double, val walkedY: Double) {
+        val steps = ArrayList<PendingStep>()
+    }
+
+    private var levelChoice: LevelChoice? = null
+
+    /**
      * Na stepeništu ili do [STAIR_DIRECTION_NEAR_M] od njega (tačka na grafu, inače slobodna pozicija) - za
      * [WalkingDirection.nearStairs]. Okret na podestu se prepoznaje tek posle prvog leta, pa se gleda i blizina.
      */
@@ -1619,8 +1647,9 @@ class PdrLocator(
      * merenja smera i učenja (replay: START red snimka nije označavanje).
      */
     fun setPosition(place: PdrPlace, point: Offset, measure: Boolean = true, timeNs: Long? = null): HeadingCheck? {
-        // Označio je gde je - pitanje za lift (ako čeka) više ne važi.
+        // Označio je gde je - pitanje za lift i za nivo (ako čeka) više ne važi.
         clearLift()
+        clearLevel()
         exitedEntrance = null
         if (!measure) {
             lastStairChange = null
@@ -1785,6 +1814,7 @@ class PdrLocator(
         watch = StairWalk()
         lastStairChange = null
         clearLift()
+        clearLevel()
     }
 
     /**
@@ -1860,6 +1890,37 @@ class PdrLocator(
         liftSteps.clear()
     }
 
+    /**
+     * Odgovor na pitanje za nivo ([LevelPrompt]): niži nivo -> tačka sa podesta niz krak (kao [descendAfterPassage]) i ponove se
+     * koraci od dolaska; viši (tačka je već tu) -> pitanje se sklanja i silazak po znaku stepenica se više ne čeka. null: pitanja
+     * nema ili tačka ostaje.
+     */
+    fun selectLevel(floor: Int): PlaceReason? {
+        val c = levelChoice ?: return null
+        clearLevel()
+        passageDescent = null
+        if (floor != c.alt.floor) return null
+        trace?.invoke("izabran nivo $floor posle prolaza (${c.steps.size} koraka) - ${c.alt.id}")
+        climb = null
+        landingClimb = null
+        walkedX = c.walkedX
+        walkedY = c.walkedY
+        var reason = arriveOnLanding(c.alt) ?: run {
+            moveTo(c.alt)
+            PlaceReason.PROLAZ
+        }
+        for (s in c.steps) step(s.azimuthDeg, s.lengthM, s.redoSteps, s.timeNs)?.let { reason = it }
+        return reason
+    }
+
+    /** "Ne znam" (ili nazad): pitanje za nivo se sklanja, tačka ostaje (i dalje može sama da siđe po znaku stepenica). */
+    fun dismissLevel() = clearLevel()
+
+    private fun clearLevel() {
+        levelPrompt = null
+        levelChoice = null
+    }
+
     /** Dužina punog koraka za sledeći korak: podešena ([setM]; napolju se uči iz GPS-a), u zgradi najviše [INDOOR_MAX_STEP_M]. */
     fun baseStepM(setM: Float): Float = if (place.isCampus) setM else minOf(setM, INDOOR_MAX_STEP_M)
 
@@ -1875,6 +1936,11 @@ class PdrLocator(
         // Pitanje za lift čeka: korak se pamti (ponavlja se na izabranom spratu), a na ovom spratu ide dalje (možda nije
         // bio u liftu).
         if (liftPrompt != null) liftSteps += PendingStep(azimuthDeg, lengthM, redoSteps, timeNs)
+        // Pitanje za nivo čeka: korak se pamti (ponavlja se na nižem nivou), dok je tačka na nivou dolaska i nije predugo.
+        levelChoice?.let { c ->
+            if (place != c.main.place || c.steps.size >= LEVEL_PROMPT_STEPS) clearLevel()
+            else c.steps += PendingStep(azimuthDeg, lengthM, redoSteps, timeNs)
+        }
         forgetCorridorBias(timeNs)
         walkedPathM += lengthM
         walkedInsideM += lengthM
@@ -4273,6 +4339,8 @@ class PdrLocator(
                 arriveOnLanding(passage.target)?.let { return it }
                 moveTo(passage.target)
                 passageDescent = passage.descent?.let { PassageDescent(it, walkedX, walkedY) }
+                levelChoice = passage.descent?.let { LevelChoice(passage.target, it, walkedX, walkedY) }
+                levelPrompt = levelChoice?.let { LevelPrompt(it.main.buildingId, it.main.floor, it.alt.floor) }
                 if (passage.target.type == NodeType.ULAZ && !passage.target.isIndoor) exitedEntrance = passage.target
                 return PlaceReason.PROLAZ
             }

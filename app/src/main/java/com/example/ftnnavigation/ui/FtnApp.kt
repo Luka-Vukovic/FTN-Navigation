@@ -46,6 +46,7 @@ import com.example.ftnnavigation.onboarding.OnboardingScreen
 import com.example.ftnnavigation.campus.PlaceKind
 import com.example.ftnnavigation.poc.DayPlanSheet
 import com.example.ftnnavigation.poc.FreeRoomsSheet
+import com.example.ftnnavigation.poc.LevelDialog
 import com.example.ftnnavigation.poc.LiftDialog
 import com.example.ftnnavigation.poc.NearestPlaceSheet
 import com.example.ftnnavigation.poc.PocRoute
@@ -275,6 +276,10 @@ fun FtnApp() {
     // Pitanje za lift iskače na bilo kom ekranu - praćenje radi i kad Mapa nije na ekranu.
     mapViewModel.state.liftPrompt?.let { prompt ->
         LiftDialog(prompt = prompt, onSelect = mapViewModel::selectLiftFloor, onDismiss = mapViewModel::dismissLift)
+    }
+    // Isto i pitanje za nivo posle prolaza na međupodest (AMF S1 iz trema).
+    mapViewModel.state.levelPrompt?.let { prompt ->
+        LevelDialog(prompt = prompt, onSelect = mapViewModel::selectLevel, onDismiss = mapViewModel::dismissLevel)
     }
 }
 

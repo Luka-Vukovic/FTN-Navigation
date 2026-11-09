@@ -170,6 +170,11 @@
     <string name="poc_lift_text">Vožnja liftom je prepoznata (sa: %1$s), ali broj spratova nije siguran. Izaberi sprat na kome si izašao.</string>
     <string name="poc_lift_destination">%1$s · izmereno</string>
     <string name="poc_lift_dismiss">Nisam u liftu</string>
+    <string name="poc_level_title">Gore ili dole?</string>
+    <string name="poc_level_text">Sa ovog podesta stepenice vode naviše (%1$s) i naniže (%2$s). Kuda ideš?</string>
+    <string name="poc_level_up">%1$s · naviše</string>
+    <string name="poc_level_down">%1$s · naniže</string>
+    <string name="poc_level_dismiss">Ne znam</string>
     <string name="poc_heading_correction">Ispravi smer</string>
     <string name="poc_heading_correction_value">Ispravi smer (greška %1$+d°)</string>
     <string name="poc_stat_steps">Koraci</string>

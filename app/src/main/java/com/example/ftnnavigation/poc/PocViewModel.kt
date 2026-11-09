@@ -110,6 +110,8 @@ data class PocUiState(
     val distanceM: Float = 0f,
     /** Pitanje "na koji sprat?" posle vožnje liftom kad broj spratova nije siguran ([PdrLocator.liftRide]); null = nema pitanja. */
     val liftPrompt: LiftPrompt? = null,
+    /** Pitanje "na koji nivo?" posle prolaza na međupodest bez odredišta ([PdrLocator.levelPrompt]); null = nema pitanja. */
+    val levelPrompt: LevelPrompt? = null,
 ) {
 
     /** Pozicija na grafu ako je lepljenje uključeno (map-matching se računa i kad nije). */
@@ -221,8 +223,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
     var routeBends by mutableStateOf<Map<Pair<String, String>, Offset>>(emptyMap())
         private set
 
-    /** Linija rute krakovima stepeništa do međupodesta ([stairLegs]): (čvor, čvor na drugom spratu) -> tačke plana. */
-    var routeStairLegs by mutableStateOf<Map<Pair<String, String>, List<PlanPoint>>>(emptyMap())
+    /** Linija rute krakovima stepeništa do međupodesta ([stairLegVariants]): (čvor, čvor na drugom spratu) -> varijante tačaka plana. */
+    var routeStairLegs by mutableStateOf<Map<Pair<String, String>, List<List<PlanPoint>>>>(emptyMap())
         private set
 
     /** Graf kampusa i zgrada (null dok se učitava iz baze). NB ima 7 nivoa (-1 ... 5), AMF 2, Kula 10, NTP 6. */
@@ -528,7 +530,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             val graph = loadGraph(application, campus)
             val stairPaths = loadStairPaths(application)
             routeBends = flightBends(graph, stairPaths).mapValues { (_, p) -> Offset(p.x, p.y) }
-            routeStairLegs = stairLegs(graph, stairPaths)
+            routeStairLegs = stairLegVariants(graph, stairPaths)
             // Pozicija se ne može postaviti pre ovoga ("Ovde sam" i Start čekaju graf).
             locator = PdrLocator(
                 graph, campus, declination, stairPaths, loadOpenAreas(application), loadSpiralPaths(application),
@@ -702,6 +704,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         walkingDirection.nearStairs = locator.nearStairs
         walkingDirection.onStairs = locator.onStairs
         state =state.copy(steps = state.steps + 1, distanceM = (state.distanceM + locator.lastStepM).coerceAtLeast(0f))
+        syncLevelPrompt(locator)
         updatePosition(before, reason)
         if (reason == PlaceReason.STEPENICE) onStairChange(locator)
         // Pokazivač u pravcu hodnika ([onHeading]) prati ivicu na kojoj je tačka posle koraka.
@@ -764,6 +767,38 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val reason = locator.selectLiftFloor(floor)
         state = state.copy(liftPrompt = null)
         updatePosition(before, reason)
+    }
+
+    /**
+     * Pitanje za nivo iz lokatora u stanje: novo pitanje - vibracija (kao za lift) i red u snimku; nestalo samo (silazak prepoznat,
+     * otišao sa tog nivoa) - sklanja se.
+     */
+    private fun syncLevelPrompt(locator: PdrLocator) {
+        val prompt = locator.levelPrompt
+        if (prompt == state.levelPrompt) return
+        if (prompt != null) {
+            recorder?.level(SystemClock.elapsedRealtimeNanos(), prompt)
+            getApplication<Application>().getSystemService(VibratorManager::class.java)
+                ?.defaultVibrator?.vibrate(VibrationEffect.createWaveform(LIFT_VIBRATION, -1))
+        }
+        state = state.copy(levelPrompt = prompt)
+    }
+
+    /** Odgovor na pitanje za nivo: na nižem nivou pozicija ide niz krak (+ koraci od podesta); Mapa ide za njom. */
+    fun selectLevel(floor: Int) {
+        val locator = locator ?: return
+        val before = locator.place
+        recorder?.levelAnswer(SystemClock.elapsedRealtimeNanos(), floor)
+        val reason = locator.selectLevel(floor)
+        state = state.copy(levelPrompt = null)
+        updatePosition(before, reason)
+    }
+
+    /** "Ne znam" na pitanju za nivo. */
+    fun dismissLevel() {
+        locator?.dismissLevel()
+        if (state.levelPrompt != null) recorder?.levelAnswer(SystemClock.elapsedRealtimeNanos(), null)
+        state = state.copy(levelPrompt = null)
     }
 
     /** "Nisam u liftu". */
@@ -841,8 +876,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         // Ispravka sprata posle stepeništa je mogla da nauči smer okreta, a merenje smera zajedničku ispravku.
         AppSettings.setStairTurns(getApplication(), locator.learnedStairTurns)
         AppSettings.setHeadingErrors(getApplication(), locator.learnedHeadingErrors)
-        // Označavanje sklanja i pitanje za lift (sprat je izabran na planu).
-        state = state.copy(isPickingStart = false, liftPrompt = null)
+        // Označavanje sklanja i pitanje za lift i za nivo (sprat je izabran na planu).
+        state = state.copy(isPickingStart = false, liftPrompt = null, levelPrompt = null)
         updatePosition(before, PlaceReason.RUCNO)
         if (check != null) {
             recorder?.headingCheck(SystemClock.elapsedRealtimeNanos(), place, check)
@@ -958,7 +993,8 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         locator?.headingFrozen = false
         // Bez praćenja nema koraka koje bi pitanje ponovilo.
         locator?.dismissLift()
-        state = state.copy(liftPrompt = null)
+        locator?.dismissLevel()
+        state = state.copy(liftPrompt = null, levelPrompt = null)
         PdrTrackingService.stop(getApplication())
         recorder?.close()
         recorder = null

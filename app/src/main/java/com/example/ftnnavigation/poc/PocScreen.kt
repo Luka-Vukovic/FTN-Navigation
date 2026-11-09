@@ -250,8 +250,8 @@ fun PocScreen(
     developerMode: Boolean = false,
     /** Savijanje linije rute krakom do prolaza sa međupodesta ([flightBends]). */
     routeBends: Map<Pair<String, String>, Offset> = emptyMap(),
-    /** Linija rute krakovima stepeništa do međupodesta ([stairLegs]). */
-    routeStairLegs: Map<Pair<String, String>, List<PlanPoint>> = emptyMap(),
+    /** Linija rute krakovima stepeništa do međupodesta, sve varijante ([stairLegVariants]). */
+    routeStairLegs: Map<Pair<String, String>, List<List<PlanPoint>>> = emptyMap(),
 ) {
     var showDestinations by rememberSaveable { mutableStateOf(false) }
     var showSteps by rememberSaveable { mutableStateOf(false) }
@@ -316,6 +316,7 @@ fun PocScreen(
                             pairedVerticals = steps.mapNotNull { s -> s.alternative?.let { it to (s.kind == StepKind.STEPENICE) } },
                             position = state.position.takeIf { pdrHere },
                             rawPosition = state.rawPosition.takeIf { pdrHere && developerMode },
+                            userInBuilding = state.rawPosition?.takeIf { building.buildingId == place.buildingId }?.let { place.floor to it },
                             showGraph = developerMode,
                             headingDeg = state.headingDeg,
                             autoRotate = autoRotateMap,
@@ -488,11 +489,13 @@ private fun FloorPlan(
     graph: BuildingGraph?,
     route: Route?,
     routeBends: Map<Pair<String, String>, Offset>,
-    routeStairLegs: Map<Pair<String, String>, List<PlanPoint>>,
+    routeStairLegs: Map<Pair<String, String>, List<List<PlanPoint>>>,
     /** Upareni lift / stepenište uz promenu sprata ([com.example.ftnnavigation.campus.RouteStep.alternative]); true = lift. */
     pairedVerticals: List<Pair<Node, Boolean>>,
     position: Offset?,
     rawPosition: Offset?,
+    /** Sprat i slobodna PDR pozicija korisnika kad je u ovoj zgradi (i na drugom spratu) - izbor bočnog kraka linije rute. */
+    userInBuilding: Pair<Int, Offset>?,
     showGraph: Boolean,
     headingDeg: Float,
     autoRotate: Boolean,
@@ -580,7 +583,10 @@ private fun FloorPlan(
                 val altStairs = stringResource(R.string.route_floor_change_alt_stairs)
                 val altStyle = changeStyle.copy(color = colors.primary)
                 Canvas(Modifier.fillMaxSize()) {
-                    drawRoute(route, routeBends, routeStairLegs, buildingId, floor, position, colors.primary, colors.secondary, 1f / zoom.scale)
+                    drawRoute(
+                        route, routeBends, routeStairLegs, { id -> graph?.node(id) }, buildingId, floor, position, userInBuilding,
+                        colors.primary, colors.secondary, 1f / zoom.scale,
+                    )
                     drawFloorChanges(
                         route, buildingId, floor, colors.primary, textMeasurer, changeStyle, 1f / zoom.scale, zoom.rotationDeg,
                     ) { from, to ->
@@ -642,6 +648,9 @@ internal fun floorName(floor: Int): String = when {
 private val LABEL_TOUCH_SLOP = 8.dp
 
 private val ROOM_DOT_RADIUS = 5.dp
+
+/** Bočni krakovi podjednako blizu ([nearestLegVariant]): razlika rastojanja manja od ovog dela širine plana (AMF: ~0,8 m). */
+private const val LEG_TIE_FRACTION = 0.01f
 
 /** Čvor rute do ovoliko od linije kraka je na njoj ([legBackTo]). */
 private val ROUTE_ON_LEG_TOLERANCE = 3.dp
@@ -750,10 +759,13 @@ private fun DrawScope.drawGraph(
 private fun DrawScope.drawRoute(
     route: Route,
     bends: Map<Pair<String, String>, Offset>,
-    stairLegs: Map<Pair<String, String>, List<PlanPoint>>,
+    stairLegs: Map<Pair<String, String>, List<List<PlanPoint>>>,
+    nodeOf: (String) -> Node?,
     buildingId: String,
     floor: Int,
     position: Offset?,
+    /** Sprat i slobodna PDR pozicija korisnika u ovoj zgradi - izbor bočnog kraka pri silasku ([nearestLegVariant]). */
+    user: Pair<Int, Offset>?,
     color: Color,
     targetColor: Color,
     k: Float,
@@ -772,6 +784,34 @@ private fun DrawScope.drawRoute(
     // Krak do međupodesta je već nacrtan od tačke na njemu ([legFromPosition]) - ne crta se ponovo od čvora.
     var legDone = false
     val nodes = route.nodes
+    // Tačka je na kraku ovog sprata, a ruta kreće od čvora stepeništa na drugom spratu (ka kome ide - [PdrLocator.routeStarts]):
+    // čvor stepeništa na ovom spratu, od koga se crta krak. Teren 09.11.2026 popodne (AMF S1 sa −1 na P): "treba iscrtati liniju, sada
+    // je nema" - na −1 se nije crtalo ništa dok je tačka bila na kraku.
+    val lead = nodes.firstOrNull()?.takeIf { position != null && !it.isHere() }?.let { first ->
+        stairLegs.keys.firstNotNullOfOrNull { (from, to) -> if (to != first.id) null else nodeOf(from)?.takeIf { it.isHere() } }
+    }
+    // Varijanta krakova (AMF S1: desni ili levi bočni krak) za svaku promenu sprata stepeništem, isto na oba sprata: pri silasku
+    // krak bliži korisniku (ili prethodnom čvoru rute), pri penjanju bliži sledećem čvoru na višem spratu.
+    val seq = listOfNotNull(lead) + nodes
+    val variant = HashMap<Pair<String, String>, Int>()
+    for (i in 0 until seq.size - 1) {
+        val a = seq[i]
+        val b = seq[i + 1]
+        if (a.buildingId != buildingId || b.buildingId != buildingId || a.floor == b.floor) continue
+        val (upper, lower) = if (a.floor > b.floor) a to b else b to a
+        val highs = stairLegs[upper.id to lower.id]?.takeIf { it.size > 1 } ?: continue
+        fun onUpper(node: Node?) = node?.takeIf { it.buildingId == buildingId && it.floor == upper.floor }?.toOffset()
+        val ref = if (a.id == upper.id) {
+            user?.takeIf { it.first == upper.floor }?.second?.let { Offset(it.x * size.width, it.y * size.height) } ?: onUpper(seq.getOrNull(i - 1))
+        } else {
+            onUpper(seq.getOrNull(i + 2))
+        }
+        val index = nearestLegVariant(highs.map { leg -> leg.map { it.toOffset() } }, ref, LEG_TIE_FRACTION, size.width)
+        variant[a.id to b.id] = index
+        variant[b.id to a.id] = index
+    }
+    fun legOf(from: String, to: String): List<PlanPoint>? =
+        stairLegs[from to to]?.let { legs -> legs[(variant[from to to] ?: 0).coerceIn(legs.indices)] }
     // Prvi čvor se preskače: linija od pozicije ide krakom pravo do drugog ([legBackTo]).
     var skip = 0
     if (position != null) {
@@ -785,8 +825,10 @@ private fun DrawScope.drawRoute(
             val tolerance = ROUTE_ON_LEG_TOLERANCE.toPx()
             fun backTo(index: Int): List<Offset>? {
                 val to = nodes.getOrNull(index)?.takeIf { it.isHere() } ?: return null
-                return stairLegs.entries.firstNotNullOfOrNull { (key, leg) ->
-                    if (key.first != first.id) null else legBackTo(here, first.toOffset(), leg.map { it.toOffset() }, to.toOffset(), tolerance)
+                return stairLegs.entries.firstNotNullOfOrNull { (key, legs) ->
+                    if (key.first != first.id) null else legs.firstNotNullOfOrNull { leg ->
+                        legBackTo(here, first.toOffset(), leg.map { it.toOffset() }, to.toOffset(), tolerance)
+                    }
                 }
             }
             var last = 0
@@ -794,6 +836,10 @@ private fun DrawScope.drawRoute(
             if (last > 0) {
                 backTo(last)?.forEach(::lineTo)
                 skip = last
+            }
+        } else if (first != null && lead != null) {
+            legOf(lead.id, first.id)?.map { it.toOffset() }?.let { line ->
+                (legFromPosition(here, lead.toOffset(), line) ?: (listOf(lead.toOffset()) + line)).forEach(::lineTo)
             }
         }
     }
@@ -807,7 +853,7 @@ private fun DrawScope.drawRoute(
         val next = nodes.getOrNull(i + 1)
         if (!node.isHere()) {
             // Napušta sprat stepeništem sa krakovima: linija još krakom do međupodesta ([stairLegs]).
-            if (previous != null && !legDone) stairLegs[previous.id to node.id]?.forEach { lineTo(it.toOffset()) }
+            if (previous != null && !legDone) legOf(previous.id, node.id)?.forEach { lineTo(it.toOffset()) }
             drawing = false
             legDone = false
             previous = null
@@ -817,7 +863,7 @@ private fun DrawScope.drawRoute(
         if (drawing) {
             // Sledi krak, a linija je već na njegovoj liniji (traka ka bočnom kraku AMF S1 - pozicija ili vrata Čitaonice; čvor
             // promene sprata je račvanje iza): dalje krakom, ne nazad do čvora pa opet preko iste tačke.
-            val leg = if (next != null && !next.isHere()) stairLegs[node.id to next.id] else null
+            val leg = if (next != null && !next.isHere()) legOf(node.id, next.id) else null
             val ahead = pen?.let { at -> leg?.let { legFromPosition(at, p, it.map { q -> q.toOffset() }) } }
             if (ahead != null) {
                 ahead.forEach(::lineTo)
@@ -837,7 +883,7 @@ private fun DrawScope.drawRoute(
         } else {
             // Stiže na sprat stepeništem sa krakovima: linija od međupodesta niz/uz krak do čvora - ili samo do mesta na kraku
             // odakle se ide dalje (sledeći čvor je na liniji kraka), bez odlaska do čvora i nazad.
-            val leg = from?.let { stairLegs[node.id to it.id] }
+            val leg = from?.let { legOf(node.id, it.id) }
             val cut = if (leg != null && next != null && next.isHere()) {
                 legFromPosition(next.toOffset(), p, leg.map { it.toOffset() })
             } else {

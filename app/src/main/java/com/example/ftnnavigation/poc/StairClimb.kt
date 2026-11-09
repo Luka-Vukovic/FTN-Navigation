@@ -190,28 +190,55 @@ fun flightBends(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, 
  * (redom od b ka a) krak naniže do međupodesta. Relativne koordinate plana. Teren 02.11.2026 (AMF P, ruta ka Biblioteci): linija se
  * završavala na vrhu stepeništa, pa je "nestajala" pri silasku na međupodest - na spratu se nije videlo kuda dalje.
  * Čvor stepeništa van putanje (AMF S1 u prizemlju: račvanje hodnika ka oba bočna kraka) do kraka ide pod pravim uglom, preko
- * tačke ose kraka naspram čvora. Stepeništa sa više varijanti krakova (AMF S1): prva.
+ * tačke ose kraka naspram čvora. Stepeništa sa više varijanti krakova (AMF S1): prva - za izbor varijante [stairLegVariants].
  */
-fun stairLegs(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, String>, List<PlanPoint>> {
-    val byStair = paths.groupBy { it.stairKey to it.floor }.mapValues { it.value.first().points }
+fun stairLegs(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, String>, List<PlanPoint>> =
+    stairLegVariants(graph, paths).mapValues { it.value.first() }
+
+/**
+ * Kao [stairLegs], sa svim varijantama krakova (AMF S1: desnim i levim bočnim krakom), istim redom na oba sprata - varijanta i na
+ * nižem spratu odgovara varijanti i na višem. Teren 09.11.2026 popodne (snimak ekrana, AMF P -> Skriptarnica): linija je uvek išla
+ * prvim (desnim) bočnim krakom, a korisnik je išao levim, bližim - "treba sugerisati bliži krak, ne uvek levi" (levi na zarotiranoj mapi).
+ */
+fun stairLegVariants(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, String>, List<List<PlanPoint>>> {
+    val byStair = paths.groupBy { it.stairKey to it.floor }.mapValues { (_, list) -> list.map { it.points }.filter { it.size == 4 } }
     fun onAxis(node: Node, foot: PlanPoint, turn: PlanPoint): List<PlanPoint> {
         if (abs(node.x - foot.x) < 1e-4f && abs(node.y - foot.y) < 1e-4f) return emptyList()
         val corner = if (abs(foot.x - turn.x) < abs(foot.y - turn.y)) PlanPoint(foot.x, node.y) else PlanPoint(node.x, foot.y)
         return listOf(corner, foot)
     }
-    val legs = mutableMapOf<Pair<String, String>, List<PlanPoint>>()
+    val legs = mutableMapOf<Pair<String, String>, List<List<PlanPoint>>>()
     for (edge in graph.edges) {
         if (edge.type != EdgeType.STEPENICE) continue
         val a = graph.node(edge.fromId) ?: continue
         val b = graph.node(edge.toId) ?: continue
         if (a.buildingId != b.buildingId || a.floor == b.floor) continue
         val (lower, upper) = if (a.floor < b.floor) a to b else b to a
-        val low = byStair[stairKey(lower) to lower.floor]?.takeIf { it.size == 4 } ?: continue
-        val high = byStair[stairKey(upper) to upper.floor]?.takeIf { it.size == 4 } ?: continue
-        legs[lower.id to upper.id] = onAxis(lower, low[0], low[1]) + listOf(low[1], low[2])
-        legs[upper.id to lower.id] = onAxis(upper, high[3], high[2]) + listOf(high[2])
+        val lows = byStair[stairKey(lower) to lower.floor]?.takeIf { it.isNotEmpty() } ?: continue
+        val highs = byStair[stairKey(upper) to upper.floor]?.takeIf { it.isNotEmpty() } ?: continue
+        legs[lower.id to upper.id] = lows.map { low -> onAxis(lower, low[0], low[1]) + listOf(low[1], low[2]) }
+        legs[upper.id to lower.id] = highs.map { high -> onAxis(upper, high[3], high[2]) + listOf(high[2]) }
     }
     return legs
+}
+
+/**
+ * Varijanta krakova ([stairLegVariants]) za liniju rute niz/uz stepenište: ona čija je linija na višem spratu ([upperLegs]: od čvora
+ * stepeništa do međupodesta) najbliža tački [ref] (pozicija korisnika na višem spratu pri silasku, inače susedni čvor rute na višem
+ * spratu). Rastojanja u px plana veličine [width] x [height]; razlika manja od [tieFraction] širine plana - prva varijanta (oba kraka
+ * podjednako blizu: sredina hodnika pred AMF S1).
+ */
+fun nearestLegVariant(upperLegs: List<List<Offset>>, ref: Offset?, tieFraction: Float, width: Float): Int {
+    if (ref == null || upperLegs.size < 2) return 0
+    fun distance(line: List<Offset>): Float = line.zipWithNext().minOfOrNull { (a, b) ->
+        val ab = b - a
+        val len2 = ab.x * ab.x + ab.y * ab.y
+        val t = if (len2 <= 0f) 0f else (((ref.x - a.x) * ab.x + (ref.y - a.y) * ab.y) / len2).coerceIn(0f, 1f)
+        (ref - (a + ab * t)).getDistance()
+    } ?: line.firstOrNull()?.let { (ref - it).getDistance() } ?: Float.MAX_VALUE
+    val d = upperLegs.map(::distance)
+    val best = d.indices.minBy { d[it] }
+    return if (d[0] - d[best] < tieFraction * width) 0 else best
 }
 
 /**

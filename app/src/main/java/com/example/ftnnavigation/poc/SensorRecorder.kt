@@ -28,6 +28,9 @@ import java.time.format.DateTimeFormatter
  *   PDR smer − stvarni bez ispravke (°), uz_ispravku = sa ispravkom koja je važila na putu; isti t kao `L` red.
  * - `Q,t,PITANJE,lift,sprat` / `Q,t,ODUSTAO` - pitanje za lift postavljeno ([LiftPrompt]) / "Nisam u liftu"; izabran
  *   sprat je `L` red sa razlogom LIFT. t kao u `L` redu.
+ * - `N,t,PITANJE,zgrada,viši,niži` / `N,t,IZBOR,sprat` / `N,t,ODUSTAO` - pitanje za nivo posle prolaza na međupodest bez
+ *   odredišta ([LevelPrompt], od 09.11.2026 uveče) postavljeno / izabran nivo / "Ne znam". t kao u `L` redu; posle izbora nižeg
+ *   nivoa sledi `L` red sa razlogom koji je lokator vratio.
  * - `V,t,početak,kraj,pomeraj_m` - prepoznata vožnja liftom ([LiftRide]; t = uzorak na kome je prepoznata, isti sat kao
  *   `A`); promena sprata posle nje je `L` red LIFT, a nesiguran broj spratova `Q` PITANJE.
  * - `K,t,dužina_m` - dužina koraka iz Podešavanja (na Start i pri promeni; snimci pre 08.10.2026 je nemaju - tada 0,8 m).
@@ -78,6 +81,13 @@ class SensorRecorder private constructor(val file: File) {
     /** Pitanje za lift postavljeno ([prompt]) ili odbijeno (null). */
     fun lift(timestampNs: Long, prompt: LiftPrompt?) =
         write(if (prompt != null) "Q,$timestampNs,PITANJE,${prompt.lift.id},${prompt.fromFloor}" else "Q,$timestampNs,ODUSTAO")
+
+    /** Pitanje za nivo posle prolaza postavljeno. */
+    fun level(timestampNs: Long, prompt: LevelPrompt) = write("N,$timestampNs,PITANJE,${prompt.buildingId},${prompt.upper},${prompt.lower}")
+
+    /** Odgovor na pitanje za nivo: izabran sprat [floor], ili "Ne znam" (null). */
+    fun levelAnswer(timestampNs: Long, floor: Int?) =
+        write(if (floor != null) "N,$timestampNs,IZBOR,$floor" else "N,$timestampNs,ODUSTAO")
 
     /** Dužina koraka (Podešavanja) - na Start i pri promeni za vreme praćenja. */
     /** [HandlingGate] je odbacio [count] koraka (premeštanje telefona u mestu, ili koraci u mestu pa pauza). */

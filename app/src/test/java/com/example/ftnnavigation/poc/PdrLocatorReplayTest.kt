@@ -314,6 +314,21 @@ class PdrLocatorReplayTest {
                 } else {
                     log(t, "telefon: pitanje za lift ${f[3]}")
                 }
+                // Pitanje za nivo posle prolaza (od 09.11.2026 uveče): odgovor sa telefona ide replay-u ako i on čeka pitanje.
+                "N" -> when (f[2]) {
+                    "PITANJE" -> log(t, "telefon: pitanje za nivo ${f[3]} ${f[4]}/${f[5]}" + if (locator.levelPrompt == null) " (replay ne pita)" else "")
+                    "IZBOR" -> {
+                        val waiting = locator.levelPrompt != null
+                        val reason = locator.selectLevel(f[3].toInt())
+                        if (reason != null) anchorKind = reason.name
+                        log(t, "telefon: izabran nivo ${f[3]}" + if (waiting) "" else " (replay ne pita)")
+                        row(t, "L")
+                    }
+                    else -> {
+                        locator.dismissLevel()
+                        log(t, "telefon: nivo - ne znam")
+                    }
+                }
                 "K" -> if (learnedStepM == null) stepM = f[2].toFloat()
                 "X" -> log(t, "telefon-locator: ${f.drop(2).joinToString(",")}")
                 "W" -> if (f[2] == "ZIROSKOP" || f[2] == "NAZAD" || f[2] == "NAGIB") {

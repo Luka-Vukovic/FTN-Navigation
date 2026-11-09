@@ -1932,6 +1932,38 @@ class PdrLocatorTest {
     }
 
     /**
+     * Teren 09.11.2026 popodne (snimak ekrana 17:17, AMF P -> Skriptarnica): linija je uvek išla desnim bočnim krakom S1 (prva
+     * varijanta), a korisnik je, malo levo od sredine hodnika, sišao levim - "treba sugerisati bliži krak". Varijante su iste na oba
+     * sprata; pri silasku bira se krak bliži korisniku, a iz sredine hodnika (podjednako blizu) prvi, kao ranije.
+     */
+    @Test
+    fun stairLegVariants_nearestSideFlightOfAmfS1() {
+        val variants = stairLegVariants(graph, stairPaths)
+        val down = checkNotNull(variants["AMF-0-S1-D" to "AMF-m1-S1"])
+        val up = checkNotNull(variants["AMF-m1-S1" to "AMF-0-S1-D"])
+        assertEquals(2, down.size)
+        assertEquals(2, up.size)
+        // Varijanta i se na oba sprata sastaje na istom mestu podesta, a desni i levi krak su na suprotnim stranama račvanja.
+        for (i in 0..1) assertEquals(down[i].last(), up[i].last())
+        val fork = node("AMF-0-S1-D")
+        assertTrue((down[0][1].x - fork.x) * (down[1][1].x - fork.x) < 0f)
+        assertEquals(stairLegs(graph, stairPaths)["AMF-0-S1-D" to "AMF-m1-S1"], down[0])
+        // Plan u px (kao na ekranu): AMF viewport (30, −80) 820 x 310 px plana.
+        val (w, h) = 820f to 310f
+        val lines = down.map { leg -> leg.map { Offset(it.x * w, it.y * h) } }
+        fun at(x: Float, y: Float) = Offset(x - 30f, y + 80f)
+        val leftIndex = if (down[0][1].x < fork.x) 0 else 1
+        // Slobodna pozicija 0,8 m levo od sredine, 2 m pred račvanjem (replay 371 s): levi krak.
+        assertEquals(leftIndex, nearestLegVariant(lines, at(242f, 123f), 0.01f, w))
+        assertEquals(1 - leftIndex, nearestLegVariant(lines, at(262f, 123f), 0.01f, w))
+        // Sredina hodnika (čvor H250_101) i bez tačke: prva varijanta.
+        assertEquals(0, nearestLegVariant(lines, node("AMF-0-H250_101").let { Offset(it.x * w, it.y * h) }, 0.01f, w))
+        assertEquals(0, nearestLegVariant(lines, null, 0.01f, w))
+        // Traka ka bočnim vratima Čitaonice (desni krak): desni.
+        assertEquals(1 - leftIndex, nearestLegVariant(lines, node("AMF-0-S1-D-DESNO").let { Offset(it.x * w, it.y * h) }, 0.01f, w))
+    }
+
+    /**
      * Teren 03.11.2026 (snimak ekrana, AMF P ka Skriptarnici): tačka na traci ka desnom bočnom kraku S1 (čvor S1-D-DESNO), a ruta
      * počinje na račvanju S1-D - linija od tačke dalje niz krak, ne nazad do račvanja pa pod pravim uglom opet preko tačke.
      */
@@ -2219,6 +2251,76 @@ class PdrLocatorTest {
         val reasons = recorded.mapNotNull { now = it.timeS; locator.walk(if (it.timeS >= 302.0) "AMF" else "KULA", it) }
         assertTrue("$reasons $log", PlaceReason.PROLAZ in reasons)
         assertEquals("$log", PdrPlace("AMF", 0), locator.place)
+    }
+
+    /**
+     * Teren 09.11.2026 popodne (hod-20261109-171101, 510-550 s, k-trem): iz hola Kule kroz trem bez odredišta, pa pravo niz srednji krak
+     * S1 na −1 i hodnikom −1 ka severu. Znak stepenica je bio slab, pa je tačka otišla bočnim krakom u prizemlje ("bode oči"); nivo se
+     * po senzorima ne razlikuje - pitanje "gore ili dole?" ([LevelPrompt]).
+     */
+    private val porchDownSteps = timedSteps(
+        """
+        354|0.19|-0.79|510.69 328|0.27|-1.14|510.94 348|0.35|-1.04|512.40 343|0.35|-1.07|522.38 343|0.48|-0.67|523.23 347|0.35|-0.94|524.03 345|0.81|-0.76|524.83
+        343|0.81|0.06|525.59 344|0.81|-0.06|526.25 347|0.81|0.18|526.99 350|0.81|-0.41|527.25 355|0.81|-0.96|527.61 354|0.81|0.23|528.21 348|0.81|0.09|528.79
+        345|0.81|0.20|529.37 346|0.81|0.36|529.96 347|0.81|0.59|530.51 347|0.81|0.29|531.09 350|0.81|0.54|531.65 352|0.81|0.30|532.22 352|0.81|0.33|532.77
+        356|0.81|0.03|533.36 359|0.81|0.02|533.97 358|0.81|0.46|534.49 354|0.81|0.04|535.11 346|0.81|0.45|535.63 340|0.81|0.49|536.21 342|0.81|0.26|536.77
+        344|0.81|0.44|537.33 350|0.81|0.00|537.93 359|0.81|0.47|538.48 5|0.81|0.12|539.04 4|0.58|-0.27|539.65 359|0.81|0.26|540.21 349|0.57|-1.10|540.90
+        343|0.40|-0.41|541.73 350|0.81|-0.06|542.39 4|0.81|-0.02|543.01 5|0.81|0.11|543.69 355|0.81|-0.11|544.37 337|0.81|0.76|544.97 327|0.61|0.40|545.53
+        328|0.81|0.33|546.21 338|0.81|0.35|546.86 354|0.81|0.62|547.58 354|0.81|0.49|548.27 352|0.81|0.32|548.93 356|0.81|0.29|549.60
+        """,
+    )
+
+    /** "Ovde sam" u holu Kule pred tremom (509,7 s), pa koraci; od 531,6 s su koraci na snimku u ravni plana AMF-a. */
+    private fun porchLocator(destination: PdrPlace? = null): PdrLocator =
+        PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            this.destination = destination
+            setPosition(PdrPlace("KULA", 0), Offset(0.38798076f, 0.40646425f), measure = false)
+        }
+
+    @Test
+    fun kulaToAmf_throughPorchWithoutDestination_asksLevel_lowerChosenAfterWalking_pointOnBasementCorridor() {
+        val locator = porchLocator()
+        var asked: LevelPrompt? = null
+        for (s in porchDownSteps) {
+            locator.walk(if (s.timeS >= 531.6) "AMF" else "KULA", s)
+            if (asked == null) asked = locator.levelPrompt
+        }
+        assertEquals(LevelPrompt("AMF", 0, -1), asked)
+        // Tačka je (kao na telefonu) otišla bočnim krakom u prizemlje; pitanje i dalje čeka.
+        assertEquals(PdrPlace("AMF", 0), locator.place)
+        assertEquals(asked, locator.levelPrompt)
+        // Odgovor posle ~13 koraka od podesta: tačka niz srednji krak i hodnikom −1 ka severu (kao korisnik).
+        assertNotNull(locator.selectLevel(-1))
+        assertNull(locator.levelPrompt)
+        assertEquals(PdrPlace("AMF", -1), locator.place)
+        val at = checkNotNull(locator.match).point
+        assertTrue("${at.from.id} ${at.to.id}", "AMF-m1-H257" in at.from.id || "AMF-m1-H257" in at.to.id)
+        // Sišao je krakom (gazišta - sporije od hoda) i izašao u hodnik severno od dna kraka.
+        assertTrue("${at.y}", at.y < node("AMF-m1-S1").y)
+    }
+
+    @Test
+    fun kulaToAmf_throughPorch_levelPrompt_upperChosen_staysAndNoQuestionWithDestination() {
+        val locator = porchLocator()
+        porchDownSteps.take(32).forEach { locator.walk(if (it.timeS >= 531.6) "AMF" else "KULA", it) }
+        assertNotNull(locator.levelPrompt)
+        val before = locator.position()
+        assertNull(locator.selectLevel(0))
+        assertNull(locator.levelPrompt)
+        assertEquals(PdrPlace("AMF", 0), locator.place)
+        assertEquals(before, locator.position())
+        // Odredište u AMF-u bira nivo samo - bez pitanja (Biblioteka na −1).
+        val toLibrary = porchLocator(destination = PdrPlace("AMF", -1))
+        porchDownSteps.forEach { toLibrary.walk(if (it.timeS >= 531.6) "AMF" else "KULA", it) }
+        assertNull(toLibrary.levelPrompt)
+        assertEquals(PdrPlace("AMF", -1), toLibrary.place)
+        // "Ovde sam" sklanja pitanje.
+        val marked = porchLocator()
+        porchDownSteps.take(32).forEach { marked.walk(if (it.timeS >= 531.6) "AMF" else "KULA", it) }
+        assertNotNull(marked.levelPrompt)
+        marked.setPosition(PdrPlace("AMF", -1), Offset(node("AMF-m1-H257_154").x, node("AMF-m1-H257_154").y), measure = false)
+        assertNull(marked.levelPrompt)
+        assertNull(marked.selectLevel(-1))
     }
 
     /** Lokator na čvoru [id] (kao posle starta) i koraci [recorded] u zgradi [buildingId]; za svaki korak (vreme, na stepeništu). */
