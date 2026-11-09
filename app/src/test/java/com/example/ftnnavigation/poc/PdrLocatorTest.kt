@@ -2134,6 +2134,93 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("AMF", -1), locator.place)
     }
 
+    /**
+     * Teren 09.11.2026 (hod-20261109-113244, 183-260 s, k-ii): "Ovde sam" na dnu spirale Kule na I, spiralom na II, par koraka u
+     * hodnik (silazak sa spirale), ~23 s stajanja kod stepeništa, pa nazad niz spiralu na I. Ulazak je bio blokiran (tek sišao sa
+     * spirale na ovom spratu), a okret niz spiralu kompas je izmerio samo ~267° - tačka je hodnikom oko jezgra ostala na II.
+     */
+    @Test
+    fun kulaSpiral_standingOnUpperFloor_thenBackDown_reachesFloorBelow() {
+        val recorded = timedSteps(
+            """
+            16|0.82|-0.51|184.41 7|0.82|1.31|185.09 5|0.82|0.93|185.80 26|0.82|0.44|186.68 50|0.82|0.09|187.29 71|0.82|0.68|187.94 80|0.82|1.56|188.50
+            86|0.82|0.75|189.17 88|0.82|0.90|189.82 94|0.82|1.32|190.60 108|0.82|0.53|191.45 126|0.82|0.35|192.25 139|0.82|0.44|192.51 176|0.49|0.70|193.08
+            215|0.82|-0.17|194.19 233|0.82|0.37|194.85 243|0.50|0.16|195.61 242|0.41|0.69|196.40 242|0.82|0.53|197.38 246|0.82|1.11|198.08 260|0.82|0.78|199.05
+            268|0.51|0.98|199.81 273|0.82|-0.30|200.07 269|0.82|0.04|200.84 267|0.82|0.03|201.50 257|0.82|0.24|202.20 251|0.79|-0.05|203.05 241|0.28|-0.21|204.08
+            226|0.70|-0.38|204.48 68|0.22|-1.11|214.36 58|0.82|-0.54|215.11 61|0.19|-0.06|216.10 64|0.58|-0.80|217.48 74|0.82|-0.16|240.61 78|0.29|0.05|241.30
+            82|0.34|-0.55|242.22 81|0.18|-0.98|242.52 75|0.82|0.48|243.10 75|0.59|0.71|243.71 76|0.82|0.75|244.48 76|0.82|1.05|245.16 74|0.82|1.28|245.87
+            70|0.82|1.02|246.62 62|0.82|0.95|247.22 44|0.82|0.78|247.90 13|0.82|0.21|248.60 351|0.82|0.74|249.32 334|0.82|0.91|250.08 318|0.64|0.64|250.64
+            281|0.82|0.02|251.64 265|0.82|0.68|252.34 256|0.82|1.30|252.99 253|0.82|1.29|253.64 252|0.82|1.38|254.27 250|0.82|1.10|254.95 239|0.82|0.40|255.68
+            227|0.82|0.88|256.25 205|0.82|0.60|257.23 190|0.82|0.80|258.01 182|0.82|0.58|258.83 168|0.33|0.41|259.55
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
+        locator.setPosition(PdrPlace("KULA", 1), Offset(0.53223854f, 0.5727814f), measure = false)
+        val log = ArrayList<String>()
+        var now = 0.0
+        locator.trace = { log += "$now $it" }
+        val floors = recorded.map { now = it.timeS; locator.walk("KULA", it); it.timeS to locator.place.floor }
+        assertTrue("$floors", floors.any { it.second == 2 })
+        assertEquals("$log", PdrPlace("KULA", 1), locator.place)
+    }
+
+    /**
+     * Isti snimak, 269-290 s (koraci iz ponovo puštenog detektora): "Ovde sam" na dnu spirale na I, pa niz spiralu u prizemlje. Prvi
+     * korak (31°, prilaz) je bliži kraku naviše (0°) nego naniže (90°), pa je ulazak bio naviše; skretanje ka kraku naniže (76-81°, znak
+     * 1,0-1,7) je stiglo uz drugo gazište (posle pravila "prerano skretanje"), pa je okret suprotno od kazaljke bio "okret nazad" i tačka
+     * je hodnikom otišla u prolaz ka NB-u.
+     */
+    @Test
+    fun kulaSpiral_firstStepTowardUpFlight_butDescending_reachesGroundFloor() {
+        val recorded = timedSteps(
+            """
+            31|0.29|-0.34|269.73 34|0.27|-0.75|270.51 52|0.32|-0.80|271.38 67|0.82|0.34|272.14 76|0.82|1.05|272.81 81|0.82|1.68|273.39 81|0.82|1.37|274.07
+            79|0.82|1.42|274.68 71|0.82|1.56|275.42 60|0.82|1.06|276.10 50|0.82|0.85|276.61 17|0.82|0.38|277.63 355|0.82|0.85|278.17 318|0.82|1.50|278.81
+            300|0.82|0.94|279.26 274|0.82|0.35|280.09 264|0.82|1.09|280.80 254|0.82|1.42|281.43 247|0.82|0.85|282.07 239|0.82|1.21|282.78 229|0.82|1.49|283.39
+            215|0.82|1.79|284.02 202|0.82|1.04|284.77 200|0.82|1.52|285.40 208|0.82|1.25|286.01 222|0.21|1.10|286.54
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
+        locator.setPosition(PdrPlace("KULA", 1), Offset(0.5315065f, 0.55588645f), measure = false)
+        val log = ArrayList<String>()
+        var now = 0.0
+        locator.trace = { log += "$now $it" }
+        recorded.forEach { now = it.timeS; locator.walk("KULA", it) }
+        assertEquals("$log", PdrPlace("KULA", 0), locator.place)
+        // Bez ponavljanja kruga naniže tačka ostaje na I (okret nazad -> hodnik).
+        assertTrue("$log", log.any { "liči na silazak" in it })
+    }
+
+    /**
+     * Teren 09.11.2026 (hod-20261109-113244, 288-326 s, k-trem-up, koraci iz ponovo puštenog detektora): iz prizemlja Kule kroz trem na
+     * podest S1 bez odredišta, preko podesta pa levim bočnim krakom NAVIŠE u prizemlje AMF-a ("Ovde sam" u 326 s u prizemlju). Znak
+     * penjanja je od 6. koraka posle trema visok (medijana 0,82 na 8. koraku) - pravilo silaska posle trema je tačku slalo na −1.
+     */
+    @Test
+    fun kulaToAmf_throughPorchWithoutDestination_sideFlightUp_staysOnGroundFloor() {
+        val recorded = timedSteps(
+            """
+            312|0.82|0.69|291.96 312|0.82|0.78|292.72 318|0.82|0.44|293.23 330|0.82|0.79|293.87 338|0.82|0.61|294.47 345|0.82|0.58|295.11 341|0.82|0.48|295.72 336|0.82|0.98|296.41
+            329|0.82|0.77|296.95 342|0.82|1.12|297.51 342|0.82|0.42|298.09 343|0.82|0.66|298.66 345|0.82|0.72|299.21 345|0.82|0.34|299.77 347|0.82|1.17|300.33
+            347|0.82|0.52|300.96 345|0.82|0.37|301.47 348|0.82|0.43|302.00 352|0.82|0.85|302.62 348|0.82|0.45|303.14 344|0.82|0.45|303.78 348|0.82|0.25|304.36
+            356|0.82|0.15|304.91 357|0.82|0.27|305.48 357|0.82|0.05|306.03 348|0.82|-0.73|306.28 334|0.82|0.78|306.64 331|0.82|0.50|307.23 332|0.82|0.34|307.79
+            328|0.82|0.18|308.38 325|0.82|0.63|308.94 323|0.82|0.11|309.61 325|0.82|-0.08|310.27 336|0.82|0.21|310.87 341|0.82|0.59|311.45 339|0.82|1.24|312.06
+            334|0.82|0.82|312.69 335|0.82|0.69|313.44 336|0.82|0.91|314.18 337|0.82|0.99|314.89 338|0.82|0.65|315.56 335|0.82|1.30|316.19 332|0.82|0.68|316.83
+            331|0.82|0.48|317.66 339|0.82|0.22|318.60 351|0.62|0.14|319.21 8|0.82|-0.43|319.95 8|0.82|0.20|320.59 0|0.82|-0.18|321.27 352|0.82|-0.11|321.92
+            """,
+        )
+        // Hodnik prizemlja Kule ka holu trema (274, 429 px plana): prolaz počinje u 297,5 s kao u replay-u.
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
+        locator.setPosition(PdrPlace("KULA", 0), Offset(0.47857143f, 0.4691f), measure = false)
+        val log = ArrayList<String>()
+        var now = 0.0
+        locator.trace = { log += "$now $it" }
+        // Od 302 s su koraci na snimku u ravni plana AMF-a.
+        val reasons = recorded.mapNotNull { now = it.timeS; locator.walk(if (it.timeS >= 302.0) "AMF" else "KULA", it) }
+        assertTrue("$reasons $log", PlaceReason.PROLAZ in reasons)
+        assertEquals("$log", PdrPlace("AMF", 0), locator.place)
+    }
+
     /** Lokator na čvoru [id] (kao posle starta) i koraci [recorded] u zgradi [buildingId]; za svaki korak (vreme, na stepeništu). */
     private fun PdrLocator.replaySteps(buildingId: String, recorded: List<TimedStep>): List<Pair<Double, Boolean>> =
         recorded.map { walk(buildingId, it); it.timeS to onStairs }

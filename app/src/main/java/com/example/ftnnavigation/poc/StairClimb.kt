@@ -157,8 +157,9 @@ fun stairKey(node: Node): String =
     node.buildingId + "/" + node.id.removePrefix(node.buildingId + "-").substringAfter('-').removeSuffix(DOWN_FOOT_SUFFIX)
 
 /**
- * Ivice samo za rutu od dna kraka naniže do prolaza sa međupodesta ([BuildingGraph.routeOnly]; F I sprat -> pasarela, NB I ->
- * stakleni prolaz): za crtanje rute krakom do međupodesta (kraj kraka, tačka 2 putanje [StairPath]), pa do prolaza - u oba
+ * Ivice samo za rutu od dna kraka do prolaza sa međupodesta ([BuildingGraph.routeOnly]; F I sprat -> pasarela, NB I ->
+ * stakleni prolaz, F prizemlje krakom naviše -> pasarela): za crtanje rute krakom do međupodesta (kraj kraka, tačka 2 putanje
+ * [StairPath] naniže, tačka 1 naviše), pa do prolaza - u oba
  * smera ivice, relativne koordinate plana. Teren 02.11.2026, F I sprat: linija je išla pravo od vrha kraka do pasarele, preko
  * oba kraka.
  */
@@ -174,8 +175,9 @@ fun flightBends(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, 
             b.type == NodeType.STEPENISTE && a.type == NodeType.PROLAZ -> b to a
             else -> continue
         }
-        if (!foot.id.endsWith(DOWN_FOOT_SUFFIX)) continue
-        val bend = byStair[stairKey(foot) to foot.floor]?.firstOrNull()?.points?.getOrNull(2) ?: continue
+        // Dno kraka naniže: kraj kraka je tačka 2 putanje; dno kraka naviše (F prizemlje -> pasarela, 09.11.2026): tačka 1.
+        val end = if (foot.id.endsWith(DOWN_FOOT_SUFFIX)) 2 else 1
+        val bend = byStair[stairKey(foot) to foot.floor]?.firstOrNull()?.points?.getOrNull(end) ?: continue
         bends[foot.id to gate.id] = bend
         bends[gate.id to foot.id] = bend
     }

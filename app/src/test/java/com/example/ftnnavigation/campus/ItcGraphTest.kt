@@ -57,15 +57,44 @@ class ItcGraphTest {
             .forEach { assertNotNull(it.id, graph.route(NbPlan.ENTRANCE_ID, it.id)) }
     }
 
-    /** Sve ITC sale iz rasporeda su ucrtane; ITCA1 je amfiteatar na III spratu (korisnik, 09.10.2026). */
+    /**
+     * ITC sale iz rasporeda: ITCA1 je amfiteatar na III spratu (korisnik, 09.10.2026); ITC03/ITC04 su 003/004 u prizemlju (teren
+     * 09.11.2026, pretpostavka korisnika); ITCS-* nisu ucrtane (sobe na mestima pretpostavke su 106, 303, 401) - ruta do zgrade.
+     */
     @Test
-    fun scheduleRooms_drawn_itca1OnThirdFloor() {
+    fun scheduleRooms_itca1OnThirdFloor_itc03And04OnGround_itcsToBuilding() {
         val schedule = Json { ignoreUnknownKeys = true }
             .decodeFromString<ScheduleData>(File("src/main/assets/schedule.json").readText())
         val names = schedule.timetables.flatMap { t -> t.classes.map { it.room } }.filter { it.startsWith("ITC") }.toSet()
         assertEquals(setOf("ITC03", "ITC04", "ITCA1", "ITCS-01", "ITCS-03", "ITCS-RC"), names)
-        names.forEach { assertEquals(it, ItcPlan.BUILDING_ID, room(it).buildingId) }
+        val campus = CampusData.parse(File("src/main/assets/campus.json").readText())
+        for (name in names) {
+            val target = checkNotNull(resolveTarget(name, graph, campus)) { name }
+            assertEquals(name, ItcPlan.BUILDING_ID, target.node.buildingId)
+            assertEquals(name, name.startsWith("ITCS"), target.approximate)
+        }
         assertEquals(3, room("ITCA1").floor)
+        assertEquals(room("ITC 003").id, resolveTarget("ITC03", graph, campus)!!.node.id)
+        assertEquals(room("ITC 004").id, resolveTarget("ITC04", graph, campus)!!.node.id)
+        assertEquals("004", ItcPlan.label("ITC 004"))
+    }
+
+    /** Oznake sa vrata (teren 09.11.2026, stranica "ITC prostorije"): I i II sever 01-05 od zapada, istočna kolona 06/07, jug 10, 09, 08. */
+    @Test
+    fun roomNumbers_fromDoorSigns() {
+        for (floor in 1..2) {
+            val north = (1..5).map { room("ITC $floor%02d".format(it)) }
+            assertEquals(north, north.sortedBy { it.x })
+            val south = listOf(10, 9, 8).map { room("ITC $floor%02d".format(it)) }
+            assertEquals(south, south.sortedBy { it.x })
+            assertTrue(room("ITC ${floor}06").y < room("ITC ${floor}07").y)
+            assertTrue(room("ITC ${floor}06").x > north.last().x)
+        }
+        val third = listOf("ITC 301", "ITC 302", "ITC 303", "ITC 304").map(::room)
+        assertEquals(third, third.sortedBy { it.x })
+        assertEquals(listOf("ITC 308", "ITC 307", "ITC 306").map(::room), listOf("ITC 308", "ITC 307", "ITC 306").map(::room).sortedBy { it.x })
+        assertEquals(4, room("ITC 401").floor)
+        assertEquals(listOf(0, 0, 0, 0), listOf("ITC 001", "ITC 002", "ITC 003", "ITC 004").map { room(it).floor })
     }
 
     /** Lift ide od prizemlja do III sprata (na IV je mašinska prostorija), stepenište do IV. */
@@ -78,7 +107,7 @@ class ItcGraphTest {
         val noStairs = routeOrFallback(RoutingProfile(avoidStairs = true)) { graph.route(ItcPlan.ENTRANCE_ID, room("ITCA1").id, it) }!!
         assertTrue(noStairs.nodes.none { it.type == NodeType.STEPENISTE })
         // Na IV sprat samo stepenicama - ruta uz napomenu.
-        assertTrue(routeOrFallback(RoutingProfile(avoidStairs = true)) { graph.route(ItcPlan.ENTRANCE_ID, room("ITCS-RC").id, it) }!!.fallback)
+        assertTrue(routeOrFallback(RoutingProfile(avoidStairs = true)) { graph.route(ItcPlan.ENTRANCE_ID, room("ITC 401").id, it) }!!.fallback)
     }
 
     /**

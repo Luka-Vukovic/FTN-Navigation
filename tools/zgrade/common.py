@@ -26,6 +26,7 @@ Opis sprata (dict):
                 (AMF S2: dva kraka u nizu) - sve četiri tačke putanje na jednoj liniji
   lifts       - [(ključ, pravougaonik, čvor)]
   points      - [(ključ, (x, y), tip)] - ulazi, prolazi (tip ULAZ/PROLAZ/HODNIK)
+  links       - [(ključ, ključ[, STEPS])] - dodatne ivice između čvorova sprata (posle points)
   columns, entrances, steps, landings - samo crtež
 """
 
@@ -220,6 +221,10 @@ def build_floor(g, f, plan, down_keys=(), up_keys=None):
             g.edge(prev, cur, steps=STEPS in mark)
             prev = cur
         g.edge(prev, n, steps=STEPS in last)
+    # Dodatne ivice između postojećih čvorova: (ključ, ključ[, STEPS]) - F prizemlje: krakom naviše do pasarele (ruta), uz ravnu vezu
+    # hodnika sa pasarelom (lociranje).
+    for a, b, *mark in plan.get("links", []):
+        g.edge(g.nid(f, a), g.nid(f, b), steps=STEPS in mark)
     net.finish()
 
 

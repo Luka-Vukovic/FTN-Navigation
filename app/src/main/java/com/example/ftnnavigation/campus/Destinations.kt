@@ -43,6 +43,8 @@ private val ROOM_ALIASES = mapOf(
     "MI B4-0D" to "MI B4-0A", "MI D4-A" to "MI D4", "MI D4-D" to "MI D4", "MI A2-1" to "MI A2-0", "MI A2-4A" to "MI A2-4",
     "MI A3-3" to "MI A2-4", "MI B4-1A" to "MI B4-1", "MI B4-B" to "MI B4-A", "MI B4-4A" to "MI B4-4",
     "MI B4-5A" to "MI B4-5", "MI V4-1" to "MI V3-5", "MI G3-1C" to "MI G3-1A",
+    // Teren 09.11.2026, korisnik: "Pretpostavljam da su 003 i 004 neke od učionica koje mi trebaju" (ITC prizemlje).
+    "ITC03" to "ITC 003", "ITC04" to "ITC 004",
 )
 
 /** Oznaka sale iz rasporeda kako je ucrtana na planu (O12 -> 012, 204A -> 204), inače ista oznaka. */

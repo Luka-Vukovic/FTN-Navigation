@@ -53,7 +53,8 @@ object DepartureScheduler {
         reschedule(context)
     }
 
-    suspend fun reschedule(context: Context) {
+    /** [reason]: ko traži zakazivanje - samo za [DepartureLog]. */
+    suspend fun reschedule(context: Context, reason: String = "aplikacija") {
         val context = context.applicationContext
         val alarms = context.getSystemService(AlarmManager::class.java)
         val zone = ZoneId.systemDefault()
@@ -66,16 +67,22 @@ object DepartureScheduler {
         }
         if (planner == null || departure == null) {
             alarms.cancel(alarmIntent(context, Intent()))
+            DepartureLog.nothing(context, reason)
             return
         }
         val notifyAtMs = departure.notifyAt.toEpochMilli(zone)
         val pending = alarmIntent(context, content(context, departure, planner.location(context, departure), zone))
-        if (alarms.canScheduleExactAlarms()) {
+        val exact = alarms.canScheduleExactAlarms()
+        if (exact) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, notifyAtMs, pending)
         } else {
             alarms.setWindow(AlarmManager.RTC_WAKEUP, notifyAtMs - INEXACT_WINDOW_MS, INEXACT_WINDOW_MS, pending)
         }
+        DepartureLog.scheduled(context, reason, departure.notifyAt, exact, logItem(departure))
     }
+
+    private fun logItem(departure: Departure) =
+        "${departure.item.date} ${departure.startAt.format(TIME_FORMAT)} ${departure.item.place ?: "-"}"
 
     /** Polazak za koji je zakazan alarm (null ako nema časova ni događaja), za prikaz u podešavanjima. */
     suspend fun upcoming(context: Context): Departure? =
@@ -104,6 +111,7 @@ object DepartureScheduler {
         val notifiedUpTo = prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0).toLocalDateTime(zone)
         val missed = planner.missed(now.toLocalDateTime(zone), notifiedUpTo) ?: return
         DepartureNotifications.show(context, content(context, missed, planner.location(context, missed), zone))
+        DepartureLog.missed(context, missed.notifyAt, logItem(missed))
         markNotified(context, now)
     }
 

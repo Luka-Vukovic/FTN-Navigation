@@ -246,6 +246,41 @@ class BuildingGraph(
         return NodeType.STEPENISTE in types && NodeType.PROLAZ in types
     }
 
+    /**
+     * Ivica samo za lociranje, ne za rutu: ravna veza hodnika sa prolazom do koga ruta ide krakom ([routeOnly]: stepenište -> prolaz
+     * na istom spratu). F prizemlje: pasarela je na međupodestu (krakom naviše pa desno), ali lociranje je drži vezanu pravo za
+     * hodnik (replay 04.10.2026 - korisnik je iz hodnika išao ravnim hodom ka njoj). Teren 09.11.2026 (F 010 -> Skriptarnica,
+     * snimak ekrana): linija rute je išla hodnikom pored kraka i preko podesta ("opet čudna ponuđena putanja").
+     */
+    fun locateOnly(edge: Edge): Boolean = (edge.fromId to edge.toId) in locateOnlyEdges
+
+    /**
+     * Graf za lociranje: bez ivica samo za rutu ([routeOnly]) do prolaza koji lociranje drži ravnom vezom sa hodnikom ([locateOnly]) -
+     * F prizemlje: krak do pasarele. Za lociranje je taj prolaz isti kao do 09.11.2026 (sa krakom su se u replay-u menjali ulazak na
+     * krak i izlazak na pasarelu). Isti čvorovi (ista id), bez tih ivica; ako ih nema - isti graf.
+     */
+    fun forLocating(): BuildingGraph {
+        val gates = locateOnlyEdges.map { it.first }.toSet()
+        val drop = edges.filter { routeOnly(it) && (it.fromId in gates || it.toId in gates) }.toSet()
+        return if (drop.isEmpty()) this else BuildingGraph(nodes, edges - drop, placements)
+    }
+
+    private val locateOnlyEdges: Set<Pair<String, String>> by lazy {
+        val result = HashSet<Pair<String, String>>()
+        for (gate in nodes.filter { it.type == NodeType.PROLAZ }) {
+            val near = neighbors(gate.id).filter { (n, _) -> n.buildingId == gate.buildingId && n.floor == gate.floor }
+            val byFlight = near.any { (n, _) -> n.type == NodeType.STEPENISTE && edge(gate.id, n.id)?.let(::routeOnly) == true }
+            if (!byFlight) continue
+            for ((n, type) in near) {
+                val e = edge(gate.id, n.id) ?: continue
+                if (type != EdgeType.HOD || e.steps || n.type == NodeType.STEPENISTE || routeOnly(e)) continue
+                result += gate.id to n.id
+                result += n.id to gate.id
+            }
+        }
+        result
+    }
+
     /** Sale (prostorije sa nazivom); toaleti su prostorije bez naziva i nisu odredište po nazivu. */
     val rooms: List<Node> get() = nodes.filter { it.type == NodeType.PROSTORIJA && it.name != null }
 
@@ -297,6 +332,7 @@ class BuildingGraph(
             for ((next, type) in neighbors(id)) {
                 if (next.buildingId == cameFromBuilding) continue
                 if (type != EdgeType.HOD && verticalOf(next) in profile.excludedVerticals) continue
+                if (type == EdgeType.HOD && (id to next.id) in locateOnlyEdges) continue
                 val step = cost(node, next, type, profile) ?: continue
                 val vertical = if (type == EdgeType.HOD) state.vertical else verticalOf(next)
                 val changed = vertical != state.vertical

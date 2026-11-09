@@ -70,10 +70,8 @@ class FGraphTest {
         val rooms = schedule.timetables.flatMap { it.classes }.map { it.room }.distinct()
             .filter { buildingOfRoom(it) == FPlan.BUILDING_ID }
         assertTrue(rooms.toString(), rooms.containsAll(listOf("F 315", "F 317", "F 318", "F 319", "F-208")))
-        // F 317 (08.11.2026): po korisniku je 316 naspram 300A, a 318 odmah do nje (široka soba sa uskom) - 317 nije u gornjem redu, mesto
-        // nepoznato (za teren) - ruta do zgrade.
-        assertTrue(checkNotNull(resolveTarget("F 317", graph, campus)).approximate)
-        for (name in rooms - "F 317") {
+        // F 317 je 08.11.2026 bila bez mesta (ruta do zgrade); od 09.11. uska soba naspram stepeništa.
+        for (name in rooms) {
             val target = checkNotNull(resolveTarget(name, graph, campus)) { name }
             assertFalse(name, target.approximate)
             assertEquals(name, FPlan.BUILDING_ID, target.node.buildingId)
@@ -151,10 +149,16 @@ class FGraphTest {
         fun doorOf(name: String) = graph.neighbors(room(name).id).single().first
         val lower = listOf("F 300A", "F 300B") + (301..307).map { "F $it" }
         assertEquals(lower, lower.sortedByDescending { room(it).x })
-        // Uske sobe između 312A i 313A su 310 i 311; 318 je široka soba spojena sa uskom (korisnik, 08.11. uveče).
-        val upper = listOf("F 308", "F 309", "F 312A", "F 310", "F 311", "F 313A", "F 313", "F 314", "F 315", "F 316", "F 318", "F 319")
+        // Uske sobe između 312A i 313A su 310 i 311 (korisnik, 08.11. uveče); teren 09.11.: sve oznake te strane redom, 312 i 317.
+        val upper = listOf(
+            "F 308", "F 309", "F 312A", "F 310", "F 311", "F 312", "F 313A", "F 313", "F 314", "F 315", "F 316", "F 317", "F 318", "F 319",
+        )
         assertEquals(upper, upper.sortedBy { room(it).x })
         assertTrue(abs(doorOf("F 316").x - doorOf("F 300A").x) < 0.02f)
+        // 317 naspram stepeništa (krak naniže III sprata), uža od 318 ("318 definitivno nije minijaturna učionica").
+        val stairs = checkNotNull(graph.node("F-3-S-D"))
+        assertTrue(abs(doorOf("F 317").x - stairs.x) < 0.04f)
+        assertTrue(room("F 318").x - room("F 317").x > room("F 317").x - room("F 316").x)
         val third = graph.nodes.filter { it.buildingId == FPlan.BUILDING_ID && it.floor == 3 }
         val between = third.filter {
             it.type == NodeType.PROSTORIJA && it.y <= room("F 319").y + 0.01f && it.x > room("F 318").x && it.x < room("F 319").x
@@ -164,6 +168,25 @@ class FGraphTest {
         val east = listOf("F 326", "F 325", "F 324")
         assertEquals(east, east.sortedBy { room(it).x })
         assertTrue(third.none { it.amenity != null })
+    }
+
+    /**
+     * Teren 09.11.2026 (F 010 -> Skriptarnica, snimak ekrana): linija rute je iz hodnika prizemlja išla pored kraka i preko podesta na
+     * pasarelu. Ruta ide krakom naviše (dno kraka, ivica sa stepenicima samo za rutu), a ravna veza hodnika sa pasarelom je samo za
+     * lociranje.
+     */
+    @Test
+    fun groundFloorToPasarela_routeUpTheFlight() {
+        val route = checkNotNull(graph.route(room("F 010").id, room("Skriptarnica").id))
+        val ids = route.nodes.map { it.id }
+        val at = ids.indexOf("F-0-PROLAZ-AMF")
+        assertEquals(ids.toString(), "F-0-S", ids[at - 1])
+        val direct = checkNotNull(graph.edge("F-0-PROLAZ-AMF", "F-0-H470_96"))
+        assertTrue(graph.locateOnly(direct))
+        assertFalse(graph.routeOnly(direct))
+        assertTrue(graph.routeOnly(checkNotNull(graph.edge("F-0-S", "F-0-PROLAZ-AMF"))))
+        // I sprat: pasarela samo krakom (bez ravne veze) - ništa samo za lociranje.
+        assertFalse(graph.edges.any { graph.locateOnly(it) && "F-0-PROLAZ-AMF" !in listOf(it.fromId, it.toId) })
     }
 
     /** Iz Amfiteatara na III sprat F-bloka: pasarelom (bez staza) pa stepeništem. */

@@ -179,6 +179,10 @@ def floor_0():
         # grafom radili ("Ok su bili prelazi").
         "stairs": stairs(400),
         "points": [("PROLAZ-AMF", PASSAGE, "PROLAZ")],
+        # Ruta ide krakom naviše na međupodest pa na pasarelu (teren 09.11.2026, F 010 -> Skriptarnica: linija je išla hodnikom pored
+        # kraka i preko podesta - "opet čudna ponuđena putanja"). Ivica je samo za rutu (BuildingGraph.routeOnly), a ravna veza sa
+        # hodnikom ostaje samo za lociranje (BuildingGraph.locateOnly).
+        "links": [("S", "PROLAZ-AMF", STEPS)],
     }
 
 
@@ -251,8 +255,8 @@ def floor_3():
     normalno, ali je 313 podeljeno 313A i 313. Prati evakuacioni plan." i (t-f319) "Nema prostorije između 318 i 319, 320 stoji čeono,
     a sa druge strane su redom prostorije 324, 325, 326."
     - Donji red od stepeništa ka zapadu: 300A (uz stepenište, ispod hola; vrata iz hola), 300B, 301 ... 307 (zapadni kraj).
-    - Gornji red od zapada: 308, 309, 312A, dve uske sobe BEZ BROJA (nije rečeno - za teren), 313A, 313, 314, 315, 316 (naspram 300A),
-      317, 318 (uska, 450-474 - do tada bez broja, a 318 je bila soba 400-450), 319 (474-549, ruta je tu stala - korisnik stigao).
+    - Gornji red od zapada (teren 09.11.2026): 308, 309, 312A, 310, 311, 312, 313A, 313, 314, 315, 316 (naspram 300A), 317 (uska,
+      naspram stepeništa), 318 (široka), 319 (475-549, ruta je tu stala 08.11. - korisnik stigao). Vidi rooms.
     - 320: na kraju hodnika pregrada sa vratima preko hodnika (x 525) - "čeono"; iza nje predvorje i dve sobe (bez broja).
     - Istočno od stepeništa dole: 326, 325, 324 (vrata na hodnik po planu x 488, 503, 519; ispod 325/324 na planu simboli WC-a -
       toalet III sprata do tada je bio PRETPOSTAVKA na tom mestu, sada ga nema).
@@ -269,9 +273,14 @@ def floor_3():
         "rooms": [
             # 08.11.2026 uveče (korisnik): dve uske sobe između 312A i 313A su 310 i 311; "318 definitivno nije uska soba ... ta uska soba
             # je spojena sa širokom levo" (ulaz u učionicu je na prednjem kraju) - 318 = 400-474 sa oba vrata sa plana.
+            # Teren 09.11.2026 (f-iii), oznake na toj strani redom: "308, 309, 312A, 310, 311, 312, 313A, 313, 314, 315, 316, 317, 318,
+            # 319 ... ne odgovara broju prostorija na planu"; "vrata 316 stoje otprilike naspram vrata 300A, dok vrata 317 stoje naspram
+            # stepenica"; "moguće je da je obrnut redosled velike i male prostorije, 318 definitivno nije minijaturna učionica". Na pitanje
+            # (izbor): 317 uska odmah naspram stepeništa, 318 široka posle nje. 312 = soba između 311 i stare 313, a stara 313 (199-250)
+            # podeljena na 313A i 313 (korisnik 08.11.: "313 je podeljeno 313A i 313"). Pregrade 225 i 425 su PRETPOSTAVKA (plan ih nema).
             *rooms(3, 0, 82, [(0, 50, 8), (50, 100, 9), (100, 124, "F 312A"), (124, 149, 10), (149, 174, 11),
-                              (174, 199, "F 313A"), (199, 250, 13), (250, 300, 14), (300, 350, 15), (350, 400, 16),
-                              (400, 475, 18), (475, 549, 19), (549, 600, None)]),
+                              (174, 199, 12), (199, 225, "F 313A"), (225, 250, 13), (250, 300, 14), (300, 350, 15),
+                              (350, 400, 16), (400, 425, 17), (425, 475, 18), (475, 549, 19), (549, 600, None)]),
             *rooms(3, 98, 163, [(0, 50, 7), (50, 100, 6), (100, 149, 5), (149, 199, 4), (199, 250, 3),
                                 (250, 300, 2), (300, 350, 1)]),
             R(350, 373, 98, 135, "F 300B"), R(350, 373, 135, 163), R(373, 397, 140, 163, "F 300A"),
@@ -306,9 +315,10 @@ DOORS = {
         "F 207": [(64, 114)], "F 206": [(137, 114)], "F 205": [(163, 114)], "F 204": [(212, 114)], "F 202": [(314, 114)],
         "F 226": [(493, 114)], "F 227": [(556, 114)], "F 228": [(591, 114)]},
     # III: vrata ponovo očitana sa ispravljenog plana 08.11.2026 (prekidi u zidu i lukovi), za sve sobe.
+    # 09.11.2026: 312 na vratima nekadašnje 313A (186); 313A/313 i 317 sa novim pregradama - vrata na sredini zida (PRETPOSTAVKA).
     3: {"F 308": [(40, 82)], "F 309": [(71, 82)], "F 312A": [(113, 82)], "F 310": [(137, 82)], "F 311": [(161, 82)],
-        "F 313A": [(186, 82)], "F 313": [(225, 82)], "F 314": [(275, 82)], "F 315": [(325, 82)], "F 316": [(373, 82)],
-        "F 318": [(422, 82), (463, 82)], "F 319": [(485, 82)], "F 320": [(525, 99)],
+        "F 312": [(186, 82)], "F 313A": [(212, 82)], "F 313": [(237, 82)], "F 314": [(275, 82)], "F 315": [(325, 82)],
+        "F 316": [(373, 82)], "F 317": [(412, 82)], "F 318": [(463, 82)], "F 319": [(485, 82)], "F 320": [(525, 99)],
         "F 307": [(40, 98)], "F 306": [(71, 98)], "F 305": [(124, 98)], "F 304": [(175, 98)], "F 303": [(226, 98)],
         "F 302": [(276, 98)], "F 301": [(325, 98)], "F 300B": [(367, 98)], "F 300A": [(382, 140)],
         "F 326": [(487, 115)], "F 325": [(502, 115)], "F 324": [(518, 115)]},

@@ -413,6 +413,21 @@ private const val SPIRAL_APPROACH_STEPS = 6
 private const val SPIRAL_RETURN_STEPS = 4
 
 /**
+ * Stajanje bar ovoliko (bez koraka) posle silaska sa spirale na spratu dozvoljava ponovni ulazak, nazad ([PdrLocator]
+ * reenterAfterPause). Teren 09.11.2026, Kula II: 23 s.
+ */
+private const val SPIRAL_REENTER_PAUSE_NS = 5_000_000_000L
+
+/** ... u prvih ovoliko koraka posle stajanja. */
+private const val SPIRAL_PAUSE_REENTER_STEPS = 4
+
+/** Krug naviše okrenut unazad je silazak ([PdrLocator] looksLikeDescent) samo uz bar ovoliko koraka sa znakom stepenica ... */
+private const val SPIRAL_DESCENT_KNOWN_STEPS = 4
+
+/** ... a ponavlja se od prvog koraka bliže pravcu prvog kraka naniže od ovoliko ([PdrLocator] replayAsDescent). */
+private const val SPIRAL_DESCENT_START_DEG = 45f
+
+/**
  * Let pored stepeništa sa nacrtanim krakovima mora ići pravcem krakova (do ovoliko, sa ispravkom smera). Greška smera u
  * zgradama je do ~15-20° (teren 03.-10.10.2026); lažna promena 10.10. (NB I sprat) je imala let ~90° od kraka.
  */
@@ -643,8 +658,13 @@ private const val SIDE_GATE_DEG = 45f
  */
 private const val PASSAGE_DESCENT_SCORE = 0.75f
 
-/** ... u prvih ovoliko koraka posle dolaska. */
-private const val PASSAGE_DESCENT_STEPS = 8
+/**
+ * ... u prvih ovoliko koraka posle dolaska. Bilo 8: teren 09.11.2026 (k-trem-up, replay sa ponovo puštenim detektorom) - sa podesta S1
+ * preko podesta (3-4 koraka) pa bočnim krakom NAVIŠE, a znak penjanja je od 6. koraka bio 0,6-1,2 (medijana 0,82 na 8. koraku) - tačka
+ * je lažno sišla na −1. Srednji krak naniže počinje odmah ispred trema (08.11.: silazak prepoznat posle 5 koraka), a do bočnih krakova
+ * se ide preko podesta.
+ */
+private const val PASSAGE_DESCENT_STEPS = 6
 
 /** Penjanje: prolaz sprata pored međupodesta ([PdrLocator] landingGateBeside) najviše ovoliko od kraja prvog kraka (F P: 1,3 m). */
 private const val LANDING_BESIDE_GATE_M = 3.0
@@ -861,13 +881,17 @@ sealed interface HeadingCheck {
  * Pozicije su relativne na plan mesta ([place]); na kampusu je "plan" cela mapa (sever gore).
  */
 class PdrLocator(
-    private val graph: BuildingGraph,
+    graph: BuildingGraph,
     private val campus: CampusData,
     declinationDeg: Float,
     stairPaths: List<StairPath> = emptyList(),
     openAreas: List<OpenArea> = emptyList(),
     spiralPaths: List<SpiralPath> = emptyList(),
 ) {
+    // Graf bez ivica samo za rutu do prolaza koji lociranje drži ravnom vezom ([BuildingGraph.forLocating]; F prizemlje -> pasarela,
+    // 09.11.2026): sa njom su se ulazak na krak i izlazak na pasarelu u replay-u menjali na više mesta.
+    private val graph = graph.forLocating()
+
     // Krugovi spiralnih stepeništa (Kula) po ključu stepeništa.
     private val spirals: Map<String, SpiralPath> = spiralPaths.associateBy { it.stairKey }
 
@@ -1942,6 +1966,12 @@ class PdrLocator(
             recentPlanHeadings.addLast(headingOnPlan(azimuthDeg))
             if (recentPlanHeadings.size > OUTER_DOOR_STEPS) recentPlanHeadings.removeFirst()
             if (timeNs != null && redo == 0) {
+                val previousNs = recentStepNs.lastOrNull()
+                stepsAfterPause = when {
+                    previousNs == null -> Int.MAX_VALUE / 2
+                    timeNs - previousNs >= SPIRAL_REENTER_PAUSE_NS -> 0
+                    else -> (stepsAfterPause + 1).coerceAtMost(Int.MAX_VALUE / 2)
+                }
                 recentStepNs.addLast(timeNs)
                 if (recentStepNs.size > 3) recentStepNs.removeFirst()
                 if (peak != null) {
@@ -2661,7 +2691,9 @@ class PdrLocator(
         val heading = headingOnPlan(azimuthDeg)
         for ((key, path) in spirals) {
             val stair = stairs[key] ?: continue
-            if (stair.buildingId != place.buildingId || offFlightStair == key to place.floor) continue
+            if (stair.buildingId != place.buildingId) continue
+            val blocked = offFlightStair == key to place.floor
+            if (blocked && stepsAfterPause > SPIRAL_PAUSE_REENTER_STEPS) continue
             val node = stair.nodes[place.floor] ?: continue
             if (distance(local(node.x, node.y), here) > SPIRAL_ENTER_M) continue
             // Samo sa ivice do stepeništa - hodnik oko lifta ide pored njega istim pravcem kao prvi krak (teren 12.10.2026 uveče:
@@ -2679,11 +2711,33 @@ class PdrLocator(
                     abs(angleDiffDeg(heading, spiralDir(pts[pts.size - 1], pts[pts.size - 2]))) <= SPIRAL_ENTER_DEG -> false
                 else -> continue
             }
+            // Posle silaska sa spirale na ovom spratu ([offFlightStair]) samo posle stajanja i samo nazad, suprotno od dolaska
+            // ([reenterAfterPause]).
+            if (blocked && !reenterAfterPause(key, up)) continue
             beginSpiral(key, stair, path, up, heading)
             return true
         }
         return false
     }
+
+    /**
+     * Ponovo na spiralu sa koje je tačka sišla na ovom spratu ([offFlightStair]): posle stajanja ([SPIRAL_REENTER_PAUSE_NS], najviše
+     * [SPIRAL_PAUSE_REENTER_STEPS] koraka posle njega) i u smeru suprotnom od dolaska na sprat ([lastStairChange]). Teren 09.11.2026
+     * (k-ii, Kula II): spiralom na II, par koraka u hodnik, ~23 s stajanja kod stepeništa, pa nazad niz spiralu - ulazak je bio
+     * blokiran, a kompas uz okno je izmerio samo ~267° okreta (pun krug traži 330°), pa je tačka hodnikom oko jezgra ostala na II i
+     * korisnik je na I ručno ispravio. Bez stajanja ostaje blokirano (hod pored stepeništa odmah posle silaska, 19.10.2026).
+     * Korak mora da liči na stepenice ([SPIRAL_APPROACH_SCORE]): pre toga je korisnik posle 10 s stajanja napravio 4 sitna koraka
+     * ka stepeništu bez znaka (pa još 23 s stajao) - ulazak tada je uzimao pogrešan pravac za početak kruga i sprat je kasnio.
+     */
+    private fun reenterAfterPause(key: String, up: Boolean): Boolean {
+        val change = lastStairChange ?: return false
+        if (change.stairKey != key || change.toFloor != place.floor) return false
+        val score = recentScores.lastOrNull() ?: return false
+        return (change.toFloor > change.fromFloor) != up && score >= SPIRAL_APPROACH_SCORE
+    }
+
+    /** Koraci od poslednjeg stajanja ([SPIRAL_REENTER_PAUSE_NS] bez koraka); veliko dok stajanja nije bilo. */
+    private var stepsAfterPause = Int.MAX_VALUE / 2
 
     /**
      * Silazak sa spirale okretom nazad na spratu (posle promene sprata): još [stepsLeft] koraka korak pravcem suprotnim od
@@ -2808,6 +2862,9 @@ class PdrLocator(
             }
             trace?.invoke("stepenište ${w.stair.key}: okret nazad - silazi sa spirale")
             if (descendedLoop(w)) return leaveSpiralBelow(w)
+            if (w.up && !w.changed && w.flight < 2 && w.stair.nodes[place.floor - 1] != null && looksLikeDescent(w)) {
+                replayAsDescent(w)?.let { return it.reason }
+            }
             return if (w.flight < 2) replayAsCorridor(w) else leaveSpiral(w)
         }
         var reason: PlaceReason? = null
@@ -2903,6 +2960,49 @@ class PdrLocator(
         val known = scores.filterNotNull()
         if (known.size * 2 < scores.size) return true
         return known.count { it >= SPIRAL_LOOP_STAIR_SCORE } >= SPIRAL_LOOP_STAIR_STEPS
+    }
+
+    /**
+     * Koraci kruga (bar [SPIRAL_DESCENT_KNOWN_STEPS] sa znakom, bar pola koraka) po ubrzanju liče na silazak: medijana znaka bar
+     * [DESCENT_STAIR_SCORE].
+     */
+    private fun looksLikeDescent(w: SpiralWalk): Boolean {
+        val scores = w.loopScores.filterNotNull().sorted()
+        if (scores.size < SPIRAL_DESCENT_KNOWN_STEPS || scores.size * 2 < w.loopScores.size) return false
+        return scores[scores.size / 2] >= DESCENT_STAIR_SCORE
+    }
+
+    /** Ishod [replayAsDescent] (razlog može biti null i kad je krug ponovljen naniže). */
+    private class Replayed(val reason: PlaceReason?)
+
+    /**
+     * Krug naviše se na prvim kracima okrenuo unazad, a koraci liče na silazak ([looksLikeDescent]): to je bio silazak - ulazak je
+     * uzeo krak naviše jer je prvi korak (prilaz, sa podesta) išao bliže njegovom pravcu. Teren 09.11.2026 (Kula I -> P posle "Ovde
+     * sam" na dnu spirale): prvi korak 33° (krak naviše 0°, naniže 90°), pa 52, 66, 76-81° (znak 1,1-1,7), pa skretanje suprotno
+     * od kazaljke - "okret nazad", tačka je hodnikom otišla u prolaz ka NB-u. Krug naniže se ponovi od prvog koraka bliže pravcu
+     * prvog kraka naniže od 45° (raniji koraci su prilaz), sa okretom merenim od pravca tog kraka. null: nema takvog koraka.
+     */
+    private fun replayAsDescent(w: SpiralWalk): Replayed? {
+        val path = spirals[w.stair.key] ?: return null
+        val pts = path.points
+        val down = spiralDir(pts[pts.size - 1], pts[pts.size - 2])
+        val from = w.loopSteps.indexOfFirst { abs(angleDiffDeg(headingOnPlan(it.azimuthDeg), down)) < SPIRAL_DESCENT_START_DEG }
+        if (from < 0) return null
+        spiralWalk = null
+        raw = w.entryRaw
+        match = w.entryMatch
+        walkedX = w.loopWalked.first
+        walkedY = w.loopWalked.second
+        trace?.invoke("stepenište ${w.stair.key}: krug unazad liči na silazak - ${w.loopSteps.size - from} koraka spiralom naniže")
+        beginSpiral(w.stair.key, w.stair, path, up = false, heading = down)
+        var reason: PlaceReason? = null
+        for (i in from until w.loopSteps.size) {
+            val s = w.loopSteps[i]
+            val d = spiralWalk
+            val r = if (d != null) spiralStep(d, s.azimuthDeg, s.lengthM, s.timeNs, w.loopScores.getOrNull(i)) else step(s.azimuthDeg, s.lengthM, 0, s.timeNs)
+            r?.let { reason = it }
+        }
+        return Replayed(reason)
     }
 
     /** [descendedLoop]: sprat niže, pa silazak sa spirale na hodnik tog sprata. */
@@ -3070,8 +3170,7 @@ class PdrLocator(
         val gate = gateways[place].orEmpty().filter { !it.viaFlight }.map { it.node }
             .filter { distance(from, local(it.x, it.y)) <= STAIR_GATE_M && offBy(it) <= STAIR_GATE_DEG && offBy(it) < offBy(corridor) }
             .minByOrNull(::offBy) ?: return null
-        val inner = graph.neighbors(gate.id).map { it.first }
-            .firstOrNull { it.buildingId == gate.buildingId && it.floor == gate.floor } ?: return null
+        val inner = innerOf(gate) ?: return null
         trace?.invoke("stepenište ${climb.stair.key}: ravan hod ka prolazu ${gate.id}")
         return inner to gate
     }
@@ -3497,10 +3596,14 @@ class PdrLocator(
             val d = distance(turn, g)
             if (d > LANDING_BESIDE_GATE_M || d < 0.3) return@mapNotNull null
             if (abs(angleDiffDeg(onPlan, azimuthOf(g.x - turn.x, g.y - turn.y))) > SIDE_GATE_DEG) return@mapNotNull null
-            val inner = graph.neighbors(gw.node.id).map { it.first }
-                .firstOrNull { it.buildingId == gw.node.buildingId && it.floor == gw.node.floor } ?: return@mapNotNull null
+            val inner = innerOf(gw.node) ?: return@mapNotNull null
             (inner to gw.node) to d
         }.minByOrNull { it.second }?.first
+    }
+
+    /** Čvor sprata uz kapiju [gate] (ne ivicom samo za rutu - [BuildingGraph.routeOnly], F prizemlje: krak do pasarele). */
+    private fun innerOf(gate: Node): Node? = graph.neighbors(gate.id).map { it.first }.firstOrNull {
+        it.buildingId == gate.buildingId && it.floor == gate.floor && graph.edge(gate.id, it.id)?.let(graph::routeOnly) != true
     }
 
     /**

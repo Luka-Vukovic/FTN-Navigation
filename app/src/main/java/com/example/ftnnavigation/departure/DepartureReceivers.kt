@@ -12,9 +12,12 @@ import kotlinx.coroutines.launch
 class DepartureAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // Alarm zakazan pre isključivanja obaveštenja (setEnabled ga briše, ali za svaki slučaj).
-        if (DepartureScheduler.isEnabled(context)) DepartureNotifications.show(context, intent)
-        DepartureScheduler.markNotified(context, intent.getLongExtra(DepartureNotifications.EXTRA_NOTIFY_AT_MS, 0))
-        rescheduleAsync(context)
+        val enabled = DepartureScheduler.isEnabled(context)
+        if (enabled) DepartureNotifications.show(context, intent)
+        val notifyAtMs = intent.getLongExtra(DepartureNotifications.EXTRA_NOTIFY_AT_MS, 0)
+        DepartureLog.alarm(context, notifyAtMs, enabled)
+        DepartureScheduler.markNotified(context, notifyAtMs)
+        rescheduleAsync(context, "alarm")
     }
 }
 
@@ -24,7 +27,7 @@ class DepartureAlarmReceiver : BroadcastReceiver() {
  */
 class DepartureRescheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action in ACTIONS) rescheduleAsync(context)
+        if (intent.action in ACTIONS) rescheduleAsync(context, intent.action.orEmpty().substringAfterLast('.'))
     }
 
     private companion object {
@@ -39,11 +42,11 @@ class DepartureRescheduleReceiver : BroadcastReceiver() {
 }
 
 /** Učitavanje rasporeda i grafa traje - van glavne niti, uz goAsync (receiver sme do ~10 s). */
-private fun BroadcastReceiver.rescheduleAsync(context: Context) {
+private fun BroadcastReceiver.rescheduleAsync(context: Context, reason: String) {
     val pending = goAsync()
     CoroutineScope(Dispatchers.Default).launch {
         try {
-            DepartureScheduler.reschedule(context)
+            DepartureScheduler.reschedule(context, reason)
         } finally {
             pending.finish()
         }

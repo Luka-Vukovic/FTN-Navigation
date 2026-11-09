@@ -25,9 +25,13 @@ trećem spratu"), 3 sobe jugozapadno. IV: samo jezgro, učionica i mašinska pro
 terasa, ostalo krov (šrafirano).
 
 Oznake sala NISU na planovima. U rasporedu: ITCA1 (amfiteatar III - korisnik), ITC03, ITC04, ITCS-01, ITCS-03, ITCS-RC.
-Ostalo je PRETPOSTAVKA (teren 09.10.2026, korisnik: "ITC po pretpostavci"): ITC03 i ITC04 = dve učionice prizemlja
-(natpis UČIONICA), ITCS-01 = velika soba I sprata (istočna kolona, sever), ITCS-03 = soba III sprata kod stepeništa,
-ITCS-RC = učionica IV sprata (jedina sa natpisom UČIONICA gore).
+Do 09.11.2026 PRETPOSTAVKA (teren 09.10.2026, korisnik: "ITC po pretpostavci"): ITC03 i ITC04 = dve učionice prizemlja,
+ITCS-01 = velika soba I sprata (istočna kolona, sever), ITCS-03 = soba III sprata kod stepeništa, ITCS-RC = učionica IV sprata.
+Teren 09.11.2026: korisnik je na stranici "ITC prostorije" obeležio oznake sa vrata (001-004; 101-110, 201-210 - sever 01-05,
+istočna kolona 06/07, jug 08 desno ... 10 levo; 301-304, 306-308, ITCA1; 401) - sale su "ITC 101" (brojevi se ponavljaju u NB i
+Kuli), na planu natpis bez "ITC ". Sobe na mestima ITCS-01/03/RC su 106, 303, 401, pa ITCS-* nisu ucrtane (korisnik: verovatno
+suteren, nije na planovima - ruta do zgrade). ITC03 -> "ITC 003", ITC04 -> "ITC 004" (korisnik: "Pretpostavljam da su 003 i
+004 neke od učionica koje mi trebaju") - aliasi u aplikaciji (Destinations.ROOM_ALIASES).
 """
 
 import argparse
@@ -81,11 +85,11 @@ def floor_0():
         "entrances": [(128, -22, 160, 0), (159, 205, 177, 212)],
         "steps": [(128, -22, 160, -8)],  # spoljne stepenice glavnog ulaza
         "rooms": [
-            # Zapad: hodnik sa po dve sobe.
-            R(0, 73, 0, 61, door=(31, 61)), R(73, 117, 0, 61, door=(89, 61)),
+            # Zapad: hodnik sa po dve sobe (sever 001, 002 - teren 09.11.2026; južne bez oznake).
+            R(0, 73, 0, 61, "ITC 001", door=(31, 61)), R(73, 117, 0, 61, "ITC 002", door=(89, 61)),
             R(0, 59, 89, 148, door=(31, 89)), R(59, 117, 89, 148, door=(89, 89)),
-            # Istok: dve učionice, vrata ka holu (PRETPOSTAVKA oznake).
-            R(231, 344, 0, 75, "ITC03", door=(231, 66)), R(231, 344, 75, 148, "ITC04", door=(231, 84)),
+            # Istok: dve učionice, vrata ka holu - 003 i 004 (teren 09.11.2026).
+            R(231, 344, 0, 75, "ITC 003", door=(231, 66)), R(231, 344, 75, 148, "ITC 004", door=(231, 84)),
             R(158, 189, 26, 56),  # portir
             *c["core_rooms"],
             R(189, 231, 103, 125, amenity=TOALET, door=(189, 114)),
@@ -102,21 +106,20 @@ def typical(floor):
     """I i II sprat (isti plan)."""
     c = core(floor)
     y0, y1 = CORRIDOR
-    names = {1: {"ITCS-01": (285, 344, 0, 73)}}.get(floor, {})
 
-    def room(x0, x1, ry0, ry1, door):
-        name = next((n for n, r in names.items() if r == (x0, x1, ry0, ry1)), None)
-        return R(x0, x1, ry0, ry1, name, door=door)
+    def room(x0, x1, ry0, ry1, door, n):
+        return R(x0, x1, ry0, ry1, f"ITC {floor}{n:02d}", door=door)
 
+    # Oznake sa vrata (teren 09.11.2026): sever 01-05 od zapada, istočna kolona 06 (sever) i 07, jug 08 (istok), 09, 10 (zapad).
     return {
         "title": f"{'I' * floor} sprat",
         "paths": [[(2, 77), (283, 77)], [(159, 77), (159, 97)]],
         "corridors": [[(0, y0), (285, y0), (285, y1), (226, y1), (226, 101), (116, 101), (116, y1), (0, y1)]],
         "rooms": [
-            *[room(a, b, 0, y0, (d, y0)) for a, b, d in ((0, 58, 27), (58, 116, 87), (116, 172, 157), (172, 230, 195),
-                                                         (230, 285, 258))],
-            room(285, 344, 0, 73, (285, 68)), room(285, 344, 75, 148, (285, 85)),
-            room(0, 60, y1, 148, (32, y1)), room(60, 116, y1, 148, (89, y1)), room(226, 285, y1, 148, (258, y1)),
+            *[room(a, b, 0, y0, (d, y0), n) for n, (a, b, d) in enumerate(
+                ((0, 58, 27), (58, 116, 87), (116, 172, 157), (172, 230, 195), (230, 285, 258)), start=1)],
+            room(285, 344, 0, 73, (285, 68), 6), room(285, 344, 75, 148, (285, 85), 7),
+            room(0, 60, y1, 148, (32, y1), 10), room(60, 116, y1, 148, (89, y1), 9), room(226, 285, y1, 148, (258, y1), 8),
             *c["core_rooms"],
         ],
         "stairs": c["stairs"],
@@ -136,10 +139,12 @@ def floor_3():
         "paths": [[(2, 77), (236, 77)], [(159, 77), (159, 97)]],
         "corridors": [[(0, y0), (232, y0), (238, 59), (238, y1), (226, y1), (226, 101), (116, 101), (116, y1), (0, y1)]],
         "rooms": [
-            R(0, 60, 0, y0, door=(32, y0)), R(60, 114, 0, y0, door=(89, y0)),
-            R(114, 174, 0, y0, "ITCS-03", door=(150, y0)), R(174, 232, 0, y0, door=(186, y0)),
+            # Oznake sa vrata (teren 09.11.2026): sever 301-304 od zapada, jug 308 (zapad), 307, 306.
+            R(0, 60, 0, y0, "ITC 301", door=(32, y0)), R(60, 114, 0, y0, "ITC 302", door=(89, y0)),
+            R(114, 174, 0, y0, "ITC 303", door=(150, y0)), R(174, 232, 0, y0, "ITC 304", door=(186, y0)),
             tech, amph,
-            R(0, 60, y1, 148, door=(31, y1)), R(60, 90, y1, 148, door=(86, y1)), R(90, 116, y1, 148, door=(94, y1)),
+            R(0, 60, y1, 148, "ITC 308", door=(31, y1)), R(60, 90, y1, 148, "ITC 307", door=(86, y1)),
+            R(90, 116, y1, 148, "ITC 306", door=(94, y1)),
             R(226, 238, y1, 148),
             *c["core_rooms"],
         ],
@@ -159,7 +164,7 @@ def floor_4():
         "corridors": [[(142, 54), (181, 54), (181, 100), (142, 100)]],
         "rooms": [
             R(112, 142, 58, 95),  # mašinska prostorija lifta
-            R(181, 237, 54, 144, "ITCS-RC", door=(181, 80)),
+            R(181, 237, 54, 144, "ITC 401", door=(181, 80)),  # učionica (teren 09.11.2026: 401)
             R(112, 123, 125, 148),  # tehnička
             R(112, 142, 95, 125),
         ],

@@ -311,10 +311,12 @@ object MiPlan : IndoorBuilding {
 /**
  * ITC (Istraživačko-tehnološki centar): prizemlje ... IV sprat, sa fotografija evakuacionih planova (teren 09.10.2026,
  * tools/zgrade/build_itc.py), gore sever (jezgro sa stepeništem dole, kao F-blok). Lift P-III. Oznake sala nisu na
- * planovima: ITCA1 (amfiteatar III) je od korisnika, ostale (ITC03, ITC04, ITCS-01, ITCS-03, ITCS-RC) su pretpostavka.
+ * planovima: ITCA1 (amfiteatar III) je od korisnika, a sobe su "ITC 101" po oznakama sa vrata (teren 09.11.2026; brojevi se
+ * ponavljaju u NB i Kuli). ITC03/ITC04 iz rasporeda su 003/004 (pretpostavka korisnika), ITCS-* nisu ucrtane (suteren?).
  */
 object ItcPlan : IndoorBuilding {
     const val BUILDING_ID = "ITC"
+    const val ROOM_PREFIX = "ITC "
 
     /** Glavni ulaz, sever. */
     const val ENTRANCE_ID = "ITC-0-ULAZ"
@@ -327,7 +329,7 @@ object ItcPlan : IndoorBuilding {
     // Plan je 374 x 257 px (NB 750 x 275 sa 0,033) - ista veličina slova u metrima.
     override val labelHeight get() = 0.035f
 
-    override fun label(name: String) = name
+    override fun label(name: String) = name.removePrefix(ROOM_PREFIX)
 
     @DrawableRes
     override fun floorDrawable(floor: Int): Int = when (floor) {
