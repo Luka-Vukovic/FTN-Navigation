@@ -38,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ntp"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "zgrade"))
 import build_amf  # noqa: E402 - planovi NB, Amfiteatara, Kule i F-bloka: zajednički sistem, viewport-i, ulazi
+import build_dgg  # noqa: E402
 import build_f  # noqa: E402
 import build_itc  # noqa: E402
 import build_mi  # noqa: E402
@@ -87,9 +88,9 @@ LABEL_SIDE = {"SMESTAJ": "EAST", "ISHRANA": "WEST", "ZZZS": "WEST"}
 # Zgrade čiji OSM unutrašnji prstenovi nisu dvorišta (provereno na terenu) - crtaju se pune.
 NO_HOLES = {"NTP"}
 
-# Zgrade čiji unutrašnji graf postoji u aplikaciji (assets/nb.json, amf.json, kula.json, f.json, ntp.json, mi.json):
-# za njih se ne pravi čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
-WITH_INTERIOR = {"NB", "NTP", "AMF", "KULA", "F", "MI", "ITC"}
+# Zgrade čiji unutrašnji graf postoji u aplikaciji (assets/nb.json, amf.json, kula.json, f.json, ntp.json, mi.json, itc.json,
+# dgg.json): za njih se ne pravi čvor ZGRADA - ulazi i prolazi se u aplikaciji vezuju za čvorove unutrašnjeg grafa.
+WITH_INTERIOR = {"NB", "NTP", "AMF", "KULA", "F", "MI", "ITC", "DGG"}
 
 # Spojni prolazi (unutrašnje veze), OSM way zasebnog dela zgrade između njih.
 PASSAGES = [
@@ -117,7 +118,9 @@ ENTRANCES = {
     "NTP": [("plan", x, y) for (x, y), _ in build_ntp.ENTRANCES.values()],
     # F: bez spoljnog ulaza - samo pasarela iz Amfiteatara (korisnik, 02.10.2026: "ne znam da li se koristi stvarno
     # neki spoljni ulaz"). Ranije (29.09.) ulaz sa juga (45.245662, 19.851880) - evakuacioni plan tu nema vrata.
-    "DGG": [(45.244697, 19.850246)],  # istočna strana, gornja trećina
+    # DGG: glavni ulaz sa evakuacionog plana prizemlja (build_dgg.ENTRANCE preko smeštaja plana, 10.11.2026); tačka sa terenske
+    # mape (45.244697, 19.850246 - "istočna strana, gornja trećina", 29.09.) je 2,2 m od njega.
+    "DGG": [(45.24468, 19.850259)],
     "MENZA": [13123222548],  # istočni ugao, kod Restorana 10
     "ZZZS": [2317805668],  # istočna strana, prema Dr Sime Miloševića
     # Službe u domu: ulaz sa severne strane, naspram tačke službe.
@@ -385,6 +388,20 @@ def itc_placement(to_campus, nb_placement, m_per_px):
         "originX": round(origin[0], 2),
         "originY": round(origin[1], 2),
         "rotationDeg": round(nb_placement["rotationDeg"] + 90, 2),
+        "widthM": round(m_per_px * vw, 2),
+        "heightM": round(m_per_px * vh, 2),
+    }
+
+
+def dgg_placement(to_campus, nb_placement, m_per_px):
+    """DGG je u koordinatama evakuacionog plana prizemlja (build_dgg.py: gore istok) - zajednički sistem zarotiran za 180°:
+    tačka DGG (x, y) je u zajedničkom sistemu build_dgg.to_shared, pa je rotacija smeštaja rotacija NB + 180°."""
+    vx, vy, vw, vh = build_dgg.VIEWPORT
+    origin = to_campus(build_dgg.to_shared((vx, vy)))
+    return {
+        "originX": round(origin[0], 2),
+        "originY": round(origin[1], 2),
+        "rotationDeg": round(nb_placement["rotationDeg"] + 180, 2),
         "widthM": round(m_per_px * vw, 2),
         "heightM": round(m_per_px * vh, 2),
     }
@@ -661,6 +678,7 @@ def main():
               for bid, module in (("AMF", build_amf), ("KULA", build_kula))}
     shared["F"] = f_placement(to_campus, placement, m_per_px)
     shared["ITC"] = itc_placement(to_campus, placement, m_per_px)
+    shared["DGG"] = dgg_placement(to_campus, placement, m_per_px)
     # MI (03.10.2026): plan je u zajedničkom sistemu (build_mi.py: OSM obris preveden u px plana NB).
     shared["MI"] = shared_placement(to_campus, placement, m_per_px, build_mi.VIEWPORT)
     for label, (plan_xy, node) in {
@@ -673,6 +691,7 @@ def main():
         "MI ulaz": (build_mi.ENTRANCE, "K-U-MI-1"),
         "ITC ulaz": (build_itc.to_shared(build_itc.ENTRANCE), "K-U-ITC-1"),
         "ITC prolaz ka AMF": (build_itc.to_shared(build_itc.PASSAGE_AMF), "K-P-ITC-AMF"),
+        "DGG ulaz": (build_dgg.to_shared(build_dgg.ENTRANCE), "K-U-DGG-1"),
     }.items():
         checks[f"{label} -> {node}"] = math.dist(to_campus(plan_xy), graph.xy(node))
 

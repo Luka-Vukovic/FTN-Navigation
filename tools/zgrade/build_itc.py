@@ -32,6 +32,13 @@ istočna kolona 06/07, jug 08 desno ... 10 levo; 301-304, 306-308, ITCA1; 401) -
 Kuli), na planu natpis bez "ITC ". Sobe na mestima ITCS-01/03/RC su 106, 303, 401, pa ITCS-* nisu ucrtane (korisnik: verovatno
 suteren, nije na planovima - ruta do zgrade). ITC03 -> "ITC 003", ITC04 -> "ITC 004" (korisnik: "Pretpostavljam da su 003 i
 004 neke od učionica koje mi trebaju") - aliasi u aplikaciji (Destinations.ROOM_ALIASES).
+
+Suteren (teren 10.11.2026, teren/izveštaj39/IMG_20261110_114249_1.jpg - evakuacioni plan suterena, orijentacija kao I-III; korisnik
+je na kopiji te slike (IMG_20261110_114456.jpg) upisao S03, RC i S01, i potvrdio ITC03/ITC04 = 003/004): ITCS-03 velika učionica na
+zapadu (sever), ITCS-RC i ITCS-01 dve učionice na istoku (iste kao 003/004 u prizemlju, isto mesto vrata), kabineti 1-3 uz zapadni
+hodnik, hol, isto jezgro (lift ide i na -1). Zapadnim hodnikom se izlazi na južni zid ("IZLAZ", evakuacioni put ka kružnom platou)
+- crta se, ali nije vezan za kampus (pravilo: ne koristiti evakuacione izlaze). Zidovi su očitani sa ispravljene fotografije
+(homografija po 4 spoljna ugla); sredina plana pomerena +3 px da se jezgro poklopi sa ostalim spratovima.
 """
 
 import argparse
@@ -41,7 +48,7 @@ from common import TOALET, R, build_graph, rect_poly, write_all
 VX, VY, VW, VH = VIEWPORT = (-15, -30, 374, 257)
 WALL = (0, 0, 344, 148)  # OSM obris (34,9 x 15,0 m)
 BUILDING = "ITC"
-FLOORS = [0, 1, 2, 3, 4]
+FLOORS = [-1, 0, 1, 2, 3, 4]
 
 # Jezgro (isto na svim spratovima; na fotografijama do ~0,3 m razlike).
 LIFT_RECT = (122, 100, 140, 118)
@@ -58,13 +65,47 @@ def to_shared(p):
 
 
 def core(floor, toilets=True):
-    """Lift (P-III), stepenište, toaleti (dva, vrata ka holu) i ostava ispod lifta."""
+    """Lift (-1 - III), stepenište, toaleti (dva, vrata ka holu) i ostava ispod lifta."""
     lifts = [("L", LIFT_RECT, (131, 99))] if floor <= 3 else []
     rooms = [R(122, 140, 118, 148)]
     if toilets:
         rooms += [R(178, 201, 101, 148, amenity=TOALET, door=(186, 101)),
                   R(201, 226, 101, 148, amenity=TOALET, door=(219, 101))]
     return {"lifts": lifts, "stairs": [("S", STAIRS_RECT, (159, 99))], "core_rooms": rooms}
+
+
+def floor_m1():
+    """Suteren (teren 10.11.2026)."""
+    c = core(-1, toilets=False)
+    return {
+        "title": "Suteren",
+        "paths": [
+            [(66, 75), (229, 75)],  # zapadni hodnik i hol
+            [(66, 75), (66, 146)],  # zapadni hodnik ka izlazu na jugu
+            [(159, 75), (159, 97)],  # ka stepeništu
+            [(182, 75), (182, 134)],  # prolaz desno od stepeništa (toaleti)
+        ],
+        "corridors": [
+            [(59, 60), (117, 60), (117, 45), (160, 45), (160, 56), (193, 56), (193, 45), (231, 45), (231, 88), (189, 88),
+             (189, 148), (176, 148), (176, 100), (117, 100), (117, 89), (73, 89), (73, 148), (59, 148)],
+        ],
+        "entrances": [(59, 148, 73, 156)],  # "IZLAZ" (evakuacioni put) - nije vezan za kampus
+        "rooms": [
+            # Zapad: velika učionica (korisnik: S03) i soba ispod nje (na planu iza tanke pregrade), kabineti 2 i 1 (sever), 3 (jug).
+            R(0, 59, 0, 89, "ITCS-03", door=(59, 75)), R(0, 59, 89, 148, door=(59, 107)),
+            R(59, 86, 0, 60, door=(76, 60)), R(86, 117, 0, 60, door=(97, 60)), R(73, 117, 89, 148, door=(87, 89)),
+            # Sever, uz hol: dve sobe i uzana između.
+            R(117, 160, 0, 45, door=(155, 45)), R(160, 176, 0, 56), R(176, 231, 0, 45, door=(197, 45)),
+            # Istok: dve učionice kao 003/004 u prizemlju (korisnik: RC sever, S01 jug).
+            R(231, 344, 0, 75, "ITCS-RC", door=(231, 66)), R(231, 344, 75, 148, "ITCS-01", door=(231, 84)),
+            *c["core_rooms"],
+            R(189, 218, 88, 121, door=(189, 98)),
+            R(189, 218, 121, 148, amenity=TOALET, door=(189, 134)),
+            R(218, 231, 88, 148, amenity=TOALET, door=(224, 88)),
+        ],
+        "stairs": c["stairs"],
+        "lifts": c["lifts"],
+    }
 
 
 def floor_0():
@@ -172,11 +213,11 @@ def floor_4():
     }
 
 
-PLANS = {0: floor_0(), 1: typical(1), 2: typical(2), 3: floor_3(), 4: floor_4()}
+PLANS = {-1: floor_m1(), 0: floor_0(), 1: typical(1), 2: typical(2), 3: floor_3(), 4: floor_4()}
 
 
 def build():
-    return build_graph(BUILDING, PLANS, stairs={"S": FLOORS}, lifts={"L": [0, 1, 2, 3]})
+    return build_graph(BUILDING, PLANS, stairs={"S": FLOORS}, lifts={"L": [-1, 0, 1, 2, 3]})
 
 
 def main():

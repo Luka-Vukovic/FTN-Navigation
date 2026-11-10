@@ -1433,12 +1433,15 @@ class PdrLocatorTest {
         assertEquals(PdrPlace("NB", 1), back.place)
     }
 
-    /** Sa najnižeg nivoa se može samo gore - i tako se nauči strana okreta stepeništa bez crteža krakova (ITC; Kula je od 18.10.2026 spirala). */
+    /**
+     * Sa najnižeg nivoa se može samo gore - i tako se nauči strana okreta stepeništa bez crteža krakova (ITC, od 10.11.2026 iz
+     * suterena; Kula je od 18.10.2026 spirala).
+     */
     @Test
     fun fromLowestLevel_goesUp_andLearnsTurn() {
-        val (locator, away) = atStairs("ITC/S", 0)
+        val (locator, away) = atStairs("ITC/S", -1)
         assertEquals(listOf(PlaceReason.STEPENICE), locator.flights(away, -180f))
-        assertEquals(PdrPlace("ITC", 1), locator.place)
+        assertEquals(PdrPlace("ITC", 0), locator.place)
         assertEquals(false, locator.lastStairChange!!.guessed)
         assertEquals(-1, locator.learnedStairTurns["ITC/S"])
         // Naučeno važi na drugim spratovima: okret ulevo je gore, udesno dole.

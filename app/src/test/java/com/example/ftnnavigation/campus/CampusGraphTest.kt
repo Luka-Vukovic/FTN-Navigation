@@ -5,6 +5,7 @@ import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
 import com.example.ftnnavigation.graph.KulaPlan
+import com.example.ftnnavigation.graph.DggPlan
 import com.example.ftnnavigation.graph.ItcPlan
 import com.example.ftnnavigation.graph.MiPlan
 import com.example.ftnnavigation.graph.NbPlan
@@ -158,10 +159,12 @@ class CampusGraphTest {
         assertEquals(NodeType.PROSTORIJA, lab.node.type)
         listOf("F 315", "NTP-A", "A2", "NTP-307", "L6 (RC)", "F 318")
             .forEach { assertNotNull(it, resolveTarget(it, graph, campus)) }
-        // MI ima plan od 03.10.2026 - "do zgrade" je glavni ulaz; zgrada bez plana je jedan čvor K-Z-...
+        // MI ima plan od 03.10.2026, ITC od 09.10., DGG od 10.11. - "do zgrade" je glavni ulaz; zgrada bez plana (sada samo
+        // službe) je jedan čvor K-Z-...
         assertEquals(MiPlan.ENTRANCE_ID, resolveTarget("Mašinski institut", graph, campus)?.node?.id)
         assertEquals(ItcPlan.ENTRANCE_ID, resolveTarget("Istraživačko-tehnološki centar", graph, campus)?.node?.id)
-        assertEquals("K-Z-DGG", resolveTarget("Departman za građevinarstvo i geodeziju", graph, campus)?.node?.id)
+        assertEquals(DggPlan.ENTRANCE_ID, resolveTarget("Departman za građevinarstvo i geodeziju", graph, campus)?.node?.id)
+        assertEquals("K-Z-MENZA", resolveTarget("Menza", graph, campus)?.node?.id)
     }
 
     /**

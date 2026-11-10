@@ -121,7 +121,7 @@ sealed interface IndoorBuilding {
 }
 
 /** Sve zgrade sa planom, redom kao na Mapi. */
-val INDOOR_BUILDINGS: List<IndoorBuilding> by lazy { listOf(NbPlan, AmfPlan, KulaPlan, NtpPlan, FPlan, MiPlan, ItcPlan) }
+val INDOOR_BUILDINGS: List<IndoorBuilding> by lazy { listOf(NbPlan, AmfPlan, KulaPlan, NtpPlan, FPlan, MiPlan, ItcPlan, DggPlan) }
 
 fun indoorBuilding(buildingId: String): IndoorBuilding? = INDOOR_BUILDINGS.find { it.buildingId == buildingId }
 
@@ -309,10 +309,11 @@ object MiPlan : IndoorBuilding {
 }
 
 /**
- * ITC (Istraživačko-tehnološki centar): prizemlje ... IV sprat, sa fotografija evakuacionih planova (teren 09.10.2026,
- * tools/zgrade/build_itc.py), gore sever (jezgro sa stepeništem dole, kao F-blok). Lift P-III. Oznake sala nisu na
+ * ITC (Istraživačko-tehnološki centar): suteren ... IV sprat, sa fotografija evakuacionih planova (teren 09.10.2026, suteren
+ * 10.11.2026, tools/zgrade/build_itc.py), gore sever (jezgro sa stepeništem dole, kao F-blok). Lift -1 - III. Oznake sala nisu na
  * planovima: ITCA1 (amfiteatar III) je od korisnika, a sobe su "ITC 101" po oznakama sa vrata (teren 09.11.2026; brojevi se
- * ponavljaju u NB i Kuli). ITC03/ITC04 iz rasporeda su 003/004 (pretpostavka korisnika), ITCS-* nisu ucrtane (suteren?).
+ * ponavljaju u NB i Kuli). ITC03/ITC04 iz rasporeda su 003/004 (potvrdio korisnik 10.11.), ITCS-01/03/RC su u suterenu (korisnik
+ * ih je upisao na plan suterena) - nazivi kao u rasporedu.
  */
 object ItcPlan : IndoorBuilding {
     const val BUILDING_ID = "ITC"
@@ -320,7 +321,7 @@ object ItcPlan : IndoorBuilding {
 
     /** Glavni ulaz, sever. */
     const val ENTRANCE_ID = "ITC-0-ULAZ"
-    val FLOORS = 0..4
+    val FLOORS = -1..4
 
     override val buildingId get() = BUILDING_ID
     override val asset get() = "itc.json"
@@ -333,10 +334,44 @@ object ItcPlan : IndoorBuilding {
 
     @DrawableRes
     override fun floorDrawable(floor: Int): Int = when (floor) {
+        -1 -> R.drawable.floor_plan_itc_m1
         1 -> R.drawable.floor_plan_itc_1
         2 -> R.drawable.floor_plan_itc_2
         3 -> R.drawable.floor_plan_itc_3
         4 -> R.drawable.floor_plan_itc_4
         else -> R.drawable.floor_plan_itc_0
+    }
+}
+
+/**
+ * Departman za građevinarstvo i geodeziju: prizemlje ... III sprat, sa fotografija evakuacionih planova (teren 10.11.2026,
+ * tools/zgrade/build_dgg.py), gore istok (glavni ulaz), jezgro sa stepeništem dole (zapad). Sale su "LG 105" kao u rasporedu
+ * (natpis bez "LG "), i kabineti - na vratima nema "LG", ali brojevi se ponavljaju u drugim zgradama (kao "ITC 101"). Na I spratu
+ * su čitljivi samo 101 i 105 (upisao korisnik) - 102, 103, 106 i 107 su PRETPOSTAVKA. Lift u oknu stepeništa (korisnik: "dosta je
+ * slično kao u NB").
+ */
+object DggPlan : IndoorBuilding {
+    const val BUILDING_ID = "DGG"
+    const val ROOM_PREFIX = "LG "
+
+    /** Glavni ulaz, istok. */
+    const val ENTRANCE_ID = "DGG-0-ULAZ"
+    val FLOORS = 0..3
+
+    override val buildingId get() = BUILDING_ID
+    override val asset get() = "dgg.json"
+    override val floors get() = FLOORS
+    override val entranceId get() = ENTRANCE_ID
+    // Plan je 318 x 194 px (ITC 374 x 257 sa 0,035) - ista veličina slova u metrima.
+    override val labelHeight get() = 0.046f
+
+    override fun label(name: String) = name.removePrefix(ROOM_PREFIX)
+
+    @DrawableRes
+    override fun floorDrawable(floor: Int): Int = when (floor) {
+        1 -> R.drawable.floor_plan_dgg_1
+        2 -> R.drawable.floor_plan_dgg_2
+        3 -> R.drawable.floor_plan_dgg_3
+        else -> R.drawable.floor_plan_dgg_0
     }
 }
