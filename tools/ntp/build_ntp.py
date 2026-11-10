@@ -21,7 +21,8 @@ samo pregrade soba u sredini) - "tipičan sprat" (TYPICAL), uz pregrade podeljen
 (typical_plan). I sprat ima svoj crtež (FIRST, teren 04.10.2026 - nije isti kao II i III). Planovi nemaju brojeve sala; do
 03.10.2026 su sale iz rasporeda bile na izmišljenim mestima, a tada ih je korisnik očitao sa vrata
 na svim spratovima (TYPICAL_LABELS, TOP_LABELS, prizemlje). Na planu prizemlja piše L1, L2, L4, LAB,
-AMFITEATAR: NTP-L3 = LAB je pretpostavka, "AMFITEATAR" je u stvari učionica 001, a na vratima "L2" piše C.
+AMFITEATAR: NTP-L3 = LAB (potvrđeno 10.11.2026), "AMFITEATAR" je u stvari učionica 001, a na vratima "L2" piše C;
+"L4" je 004, a soba desno od nje 005 (teren 10.11.2026).
 NTP-A NIJE taj amfiteatar: u prizemlju je, ali u poslovnom delu NTP-a (teren 01.10.2026, korisnik
 nacrtao na mapi kampusa); do njega se ide kroz predvorje "ULAZ - FTN" (PRETPOSTAVKA). Teren 02.10.2026:
 korisnik ga je nacrtao ponovo, na planu - poravnat je sa planom (paralelno/upravno sa ostalim zidovima) i
@@ -757,19 +758,20 @@ def ground_floor(g):
     # Put od predvorja do vrata nije na planu (poslovni deo) - PRETPOSTAVKA.
     center = (sum(x for x, _ in NTP_A) / 4, sum(y for _, y in NTP_A) / 4)
     g.room(f, "NTP-A", center, (-680, NTP_A[1][1]), "VB")
-    g.room(f, "NTP-L3", (930, 650), (1131, 764), "PA")  # "LAB" - pretpostavka
+    g.room(f, "NTP-L3", (930, 650), (1131, 764), "PA")  # "LAB" sa plana; teren 10.11.2026: na vratima papir "L3" - potvrđeno
     # Na planu prizemlja piše L2, a na vratima C (korisnik, teren 03.10.2026).
     g.room(f, "NTP-C", (1170, 1410), (1299, 1420), "P1420")
     g.room(f, "NTP-L1", (1170, 1690), (1299, 1690), "P1690")
-    g.room(f, "NTP-L4", (1580, 1150), (1580, 1297), "LB1600")
-    # Teren 03.10.2026 (korisnik): 001 je soba "AMFITEATAR" sa plana (učionica), 003 prva od tri male sobe ispod S2, 004 soba
-    # desno od L4. Vrata 001: korisnik upisao na snimku ekrana (18.10.2026) - zapadni zid, pri vrhu sobe (bliže S1), ka hodniku
-    # uz zid hola. Do 18.10. su bila pretpostavka "bliže S2, donji kraj" - prevaziđeno.
+    # Teren 10.11.2026 (korisnik upisao na snimku ekrana, kroz PASAŽ): soba "L4" sa evakuacionog plana je 004, a soba desno od
+    # nje (do 10.11. NTP-004 po terenu 03.10.) je 005. Do tada je NTP-005 bio izmišljen u levom krilu (nije nađen) - ta
+    # kancelarija je sada bez naziva. "L4" nije u rasporedu. L3 potvrđen (papir "L3" na vratima, uz naziv laboratorije).
+    g.room(f, "NTP-004", (1580, 1150), (1580, 1297), "LB1600")
+    # Teren 03.10.2026 (korisnik): 001 je soba "AMFITEATAR" sa plana (učionica), 003 prva od tri male sobe ispod S2. Vrata 001:
+    # korisnik upisao na snimku ekrana (18.10.2026) - zapadni zid, pri vrhu sobe (bliže S1), ka hodniku uz zid hola. Do 18.10. su
+    # bila pretpostavka "bliže S2, donji kraj" - prevaziđeno.
     g.room(f, "NTP-001", (552, 1050), (450, 874), "M874")
     g.room(f, "NTP-003", (510, 1645), (510, 1740), "BB510")
-    g.room(f, "NTP-004", (1930, 1331), (1780, 1360), "LB1790")
-    # NTP-005 nije nađen na terenu - izmišljeno mesto u levom krilu.
-    g.room(f, "NTP-005", (143, 1480), (143, 1407), "W143")
+    g.room(f, "NTP-005", (1930, 1331), (1780, 1360), "LB1790")
 
 
 # Toaleti (čvorovi bez naziva, vrsta TOALET - "najbliži toalet" u aplikaciji): (centar, vrata, čvor hodnika).
@@ -780,7 +782,7 @@ def ground_floor(g):
 # Toalet uz liftove L1/L2 (teren 04.10.2026: "svaki sprat (ne prizemlje) ima toalet odmah do lifta"; evakuacioni plan:
 # pregrade i lavaboi ispod liftova): ulaz iz predvorja gore desno, iz gornjeg hodnika. Do 08.10. vrata ka glavnom hodniku
 # (levo) - korisnik: "može biti zbunjujuće što vrata nisu sa te strane".
-# Prizemlje: WC levo od kancelarije NTP-005. Vrata - sredina zida ka hodniku (kao sale), osim gde piše drugačije.
+# Prizemlje: WC levo od kancelarije u levom krilu (do 10.11.2026 izmišljeni NTP-005). Vrata - sredina zida ka hodniku (kao sale), osim gde piše drugačije.
 TOILET_BLOCK_ROOM = 20
 TOILET_BLOCK = ((1170, 1472), (1170, 1389), "C1170")
 TOILET_BLOCK_FIRST = ((1158, 1478), (1130, 1556), "B1107")  # ulaz odozdo (fotografija, teren 17.10.2026)

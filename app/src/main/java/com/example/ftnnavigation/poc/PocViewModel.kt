@@ -25,6 +25,7 @@ import com.example.ftnnavigation.campus.CampusGeo
 import com.example.ftnnavigation.campus.GpsFix
 import com.example.ftnnavigation.campus.RouteTarget
 import com.example.ftnnavigation.campus.buildingExits
+import com.example.ftnnavigation.campus.indoorBuildingAt
 import com.example.ftnnavigation.campus.loadCampus
 import com.example.ftnnavigation.campus.loadGraph
 import com.example.ftnnavigation.campus.loadOpenAreas
@@ -388,11 +389,13 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * GPS lokacija za start praćenja bez označavanja: tačna i napolju (ili u zgradi bez plana). U zgradi sa
-     * planom GPS nije dovoljno tačan - tamo se označava na planu.
+     * planom GPS nije dovoljno tačan - tamo se označava na planu. Ni lokacija u obrisu zgrade sa planom pre nego što je
+     * detektor potvrdi ([indoorBuildingAt], teren 10.11.2026).
      */
     private val startGps: GpsFix?
         get() = routeGps?.takeIf {
-            it.accuracyM <= MAX_START_ACCURACY_M && currentBuilding?.let { b -> indoorBuilding(b.id) } == null
+            it.accuracyM <= MAX_START_ACCURACY_M && currentBuilding?.let { b -> indoorBuilding(b.id) } == null &&
+                campus?.indoorBuildingAt(it.point) == null
         }
 
     /** Praćenje može da počne: pozicija postoji ili je napolju dobar GPS. */

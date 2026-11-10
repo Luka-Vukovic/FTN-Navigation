@@ -35,8 +35,11 @@ class NbGraphTest {
 
     private val nbNodes = graph.nodes.filter { it.buildingId == NbPlan.BUILDING_ID }
 
-    /** Sale iz rasporeda koje su privremeno u NB, a nisu ucrtane (AH6A, AH7A i 012 ucrtane posle terena 01.10.2026). */
-    private val notDrawn = setOf("Fizika", "Hemija", "Hemija 2")
+    /**
+     * Sale iz rasporeda koje su privremeno u NB, a nisu ucrtane (AH6A, AH7A i 012 ucrtane posle terena 01.10.2026; Fizika je od 10.11.2026
+     * F 125).
+     */
+    private val notDrawn = setOf("Hemija", "Hemija 2")
 
     @Test
     fun entranceAndPassages_areConstants() {

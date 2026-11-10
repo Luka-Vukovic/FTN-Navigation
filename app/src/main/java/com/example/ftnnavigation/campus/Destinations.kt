@@ -18,9 +18,9 @@ private val AR_ROOM = Regex("""AR\d""") // AR0...AR6: prizemlje Amfiteatara, zap
 
 /**
  * Privremeno u Nastavnom bloku dok se ne sazna tačno (korisnik, 29.09.2026): "neka bude nastavni
- * blok dok ne saznam". "Hemija 2" je uz "Hemija".
+ * blok dok ne saznam". "Hemija 2" je uz "Hemija". "Fizika" je od 10.11.2026 F 125 ([ROOM_ALIASES]).
  */
-private val PROVISIONAL_NB = listOf("Fizika", "Hemija")
+private val PROVISIONAL_NB = listOf("Hemija")
 
 /** Mesta van kampusa, predaleko da bi bila na mapi (korisnik): prefiks oznake sale -> naziv. */
 private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
@@ -45,6 +45,9 @@ private val ROOM_ALIASES = mapOf(
     "MI B4-5A" to "MI B4-5", "MI V4-1" to "MI V3-5", "MI G3-1C" to "MI G3-1A",
     // Teren 09.11.2026, korisnik: "Pretpostavljam da su 003 i 004 neke od učionica koje mi trebaju" (ITC prizemlje).
     "ITC03" to "ITC 003", "ITC04" to "ITC 004",
+    // Teren 10.11.2026 uveče, korisnik: na I spratu F-bloka tabla "F-125, Laboratorija za fiziku" ("nema table sa rasporedom ... nisam skroz
+    // siguran da je to Fizika"). U rasporedu je "Fizika" samo laboratorijske vežbe (Fizika, Tehnička fizika, Odabrana poglavlja iz fizike).
+    "Fizika" to "F 125",
 )
 
 /** Oznaka sale iz rasporeda kako je ucrtana na planu (O12 -> 012, 204A -> 204), inače ista oznaka. */
@@ -154,6 +157,7 @@ fun buildingOfRoom(room: String): String? {
         // (korisnik, po oznaci na vratima) - iznad hodnika iza amfiteatara.
         name == "L1" -> "AMF"
         name == "Scen-LAB" -> "AMF" // FtnGO: suteren Amfiteatara (ranije NB - korisnik prihvatio ispravku)
+        name == "Fizika" -> "F" // F 125, "Laboratorija za fiziku" (teren 10.11.2026; do tada privremeno NB)
         PROVISIONAL_NB.any { name.startsWith(it) } -> "NB"
         name.startsWith("GRID-") -> "AMF" // suteren Amfiteatara, sa svojim ulazom sa zapada
         AR_ROOM.matches(name) -> "AMF"

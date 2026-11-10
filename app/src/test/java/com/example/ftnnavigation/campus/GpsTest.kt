@@ -50,6 +50,20 @@ class GpsTest {
         assertFalse(campus.building("NB")!!.contains(outdoor))
     }
 
+    /**
+     * Start sa GPS-a ne kreće iz obrisa zgrade sa planom (teren 10.11.2026: GPS 7 m u NB-u, korisnik ~20 m ispred ulaza).
+     * Lokacija ispred glavnog ulaza NB-a i u zgradi bez plana (Menza) nije u takvoj zgradi.
+     */
+    @Test
+    fun indoorBuildingAt_onlyBuildingsWithPlan() {
+        assertEquals("NB", campus.indoorBuildingAt(PointM(372.76, 100.67))?.id)
+        assertEquals("NB", campus.indoorBuildingAt(labelOf("NB"))?.id)
+        assertNull(campus.indoorBuildingAt(PointM(386.5, 85.9)))
+        assertTrue(campus.building("MENZA")!!.contains(labelOf("MENZA")))
+        assertNull(campus.indoorBuildingAt(labelOf("MENZA")))
+        assertNull(campus.indoorBuildingAt(outdoor))
+    }
+
     @Test
     fun insideBuilding_afterConfirmedFixes() {
         val detector = BuildingDetector(campus)

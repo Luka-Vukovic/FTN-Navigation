@@ -126,7 +126,7 @@ class CampusGraphTest {
             "A2" to "AMF", "INT 1" to "AMF", "AH4A" to "NB", "AH-CRT" to "NB", "L1" to "AMF", "L1 (RC)" to "NB",
             "L4 (RC)" to "NB", "108A" to "NB", "312" to "NB", "ITC04" to "ITC", "ITCA1" to "ITC", "ITCS-RC" to "ITC",
             "F-208" to "F", "LG 005" to "DGG", "LG 107" to "DGG", "Scen-LAB" to "AMF", "O12" to "NB",
-            "GRID-1" to "AMF", "Fizika" to "NB", "Hemija" to "NB", "Hemija 2" to "NB", "AR0" to "AMF", "AR6" to "AMF",
+            "GRID-1" to "AMF", "Fizika" to "F", "Hemija" to "NB", "Hemija 2" to "NB", "AR0" to "AMF", "AR6" to "AMF",
         ).forEach { (room, building) -> assertEquals(room, building, buildingOfRoom(room)) }
         listOf("MF-27", "MF-Sala 1").forEach {
             assertNull(it, buildingOfRoom(it))
@@ -181,7 +181,7 @@ class CampusGraphTest {
         assertEquals("NTP-0-ULAZ-FTN", nearest.nodes.last().id)
         assertTrue(checkNotNull(resolveTarget(campus.building("NTP")!!.name!!, graph, campus)).isBuilding)
         assertFalse(checkNotNull(resolveTarget("204", graph, campus)).isBuilding)
-        val unmapped = checkNotNull(resolveTarget("AH6A", graph, campus).takeIf { it?.approximate == true } ?: resolveTarget("Fizika", graph, campus))
+        val unmapped = checkNotNull(resolveTarget("Hemija", graph, campus))
         assertFalse(unmapped.isBuilding)
     }
 

@@ -37,6 +37,16 @@ class FGraphTest {
         return hypot((pa.x - pb.x).toDouble(), (pa.y - pb.y).toDouble())
     }
 
+    /** "Fizika" iz rasporeda je F 125 na I spratu (tabla "F-125, Laboratorija za fiziku", teren 10.11.2026). */
+    @Test
+    fun fizika_isF125OnFirstFloor() {
+        val target = checkNotNull(resolveTarget("Fizika", graph, campus))
+        assertFalse(target.approximate)
+        assertEquals(room("F 125").id, target.node.id)
+        assertEquals(1, target.node.floor)
+        assertEquals("F 125", canonicalRoom("Fizika"))
+    }
+
     /** Zgradu predstavlja pasarela iz Amfiteatara; spoljnog ulaza nema (korisnik, 02.10.2026). */
     @Test
     fun onlyEntrance_isPassageFromAmf() {
@@ -62,7 +72,7 @@ class FGraphTest {
             .forEach { assertNotNull(it.id, graph.route(NbPlan.ENTRANCE_ID, it.id)) }
     }
 
-    /** Sale F-bloka iz rasporeda (F 315 ... F 319, F-208) su ucrtane na spratu iz broja. */
+    /** Sale F-bloka iz rasporeda (F 315 ... F 319, F-208, Fizika = F 125) su ucrtane na spratu iz broja oznake sa plana. */
     @Test
     fun scheduleRooms_onTheirFloor() {
         val schedule = Json { ignoreUnknownKeys = true }
@@ -75,7 +85,7 @@ class FGraphTest {
             val target = checkNotNull(resolveTarget(name, graph, campus)) { name }
             assertFalse(name, target.approximate)
             assertEquals(name, FPlan.BUILDING_ID, target.node.buildingId)
-            assertEquals(name, name.filter(Char::isDigit).first().digitToInt(), target.node.floor)
+            assertEquals(name, canonicalRoom(name).filter(Char::isDigit).first().digitToInt(), target.node.floor)
         }
         assertEquals("208", FPlan.label(room("F 208").name!!))
     }

@@ -1,6 +1,7 @@
 package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.PointM
+import com.example.ftnnavigation.graph.indoorBuilding
 import kotlin.math.cos
 import kotlin.math.hypot
 
@@ -32,6 +33,14 @@ data class GpsFix(val point: PointM, val accuracyM: Float, val elapsedNs: Long =
 /** Da li je tačka u obrisu zgrade (van dvorišta). Služba bez svog obrisa nije nigde. */
 fun CampusBuilding.contains(p: PointM): Boolean =
     outline.isNotEmpty() && ringContains(outline, p) && holes.none { ringContains(it, p) }
+
+/**
+ * Zgrada sa unutrašnjim planom u čijem je obrisu tačka, ili null. Za Start sa GPS-a: teren 10.11.2026 (NB) - korisnik ~20 m
+ * ispred glavnog ulaza, a GPS (tačnost 8 m) 7 m unutar obrisa NB-a; detektor zgrade je to potvrdio tek 1 s posle Start-a, tačka
+ * je krenula iz zgrade na mapi kampusa, koraci su je vodili kroz zidove i ulazak je okinuo ~10 m kasno.
+ */
+fun CampusData.indoorBuildingAt(p: PointM): CampusBuilding? =
+    buildings.find { indoorBuilding(it.id) != null && it.contains(p) }
 
 /** Najmanja udaljenost tačke od zida (spoljnog ili dvorišta) u metrima; beskonačno bez obrisa. */
 fun CampusBuilding.distanceToWallM(p: PointM): Double =

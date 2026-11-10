@@ -45,6 +45,26 @@ class NtpGraphTest {
         .map { it.id.split('-')[2] }.distinct()
 
     /**
+     * Teren 10.11.2026 (korisnik upisao na snimku ekrana prizemlja, kroz PASAŽ): soba "L4" sa evakuacionog plana je 004, soba desno
+     * od nje 005 (ranije 004); izmišljenog NTP-005 u levom krilu više nema. Granice soba iz `build_ntp.GROUND` (px plana -> 0..1).
+     */
+    @Test
+    fun groundFloor004InFormerL4_005ToItsRight() {
+        fun rel(x: Int, y: Int) = (x + 1650) / 3790f to (y + 720) / 2580f
+        fun room(name: String) = ntpNodes.single { it.name == name }
+        fun inside(name: String, from: Pair<Int, Int>, to: Pair<Int, Int>) {
+            val (x0, y0) = rel(from.first, from.second)
+            val (x1, y1) = rel(to.first, to.second)
+            val r = room(name)
+            assertEquals(name, 0, r.floor)
+            assertTrue("$name ${r.x} ${r.y}", r.x in x0..x1 && r.y in y0..y1)
+        }
+        inside("NTP-004", 1403 to 835, 1756 to 1297)
+        inside("NTP-005", 1780 to 1115, 2080 to 1547)
+        assertTrue(ntpNodes.none { it.name == "NTP-L4" })
+    }
+
+    /**
      * Teren 03.11.2026 popodne (snimak 16:47, NTP III kod 307, odredište NTP): najbrži izlaz je S2 i glavni ulaz (69,5 s), a S1 i
      * "ULAZ - FTN" su 5 s sporiji - S1 je ~8 m od vrata 307, S2 ~20 m u suprotnu stranu. Korisnik: "daj prednost bližem stepeništu
      * do 10 s".
