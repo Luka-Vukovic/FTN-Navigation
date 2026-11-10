@@ -762,9 +762,9 @@ def ground_floor(g):
     g.room(f, "NTP-C", (1170, 1410), (1299, 1420), "P1420")
     g.room(f, "NTP-L1", (1170, 1690), (1299, 1690), "P1690")
     g.room(f, "NTP-L4", (1580, 1150), (1580, 1297), "LB1600")
-    # Teren 03.10.2026 (korisnik): 001 je soba "AMFITEATAR" sa plana (učionica; vrata bliže stepeništu S2 -
-    # PRETPOSTAVKA: na zidu ka holu, donji kraj), 003 prva od tri male sobe ispod S2, 004 soba desno od L4.
-    # Vrata 001: korisnik upisao na snimku ekrana (18.10.2026) - zapadni zid, pri vrhu sobe, ka hodniku uz zid hola.
+    # Teren 03.10.2026 (korisnik): 001 je soba "AMFITEATAR" sa plana (učionica), 003 prva od tri male sobe ispod S2, 004 soba
+    # desno od L4. Vrata 001: korisnik upisao na snimku ekrana (18.10.2026) - zapadni zid, pri vrhu sobe (bliže S1), ka hodniku
+    # uz zid hola. Do 18.10. su bila pretpostavka "bliže S2, donji kraj" - prevaziđeno.
     g.room(f, "NTP-001", (552, 1050), (450, 874), "M874")
     g.room(f, "NTP-003", (510, 1645), (510, 1740), "BB510")
     g.room(f, "NTP-004", (1930, 1331), (1780, 1360), "LB1790")
