@@ -20,6 +20,7 @@ import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.OpenArea
 import com.example.ftnnavigation.graph.PlanPoint
 import com.example.ftnnavigation.graph.PointM
+import com.example.ftnnavigation.graph.Route
 import com.example.ftnnavigation.graph.SpiralPath
 import com.example.ftnnavigation.graph.StairPath
 import com.example.ftnnavigation.graph.indoorBuilding
@@ -504,6 +505,8 @@ private val FLIGHT_TREADS_BY_STAIR: Map<String, (floor: Int, lower: Boolean) -> 
     "NTP/S2" to { _, _ -> 12 },
     // F-blok: krak naviše iz prizemlja ~13-14 gazišta (fotografija iz hola, teren 10.10.2026); ostali nisu brojani.
     "F/S" to { _, _ -> 13 },
+    // DGG (korisnik, 12.11.2026): bočni krakovi ~11 gazišta, srednji iza lifta ~6 (deo međupodesta). Prvo (sa planova) 9 / 11.
+    "DGG/S" to { _, _ -> 11 },
 )
 
 /**
@@ -676,6 +679,12 @@ private const val SIDE_GATE_WAIT_STEPS = 4
 
 /** Na podestu sprata ovoliko koraka pravo bez punog okreta -> nastavio je hodnikom, ne sledećim krakom. */
 private const val LANDING_EXIT_STEPS = 4
+
+/**
+ * Isto, po stepeništu: DGG (build_dgg.py) ima tri kraka oko lifta u obliku slova U - srednji krak iza lifta (~6 gazišta) je u modelu deo
+ * međupodesta, između dva okreta od po 90° (evakuacioni planovi, teren 12.11.2026).
+ */
+private val LANDING_EXIT_STEPS_BY_STAIR = mapOf("DGG/S" to 10)
 
 /** Na vratima prolaza sa međupodesta okret nazad ([PdrLocator] turnAtGate) se prati najviše ovoliko koraka. */
 private const val LANDING_GATE_STEPS = 8
@@ -1605,7 +1614,7 @@ class PdrLocator(
                 graph.neighbors(f.id).firstOrNull { (n, type) ->
                     type == EdgeType.HOD && n.type != NodeType.STEPENISTE && graph.edge(f.id, n.id)?.steps == true
                 }?.first
-            }
+            } ?: if (c.up) gateBesideLanding(c) else null
             // Već na međupodestu (kraj kraka ili okret): ruta od mesta preko kraka (pasarela, podest), ne nazad uz krak.
             // Teren 02.11.2026, F I sprat: tačka na kraju kraka naniže, ruta do Amfiteatara je kretala od vrha kraka.
             if (beyond == null) null else if (c.part == ClimbPart.LANDING || c.progress >= 1.0) beyond else foot
@@ -1613,6 +1622,32 @@ class PdrLocator(
             null
         }
         return listOfNotNull(ahead, landing)
+    }
+
+    /**
+     * Penjanje: prolaz ovog sprata pored međupodesta (do [LANDING_BESIDE_GATE_M] od kraja prvog kraka) do koga lokator nema ivicu - F
+     * prizemlje: krak do pasarele je ivica samo za rutu (lokator dobija graf bez nje). Za [routeStarts]: teren 12.11.2026 (F 010 ->
+     * Skriptarnica) je na kraku naviše jedini start bio sledeći sprat.
+     */
+    private fun gateBesideLanding(c: Climb): Node? {
+        val path = pathOf(c) ?: return null
+        val turn = local(path[1].x, path[1].y)
+        return gateways[place].orEmpty().filter { !it.viaFlight }.map { it.node }
+            .filter { distance(turn, local(it.x, it.y)) <= LANDING_BESIDE_GATE_M }
+            .minByOrNull { distance(turn, local(it.x, it.y)) }
+    }
+
+    /**
+     * Ruta od čvora sledećeg sprata ([routeStarts]) koja odmah silazi krakom u prolaz sa međupodesta, a taj međupodest je još ispred
+     * korisnika (prvi krak ovog sprata) - nemoguć put "gore, pa nazad dole na isti podest". Teren 12.11.2026 (F 010 -> Skriptarnica):
+     * na kraku naviše iz prizemlja ruta je kretala sa I sprata - "Niz stepenice do podesta · pa desno u prolaz" ("aplikacija mi je rekla
+     * da idem na F-blok I"), jer je put od dna kraka naniže I sprata do pasarele isto dug kao put sa prizemlja uz krak.
+     */
+    fun backtracksToLanding(route: Route): Boolean {
+        val c = climb ?: return false
+        if (pathOf(c) == null || c.changedInLeg || (c.part != ClimbPart.FIRST && c.part != ClimbPart.LANDING)) return false
+        val (first, second) = route.nodes.takeIf { it.size >= 2 } ?: return false
+        return first.floor != place.floor && second.type == NodeType.PROLAZ && graph.edge(first.id, second.id)?.steps == true
     }
 
     /** Smer za prikaz, u odnosu na "gore" plana mesta. */
@@ -3383,6 +3418,16 @@ class PdrLocator(
                 }
                 val ref = c.flightHeading ?: heading.also { c.flightHeading = it }
                 val off = angleDiffDeg(heading, ref)
+                // Prvi koraci prvog kraka, a okret kojim je ušao na krak se nastavlja: smer kraka prati okret. Teren 12.11.2026 (NB I ->
+                // stakleni prolaz ka A1): smer kraka je uzet usred okreta sa podesta sprata (27°, krak ~340°), pa je hod pravo kroz
+                // međupodest u prolaz (329°, 58° od 27°) proglašen okretom na međupodestu i tačka je vraćena na vrh kraka. Samo silazak:
+                // pri penjanju je pogrešan krak (okret na podestu sprata ka kraku naniže, replay 08.10. i 12.10.) ovim ostajao bez
+                // "okreta na međupodestu" koji ga je ranije vraćao.
+                if (!c.up && c.part == ClimbPart.FIRST && c.progress <= LANDING_TURN_TAIL_PROGRESS && abs(off) > STRAIGHT_STEP_DEG &&
+                    abs(off) <= TURN_START_DEG && off * turn > 0
+                ) {
+                    c.flightHeading = heading
+                }
                 if (abs(off) <= TURN_START_DEG) {
                     if (!c.up && (c.part == ClimbPart.SECOND || c.descentStarted)) {
                         // Silazak: koraci pravo već liče na ravan hod - sišao je pre očekivanog broja gazišta (posle drugog kraka
@@ -3506,7 +3551,9 @@ class PdrLocator(
                 }
                 // Hoda pravo bez punog okreta: sa podesta sprata nastavio hodnikom; sa međupodesta u prolaz, ako ga ima (NB ->
                 // Amfiteatri), inače nema kuda - nije se ni penjao (okret u hodniku pored stepeništa) -> nazad na dno kraka.
-                if (c.straight < LANDING_EXIT_STEPS) return false
+                val exitSteps = if (c.part == ClimbPart.LANDING) LANDING_EXIT_STEPS_BY_STAIR[c.stair.key] ?: LANDING_EXIT_STEPS
+                else LANDING_EXIT_STEPS
+                if (c.straight < exitSteps) return false
                 if (c.part == ClimbPart.LANDING) {
                     val gate = if (c.up) c.stair.nodes[place.floor]?.let { landingGate(c.stair, it) } ?: landingGateBeside(c, heading)
                     else sideGateDown(c, heading)
@@ -3617,9 +3664,15 @@ class PdrLocator(
         // Prolaz sa kraka naniže (NB I -> stakleni prolaz) tek posle [FLIGHT_PASSAGE_STEPS] koraka pravo, i to ravnih po znaku
         // ubrzanja. Replay 19.10.2026 (1298 s, telefon u džepu - znaka nema): krak je trajao 17 koraka (računa se 11), pa je
         // 6 koraka "pravo posle kraja" bio još krak - lažan izlazak u prolaz, promašaj 20 m.
+        // Bez znaka (nema baze - snimak je počeo na stepeništu, džep) prolaz važi kad je odredište u zgradi u koju vodi. Teren 12.11.2026
+        // (205 -> A1, praćenje uključeno na II spratu pored stepeništa): znaka nije bilo, pa je tačka 50 s stajala na međupodestu dok je
+        // korisnik prošao prolaz i sišao do A1 ("Tačka nije skrenula u prolaz").
         val gate = landingGate(c.stair, start)
             ?: landingGate(c.stair, start, viaFlight = true)
-                ?.takeIf { !c.up && c.straight >= FLIGHT_PASSAGE_STEPS && gaitBelow(c, DESCENT_FLAT_SCORE) }
+                ?.takeIf {
+                    !c.up && c.straight >= FLIGHT_PASSAGE_STEPS &&
+                        (gaitBelow(c, DESCENT_FLAT_SCORE) || (gaitMedian(c) == null && leadsToDestination(it.second)))
+                }
             ?: return null
         val (a, b) = firstFlight(c) ?: return null
         val length = distance(a, b).takeIf { it > 0 } ?: return null
@@ -3629,6 +3682,13 @@ class PdrLocator(
         val ahead = (g.x - b.x) * ux + (g.y - b.y) * uy
         val aside = abs((g.x - b.x) * uy - (g.y - b.y) * ux)
         return gate.takeIf { ahead >= -0.5 && aside <= 3.5 }
+    }
+
+    /** Prolaz [gate] ovog mesta vodi u drugu zgradu, a odredište je u njoj. */
+    private fun leadsToDestination(gate: Node): Boolean {
+        val dest = destination ?: return false
+        if (dest.buildingId == place.buildingId) return false
+        return gateways[place].orEmpty().any { it.node.id == gate.id && it.target.buildingId == dest.buildingId }
     }
 
     /**

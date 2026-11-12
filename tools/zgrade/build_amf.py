@@ -189,13 +189,17 @@ def floor_0():
 
 
 def floor_1():
+    # Evakuacioni plan "Amfiteatri - sprat" (teren 12.11.2026, teren/izveštaj41/IMG_20261112_115408.jpg; razmera po uglu AMF-a i
+    # zidu NB-a, ~4,6 px fotografije po px plana): L1 je uz južni zid AMF-a od x ~566 do desne ivice staklenog prolaza (704), dubine
+    # ~3,6 m; dvokrilna vrata su na donjem zidu, iznad vrha S3 ("VI STE OVDE"). Do tada L1 553..664 sa vratima na desnom zidu i
+    # holom 664..711 desno od nje.
     return {
         "title": "Nivo 1 (L1, iznad hodnika iza amfiteatara)",
         "roof": rect_poly(*WALL),
-        "outline": [rect_poly(553, 168, 711, 207)],
-        "paths": [[(670, 195), (696, 195), (696, 215)]],  # od vrata L1 do S3 pod pravim uglom (27.10.2026; bilo koso)
-        "corridors": [rect_poly(664, 190, 711, 240)],
-        "rooms": [R(553, 664, 168, 207, "L1", door=(664, 195))],
+        "outline": [rect_poly(566, 174, 704, 210)],
+        "paths": [[(688, 216), (696, 216)]],  # od vrata L1 preko podesta do vrha S3 (pod pravim uglom)
+        "corridors": [rect_poly(667, 210, 704, 226)],  # podest ispred L1, na vrhu S3
+        "rooms": [R(566, 704, 174, 210, "L1", door=(688, 210))],
         "stairs": [S3],
     }
 

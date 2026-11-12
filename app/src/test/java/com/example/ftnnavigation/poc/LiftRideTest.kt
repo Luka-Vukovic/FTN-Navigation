@@ -266,6 +266,25 @@ class LiftRideTest {
      * 11.10.2026 kod kuće (telefon u džep stojeći): mali "polazak", par sekundi rukovanja telefonom (koraci u bučnim
      * korpama std 0,67-1,4), pa suprotan impuls - nije vožnja. Koraci uz impuls se zanemaruju samo u tihim korpama.
      */
+    /**
+     * Teren 12.11.2026, NTP L1 III -> P u ruci: detektor je u kabini javljao "korake" ~svake sekunde (tihe korpe, std 0,3-0,5) i u prve
+     * dve korpe kočenja - vožnja nije prepoznata ("Nešto se desilo pa nije prepoznato putovanje liftom"). Koraci u tihim korpama se
+     * nigde u vožnji ne broje, a kočenje sme da počne tihom korpom sa "korakom".
+     */
+    @Test
+    fun quietFalseStepsThroughRide_stillDetected() {
+        val s = sim()
+        s.run(10.0)
+        s.run(2.5) { -0.5 }
+        s.run(5.0, stepEveryS = 1.1)
+        s.detector.onStep(s.t + 200_000_000L)
+        s.detector.onStep(s.t + 700_000_000L)
+        s.run(3.0) { 0.5 }
+        s.run(5.0)
+        assertEquals(1, s.rides.size)
+        assertTrue(!s.rides.single().up)
+    }
+
     @Test
     fun handlingBetweenPulses_noRide() {
         val s = sim()

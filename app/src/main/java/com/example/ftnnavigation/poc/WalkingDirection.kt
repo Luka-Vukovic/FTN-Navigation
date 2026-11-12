@@ -504,8 +504,12 @@ class WalkingDirection {
         val phoneOnly = walk != null && turn.axisTrusted && abs(angleDiff(walk, turn.walkDeg)) <= AXIS_MATCH_DEG
         when {
             phoneOnly -> offsetDeg = angleDiff(turn.walkDeg, phone)
-            // Skretanje, a hod posle njega je daleko od procene: telefon se sada drži drugačije.
-            walk != null && abs(angleDiff(walk, phone + offsetDeg)) > MAX_CORRECTION_DEG -> offsetDeg = angleDiff(walk, phone)
+            // Skretanje, a hod posle njega je daleko od procene: telefon se sada drži drugačije - ali samo uz ritam hoda. Teren
+            // 12.11.2026 (NTP P, posle kucanja beleški): "okret" iz 3 lažna koraka u razmaku 0,3-0,4 s (rukovanje telefonom u mestu)
+            // je jednim merenjem postavio odstupanje 89° - ~200 s pogrešnog smera (uspon S1 P -> III, hodnik III). Inače ga
+            // ispravlja tek potvrda sledećeg merenja ([correctOffset], dva jaka merenja se slože).
+            walk != null && abs(angleDiff(walk, phone + offsetDeg)) > MAX_CORRECTION_DEG && walkingCadence() ->
+                offsetDeg = angleDiff(walk, phone)
         }
         lastPhaseDeg = walk
         steadyWalkDeg = phone + offsetDeg
@@ -530,6 +534,9 @@ class WalkingDirection {
         }
         return phaseDirection(fromNs)
     }
+
+    /** Poslednji koraci su u ritmu hoda: razmak bar [MIN_WALK_STEP_NS] (hod 0,5-0,7 s; rukovanje telefonom u mestu 0,25-0,4 s). */
+    private fun walkingCadence(): Boolean = stepTimes.zipWithNext().all { (a, b) -> b - a >= MIN_WALK_STEP_NS }
 
     /** Pravac telefona se u poslednja dva koraka nije menjao (nema okretanja). */
     private fun phoneSteady(): Boolean {
@@ -658,6 +665,9 @@ class WalkingDirection {
 
         /** Razmak koraka u hodu (lažni koraci rukovanja telefonom u mestu su na 1-2 s). */
         private const val WALK_STEP_NS = 900_000_000L
+
+        /** Najmanji razmak koraka u hodu za [walkingCadence] (brz hod ~0,45 s; lažni koraci rukovanja ~0,25-0,4 s). PROCENA. */
+        private const val MIN_WALK_STEP_NS = 400_000_000L
 
         private fun isGrip(up: DoubleArray) = up[2] >= HAND_UP_Z && hypot(up[0], up[1]) >= GRIP_MIN_TILT
 

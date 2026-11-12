@@ -507,7 +507,9 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         val starts = locator?.routeStarts()?.takeIf { raw != null }.orEmpty()
         return routeOrFallback(floorChange.profile.copy(buildingCrowd = crowdNow, excludedVerticals = excluded)) { profile ->
             when {
-                starts.isNotEmpty() -> starts.mapNotNull { graph.route(it.id, nodeId, profile) }.minByOrNull { it.durationSec }
+                starts.isNotEmpty() -> starts.mapNotNull { graph.route(it.id, nodeId, profile) }
+                    .let { routes -> routes.filterNot { locator?.backtracksToLanding(it) == true }.ifEmpty { routes } }
+                    .minByOrNull { it.durationSec }
                 match != null -> graph.routeFrom(match.point, nodeId, profile)
                 raw != null -> graph.routeFrom(
                     place.buildingId, place.floor, raw.x, raw.y, nodeId, profile,

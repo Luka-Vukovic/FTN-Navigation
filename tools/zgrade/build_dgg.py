@@ -21,24 +21,22 @@ rotacija NB + 180° (build_campus.py, dgg_placement).
 
 Prizemlje: glavni ulaz na istoku, unutrašnje stepenice od vrata do hola (crtano kao stepenice, ruta ih prelazi kao hod), portirnica
 i razvodni ormar levo od njih, hol, učionice 001 (sever, uz laboratoriju 001b) i 002 (severozapad), laboratorije 003 i 004 i
-učionica 005 (jug), toaleti i čajna kuhinja 006 desno od stepeništa. I: 101-103 (sever), 105 i još jedna učionica (istok), veliki
+učionica 005 (jug), toaleti i čajna kuhinja 006 desno od stepeništa. I: 102-104 (sever; 102 i 103 iza vrata "101"), učionice 105 i 106 (istok), veliki
 amfiteatar (jug), toaleti. II: kabineti 201-213 + čajna kuhinja 214. III: kabineti 301-312 + čajna kuhinja 313.
 
 Oznake: P, II i III sa planova (čitljive); na I su čitljivi samo nazivi soba (amfiteatar, dve učionice, kancelarije, konferencijska
-sala), a brojeve 101 (kancelarija direktora, sever) i 105 (severnija od dve učionice uz istočni zid) je korisnik upisao na sliku.
-PRETPOSTAVKA: druga učionica = 106, amfiteatar = 107 (u rasporedu su LG 105, 106, 107), kancelarija sekretara = 102, konferencijska
-sala = 103.
+sala). Brojeve I sprata je korisnik obeležio na terenu 12.11.2026 (stranica "DGG prostorije"): 105 i 106 učionice, 107 amfiteatar,
+103 kancelarija direktora, 102 kancelarija sekretara, 104 konferencijska sala; "101" su samo vrata predprostora ka 102 i 103.
 Sale su "LG 105" kao u rasporedu, i kabineti ("LG 201"): na vratima nema "LG" (korisnik, 10.11.2026), ali je to oznaka zgrade u
 rasporedu - kao "ITC 101" u ITC-u (brojevi 101, 201... se ponavljaju u NB, Kuli i ITC-u, a naziv sale mora biti jedinstven); natpis na
-planu bez "LG ". Korisnik: "Neka ostane LG 201, kao sada, pošto je tako u rasporedu". Brojevi 102, 103, 106, 107 ostaju pretpostavka dok
-korisnik ne ode ponovo ("Nek ostanu brojevi dok ne odem ponovo").
+planu bez "LG ". Korisnik: "Neka ostane LG 201, kao sada, pošto je tako u rasporedu".
 
 Lift u oknu u sredini stepeništa, P-III (korisnik, 10.11.2026: "Postoji lift, dosta je slično kao u NB").
 """
 
 import argparse
 
-from common import TOALET, R, build_graph, rect_poly, write_all
+from common import TOALET, Flights, R, build_graph, rect_poly, write_all
 
 VX, VY, VW, VH = VIEWPORT = (-12, -20, 318, 194)
 WALL = (0, 0, 294, 162)  # OSM obris (29,8 x 16,4 m)
@@ -47,6 +45,25 @@ FLOORS = [0, 1, 2, 3]
 
 STAIRS_RECT = (98, 107, 147, 160)  # stepenište oko okna (lifta), isto na svim spratovima
 LIFT_RECT = (114, 121, 130, 140)
+# Stepenište sa planova: tri kraka oko okna lifta u obliku slova U - levi krak (od hola ka zapadnom zidu), donji krak iza lifta
+# (popreko, uz zapadni zid) i desni krak (nazad ka holu). Naviše se ide levim krakom uz dva okreta ulevo i stiže se na vrh desnog
+# kraka sprata iznad; naniže desnim krakom uz dva okreta udesno (snimak 12.11.2026: azimut telefona 240 -> 140 -> 65° pri penjanju
+# P -> I, 260 -> 345 -> 75° pri silasku II -> I). Donji krak je u modelu deo međupodesta (dva okreta po 90° sa ~6 gazišta između -
+# PdrLocator LANDING_EXIT_STEPS_BY_STAIR). Korisnik, 12.11.2026: "Stepenice u LG moraju da se poprave" - do tada pravougaonik bez
+# krakova (tačka je stajala na čvoru dok se sprat menjao: "delovalo je kao da ne idem po stepenicama, pa se ipak promenio sprat").
+# Prizemlje: desni krak vodi u suteren (nije u modelu - nema čvora S-D), ali se crta kao na planu.
+# Korisnik, 12.11.2026 uveče: "da budu poput onih NB. Obično ima oko 11 koraka sa krakova, a ima nekih 6 bočno. Ne treba ispred lifta da
+# stoje stepenice." -> bočni krakovi od hola (y 107) do ugaonih podesta (y 138): 3,1 m = 11 gazišta po ~0,28 m; donji krak iza lifta
+# 1,7 m = 6 gazišta; ispred lifta (između krakova) je pod hola, ne podest stepeništa. Prva verzija (isti dan): krakovi 110..135 / 107..137
+# sa planova (evakuacioni planovi crtaju krakove šematski), a ispred lifta podest bojom stepeništa.
+STAIR_FOOT = (105, 106)  # dno levog kraka (naviše), u holu
+# Peti član pravougaonika kraka = broj gazišta na crtežu (common.treads).
+FLIGHTS = Flights(up=(98, 107, 112, 138, 11), down=(130, 107, 145, 138, 11), landing=(98, 138, 113, 158),
+                  path=[STAIR_FOOT, (105, 148), (138, 148), (138, 106)])
+STAIR_MIDDLE = (113, 140, 130, 155, 6)  # donji krak iza lifta (crtež; u modelu deo međupodesta)
+# Desni ugaoni podest i traka ispod donjeg kraka.
+STAIR_LANDINGS = [(130, 138, 145, 158), (113, 155, 130, 158)]
+LIFT_FRONT = rect_poly(112, 107, 130, 121)  # hol ispred lifta, između krakova
 ENTRANCE = (111, 0)  # glavni ulaz, istočni zid
 CAMPUS_LINKS = [("K-U-DGG-1", "DGG-0-ULAZ")]
 
@@ -56,8 +73,9 @@ def to_shared(p):
     return (-487 - p[0], -1402 - p[1])
 
 
-def core():
-    return {"stairs": [("S", STAIRS_RECT, (106, 104))], "lifts": [("L", LIFT_RECT, (122, 104))]}
+def core(steps=()):
+    return {"stairs": [("S", STAIRS_RECT, STAIR_FOOT)], "lifts": [("L", LIFT_RECT, (122, 104))], "flights": {"S": FLIGHTS},
+            "landings": STAIR_LANDINGS, "steps": [*steps, STAIR_MIDDLE]}
 
 
 def lg(n):
@@ -78,7 +96,6 @@ def floor_0():
              (188, 133), (176, 133), (176, 100), (147, 100), (147, 107), (98, 107), (98, 98), (73, 98)],
         ],
         "entrances": [(97, -4, 126, 0)],
-        "steps": [(98, 2, 126, 45)],  # unutrašnje stepenice od ulaza do hola
         "rooms": [
             R(0, 73, 0, 27),  # 001b - laboratorija (iza 001, bez svojih vrata ka holu)
             R(0, 73, 27, 98, lg("001"), door=(73, 80)),
@@ -94,26 +111,31 @@ def floor_0():
             R(188, 207, 100, 133),
             R(188, 218, 133, 162, door=(200, 133)),  # 006 čajna kuhinja
         ],
-        **core(),
+        **core(steps=[(98, 2, 126, 45)]),  # + unutrašnje stepenice od ulaza do hola
     }
 
 
 def floor_1():
-    r103 = R(0, 97, 118, 162, lg("103"), door=(87, 118))  # konferencijska sala (broj PRETPOSTAVKA)
+    # Teren 12.11.2026 (stranica "DGG prostorije" + snimak ekrana sa ucrtanim vratima): "ne postoji prava prostorija 101, već su to
+    # samo vrata koja vode do prostorija 102 i 103" - vrata 101 su na x 77 (y 58..81) ka predprostoru (55..77 x 58..81), iz njega
+    # 103 (ugao gore levo, do tada "101") i 102; donja leva soba je 104 (do tada "103"). 105, 106 (učionice) i 107 (amfiteatar)
+    # potvrđeni.
     return {
         "title": "I sprat",
-        "paths": [[(57, 79), (216, 79)], [(87, 79), (87, 116)], [(169, 79), (169, 138)]],
+        # Hodnik kroz vrata "101" u predprostor, do naspram vrata 103 (pravi uglovi).
+        "paths": [[(60, 70), (60, 79), (216, 79)], [(87, 79), (87, 116)], [(169, 79), (169, 138)]],
         "corridors": [
-            [(55, 58), (218, 58), (218, 100), (177, 100), (177, 140), (162, 140), (162, 100), (147, 100), (147, 107),
-             (98, 107), (98, 100), (97, 100), (97, 118), (77, 118), (77, 81), (55, 81)],
+            [(77, 58), (218, 58), (218, 100), (177, 100), (177, 140), (162, 140), (162, 100), (147, 100), (147, 107),
+             (98, 107), (98, 100), (97, 100), (97, 118), (77, 118)],
         ],
         "rooms": [
-            R(0, 55, 0, 81, lg("101"), door=(55, 63)),  # kancelarija direktora (korisnik: 101)
-            R(0, 77, 81, 118, lg("102"), door=(77, 109)),  # kancelarija sekretara (broj PRETPOSTAVKA)
-            r103,
-            R(55, 131, 0, 58, lg("105"), door=(120, 58)),  # učionica (korisnik: 105)
-            R(131, 218, 0, 58, lg("106"), door=(157, 58)),  # učionica (broj PRETPOSTAVKA)
-            R(218, 294, 0, 162, lg("107"), door=(218, 76)),  # amfiteatar (broj PRETPOSTAVKA)
+            R(55, 77, 58, 81, door=(77, 70)),  # predprostor iza vrata "101"
+            R(0, 55, 0, 81, lg("103"), door=(55, 70)),  # kancelarija direktora
+            R(0, 77, 81, 118, lg("102"), door=(66, 81)),  # kancelarija sekretara
+            R(0, 97, 118, 162, lg("104"), door=(87, 118)),  # konferencijska sala
+            R(55, 131, 0, 58, lg("105"), door=(120, 58)),  # učionica
+            R(131, 218, 0, 58, lg("106"), door=(157, 58)),  # učionica
+            R(218, 294, 0, 162, lg("107"), door=(218, 76)),  # amfiteatar
             R(147, 162, 100, 123, door=(162, 110)),
             R(177, 205, 100, 132, amenity=TOALET, door=(177, 120)),
             R(205, 218, 100, 132),
@@ -194,6 +216,8 @@ def floor_3():
 
 PLANS = {0: floor_0(), 1: floor_1(), 2: floor_2(), 3: floor_3()}
 PLANS[0]["points"] = [("ULAZ", ENTRANCE, "ULAZ")]
+for _plan in PLANS.values():
+    _plan["corridors"].append(LIFT_FRONT)
 
 
 def build():

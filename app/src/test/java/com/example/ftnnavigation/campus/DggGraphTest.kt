@@ -54,8 +54,8 @@ class DggGraphTest {
     }
 
     /**
-     * Sve LG sale iz rasporeda su ucrtane: 001, 002, 005 u prizemlju (sa plana), 105, 106, 107 na I spratu (105 upisao korisnik,
-     * 106 i 107 PRETPOSTAVKA - druga učionica i amfiteatar); natpis bez "LG ".
+     * Sve LG sale iz rasporeda su ucrtane: 001, 002, 005 u prizemlju (sa plana), 105, 106, 107 na I spratu (korisnik obeležio
+     * 12.11.2026); natpis bez "LG ".
      */
     @Test
     fun scheduleRooms_onTheirFloor() {
@@ -71,24 +71,36 @@ class DggGraphTest {
         assertEquals("105", DggPlan.label("LG 105"))
     }
 
-    /** Oznake sa planova: P 001-005, II 201-213, III 301-312 (čajne kuhinje 214 i 313 nisu sale); I 101 i 105 od korisnika. */
+    /**
+     * Oznake sa planova: P 001-005, II 201-213, III 301-312 (čajne kuhinje 214 i 313 nisu sale); I sprat obeležio korisnik 12.11.2026:
+     * 102-107, a "101" su samo vrata predprostora ka 102 i 103 (nije sala).
+     */
     @Test
     fun roomNumbers_fromPlans() {
         val rooms = graph.nodes.filter { it.buildingId == DggPlan.BUILDING_ID && it.type == NodeType.PROSTORIJA && it.name != null }
         assertEquals(listOf(0, 1, 2, 3).associateWith { f -> listOf(5, 6, 13, 12)[f] }, rooms.groupingBy { it.floor }.eachCount().toSortedMap())
         rooms.forEach { assertEquals(it.name, it.name!!.removePrefix("LG ").first().digitToInt(), it.floor) }
-        // 105 je severnija (levo na planu) od dve učionice uz istočni zid, 101 je severno od nje.
+        // 105 je severnija (levo na planu) od dve učionice uz istočni zid, 103 (direktor) je severno od nje.
         assertTrue(room("LG 105").x < room("LG 106").x)
-        assertTrue(room("LG 101").x < room("LG 105").x)
+        assertTrue(room("LG 103").x < room("LG 105").x)
+        assertNull(graph.room("LG 101"))
+        // 102 i 103 su iza istih vrata: put od hodnika do oba ide kroz predprostor (čvor naspram vrata 102, x 66 < 77).
+        val routes = listOf("LG 102", "LG 103").map { graph.route(room("LG 106").id, room(it).id)!!.nodes.map { n -> n.id } }
+        assertTrue(routes.toString(), "DGG-1-H66_79" in routes[0] && "DGG-1-H66_79" in routes[1])
     }
 
-    /** Stepenište i lift (u oknu stepeništa, kao u NB - korisnik 10.11.2026) na svim spratovima; toaleti na svakom spratu. */
+    /**
+     * Stepenište (tri kraka oko lifta, teren 12.11.2026) i lift (u oknu stepeništa, kao u NB - korisnik 10.11.2026) na svim spratovima:
+     * dno kraka naviše (S) na svakom spratu osim poslednjeg, dno kraka naniže (S-D) na svakom osim prizemlja. Toaleti na svakom spratu.
+     */
     @Test
     fun stairsLiftAndToilets_onEveryFloor() {
-        for (type in listOf(NodeType.STEPENISTE, NodeType.LIFT)) {
-            val floors = graph.nodes.filter { it.buildingId == DggPlan.BUILDING_ID && it.type == type }.map { it.floor }.sorted()
-            assertEquals(type.name, DggPlan.FLOORS.toList(), floors)
+        val floors = { type: NodeType, suffix: String ->
+            graph.nodes.filter { it.buildingId == DggPlan.BUILDING_ID && it.type == type && it.id.endsWith(suffix) }.map { it.floor }.sorted()
         }
+        assertEquals(DggPlan.FLOORS.toList(), floors(NodeType.LIFT, "-L"))
+        assertEquals(DggPlan.FLOORS.toList().dropLast(1), floors(NodeType.STEPENISTE, "-S"))
+        assertEquals(DggPlan.FLOORS.drop(1), floors(NodeType.STEPENISTE, "-S-D"))
         val toilets = graph.nodes.filter { it.buildingId == DggPlan.BUILDING_ID && it.amenity == AMENITY_TOALET }.map { it.floor }.toSet()
         assertEquals(DggPlan.FLOORS.toSet(), toilets)
     }

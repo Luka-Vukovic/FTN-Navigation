@@ -432,8 +432,8 @@ class PdrLocatorTest {
      */
     @Test
     fun nbCorridor_compassDraggingTowardAmfBranch_noPassageToAmf() {
-        val locator = locatorAt("NB-0-H744_420")
-        val azimuth = magneticAzimuth(graph.position(node("NB-0-H744_420")), graph.position(inner("NB-0-PROLAZ"))) + 35f
+        val locator = locatorAt("NB-0-H736_420")
+        val azimuth = magneticAzimuth(graph.position(node("NB-0-H736_420")), graph.position(inner("NB-0-PROLAZ"))) + 35f
         val reasons = mutableListOf<PlaceReason>()
         var steps = 0
         while (locator.place != PdrPlace("KULA", 0)) {
@@ -647,12 +647,12 @@ class PdrLocatorTest {
      */
     @Test
     fun corridorWalk_learnsCompassError_forgottenAfterTwentyMinutes() {
-        val azimuth = magneticAzimuth(graph.position(node("NB-0-H744_420")), graph.position(node("NB-0-H1021_420"))) + 10f
-        val off = locatorAt("NB-0-H744_420").apply { applyCorrection = false }
+        val azimuth = magneticAzimuth(graph.position(node("NB-0-H736_420")), graph.position(node("NB-0-H1021_420"))) + 10f
+        val off = locatorAt("NB-0-H736_420").apply { applyCorrection = false }
         repeat(30) { off.step(azimuth, stepM, timeNs = it * 600_000_000L) }
         assertEquals(0f, off.corridorBiasDeg, 0f)
 
-        val locator = locatorAt("NB-0-H744_420")
+        val locator = locatorAt("NB-0-H736_420")
         repeat(30) { locator.step(azimuth, stepM, timeNs = it * 600_000_000L) }
         assertEquals(PdrPlace("NB", 0), locator.place)
         assertTrue("naučeno ${locator.corridorBiasDeg}", locator.corridorBiasDeg in -10f..-2f)
@@ -668,10 +668,10 @@ class PdrLocatorTest {
     /** Pokazivač dok se hoda hodnikom: pravac hodnika u smeru hoda, i kad kompas vuče u stranu (teren 17.10.2026). */
     @Test
     fun corridorPointer_alongCorridorInWalkingDirection() {
-        val from = graph.position(node("NB-0-H744_420"))
+        val from = graph.position(node("NB-0-H736_420"))
         val to = graph.position(node("NB-0-H1021_420"))
         val azimuth = magneticAzimuth(from, to)
-        val locator = locatorAt("NB-0-H744_420").apply { applyCorrection = false }
+        val locator = locatorAt("NB-0-H736_420").apply { applyCorrection = false }
         repeat(6) { locator.step(azimuth + 15f, stepM) }
         val axis = locator.headingOnPlan(azimuth)
         // Smer koraka je 15° pored, pokazivač ide hodnikom; nazad - suprotan smer hodnika.
@@ -1400,7 +1400,7 @@ class PdrLocatorTest {
         // Okret udesno je penjanje: na I sprat se stiže desnim krakom.
         val path1 = stairPath("NB/S", 1)
         assertTrue(distanceToSegment(near.position(), path1[2], path1[3]) < 0.1)
-        val far = locatorAt("NB-0-H744_420")
+        val far = locatorAt("NB-0-H736_420")
         assertTrue(far.flights(axis, 180f, first = 8, second = 10).isEmpty())
         assertEquals(PdrPlace("NB", 0), far.place)
     }
@@ -1625,12 +1625,12 @@ class PdrLocatorTest {
     private fun steps(recorded: String): List<Triple<Float, Float, Float>> =
         recorded.trim().split(Regex("\\s+")).map { s -> s.split("|").map { it.toFloat() }.let { Triple(it[0], it[1], it[2]) } }
 
-    private data class TimedStep(val onPlan: Float, val lengthM: Float, val gait: Float, val timeS: Double)
+    private data class TimedStep(val onPlan: Float, val lengthM: Float, val gait: Float?, val timeS: Double)
 
-    /** Kao [steps], sa vremenom koraka u sekundama snimka: "smer|dužina|znak|vreme". */
+    /** Kao [steps], sa vremenom koraka u sekundama snimka: "smer|dužina|znak|vreme" (znak "-" = nema ga - bez baze, džep). */
     private fun timedSteps(recorded: String): List<TimedStep> =
         recorded.trim().split(Regex("\\s+")).map { s ->
-            s.split("|").let { TimedStep(it[0].toFloat(), it[1].toFloat(), it[2].toFloat(), it[3].toDouble()) }
+            s.split("|").let { TimedStep(it[0].toFloat(), it[1].toFloat(), it[2].toFloatOrNull(), it[3].toDouble()) }
         }
 
     private fun PdrLocator.walk(buildingId: String, step: TimedStep): PlaceReason? =
@@ -1850,6 +1850,61 @@ class PdrLocatorTest {
         val reasons = recorded.mapNotNull { locator.walk("NB", it) }
         assertTrue("$reasons", PlaceReason.PROLAZ in reasons && PlaceReason.STEPENICE !in reasons)
         assertEquals(PdrPlace("AMF", 0), locator.place)
+    }
+
+    /**
+     * Teren 12.11.2026 (hod-20261112-115056, 0-52 s, zadatak 205 -> A1): praćenje uključeno na II spratu kod stepeništa (bez hoda po
+     * ravnom - znaka stepenica nema), II -> I, okret na podestu sprata ka desnom kraku, niz krak i pravo u stakleni prolaz. Smer kraka je
+     * uzet usred okreta (27°, krak ~340°), pa je hod pravo kroz međupodest proglašen okretom i tačka vraćena na vrh kraka; zatim je bez
+     * znaka prolaz čekao zauvek - tačka je 50 s stajala na međupodestu ("Tačka nije skrenula u prolaz").
+     */
+    @Test
+    fun nbFirstFloor_noGaitBaseline_downFlightIntoGlassPassage_entersAmf() {
+        val recorded = timedSteps(
+            """
+            327|0.82|-|0.27 324|0.82|-|0.57 320|0.82|-|1.18 320|0.82|-|1.89 323|0.82|-|2.52
+            325|0.82|-|3.13 324|0.82|-|3.82 324|0.82|-|4.49 320|0.25|-|4.95 303|0.82|-|5.52
+            278|0.82|-|6.18 251|0.82|-|6.93 232|0.82|-|7.65 223|0.82|-|8.25 209|0.82|-|8.96
+            194|0.82|-|9.65 180|0.24|-|10.21 158|0.82|-|11.06 145|0.82|-|11.70 141|0.82|-|12.31
+            151|0.82|-|12.95 151|0.82|-|13.57 143|0.82|-|14.18 136|0.82|-|14.44 130|0.82|-|14.82
+            129|0.82|-|15.43 132|0.82|-|16.07 134|0.82|-|16.72 137|0.82|-|17.30 135|0.82|-|17.75
+            125|0.82|-|18.31 102|0.82|-|18.96 79|0.82|-|19.57 55|0.82|-|20.18 39|0.82|-|20.83
+            27|0.41|-|21.50 14|0.82|-|22.14 2|0.82|-|22.95 348|0.82|-|23.59 343|0.82|-|24.19
+            344|0.82|-|24.76 346|0.82|-|25.47 345|0.82|-|26.13 340|0.82|-|26.72 335|0.82|-|27.34
+            332|0.82|-|27.89 330|0.82|-|28.45 329|0.82|-|28.99 329|0.82|-|29.49 326|0.82|-|30.00
+            327|0.82|-|30.64 328|0.82|-|31.29 329|0.82|-|31.96 329|0.48|-|32.57 327|0.82|-|33.21
+            325|0.82|-|33.85 323|0.82|-|34.50 322|0.82|-|35.22 323|0.82|-|35.81 329|0.82|-|36.76
+            333|0.82|-|37.34 338|0.82|-|37.99 339|0.82|-|38.59 339|0.82|-|39.25 339|0.82|-|39.81
+            339|0.82|-|40.49 338|0.82|-|41.15 337|0.82|-|41.86 337|0.82|-|42.54 335|0.82|-|43.23
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("NB", 2), Offset(0.496f, 0.28f), measure = false)
+            destination = PdrPlace("AMF", 0)
+        }
+        val reasons = recorded.mapNotNull { locator.walk("NB", it) }
+        assertEquals("$reasons", PlaceReason.STEPENICE, reasons.first())
+        assertTrue("$reasons", PlaceReason.PROLAZ in reasons && reasons.count { it == PlaceReason.STEPENICE } == 1)
+        assertEquals(PdrPlace("AMF", 0), locator.place)
+    }
+
+    /**
+     * Teren 12.11.2026 (F 010 -> Skriptarnica): na kraku naviše iz prizemlja F-a ruta je kretala od dna kraka naniže I sprata ("Niz
+     * stepenice do podesta · pa desno u prolaz") - nemoguć put preko I sprata nazad na isti podest. Ta ruta se odbacuje.
+     */
+    @Test
+    fun fGroundFloor_upFlightToPasarela_routeNotBackDownFromFirstFloor() {
+        val locator = locatorAt("F-0-S").apply { destination = PdrPlace("AMF", -1) }
+        // Krak naviše prizemlja ide ka pasareli (podest je na njegovom kraju).
+        val flight = magneticAzimuth(graph.position(node("F-0-S")), graph.position(node("F-0-PROLAZ-AMF")))
+        repeat(4) { locator.step(flight, stepM) }
+        assertTrue(locator.onStairs)
+        val starts = locator.routeStarts().map { it.id }
+        assertEquals(listOf("F-1-S-D", "F-0-S"), starts)
+        val target = checkNotNull(graph.room("Skriptarnica")).id
+        val routes = starts.map { checkNotNull(graph.route(it, target)) }
+        assertTrue(locator.backtracksToLanding(routes[0]))
+        assertTrue(!locator.backtracksToLanding(routes[1]))
     }
 
     /**

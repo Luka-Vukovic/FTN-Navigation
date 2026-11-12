@@ -57,7 +57,9 @@ FLIGHTS_LOWEST = {**FLIGHTS, "draw_down": False}
 SPIRAL = ("S2", (908, 424, 928, 440), (918, 432))  # spiralno stepenište IV -> V sprat
 
 # Posebne tačke prizemlja; veze sa kampusom (build_campus.py pravi te čvorove).
-ENTRANCE = (666, 522)
+# Pravo ispred spoljnih vrata predvorja, na ivici trema (evakuacioni plan; OSM ulaz je na ivici obrisa sa tremom, 0,4 m dalje). Do
+# 12.11.2026 (666, 522). Na samim vratima (676, 507) prolaz do OSM ulaza je bio 1,3 m - test izlaska je video izlazak pa povratak.
+ENTRANCE = (677, 517)
 PASSAGE_KULA = (322, 422)
 PASSAGE_AMF = (680, 313)
 # Prolaz ka Amfiteatrima je sa međupodesta glavnog stepeništa (FtnGO: "stepenicama naviše"; plan: otvor iznad desnog
@@ -114,30 +116,68 @@ def floor_m1():
 
 
 def floor_0():
+    # Precrtano zid po zid sa evakuacionog plana prizemlja (images/IMG_20260918_120057.webp, van gita; 1 px fotografije = 1 px
+    # plana - koordinatni sistem plana je nastao precrtavanjem baš te fotografije), teren 12.11.2026: "Ponovo pogledaj prizemlje
+    # NB, ovo nije skroz po planu. Ne moraju sve prostorije imati oblik pravougaonika." Do tada FtnGO crtež:
+    #  - istočni zid je na y 505; pojas 505..519 (i 1033..1038 na severu) je trem sa stubovima - unutra je samo pod krovom.
+    #    Sobe uz istočni zid su do 505 (bile do 519), hodnik je 378..449 (bio 383..456) - hol sa dva reda stubova;
+    #  - 018 je u obliku slova L (018A se uvlači u njegov ugao), 018A 368..400;
+    #  - južni red (od juga): Server sala je mala prostorija u uglu hola pred prolazom ka Kuli (416..446 x 439..449, vrata ka holu sa
+    #    istoka); 014 u obliku slova L (416..514 do y 470, ispod toga 416..486) BEZ vrata na hodnik - ulazi se iz 012 (vrata x 514,
+    #    y ~463); iza 012 mala soba 486..522 x 470..505 (vrata ka 014, naziv nepoznat); 012 u obliku slova L (514..556, ispod y 470
+    #    522..556) sa dvokrilnim vratima; 016 556..590, 017 590..627, pa blok Portirnice (627..662: mala soba i Portir, vrata ka
+    #    predvorju) i predvorje glavnog ulaza 662..691 (dvoja dvokrilna vrata, y 476 i 505);
+    #  - 002 je 1000..1031, Studentska služba 760..1000; Svečana sala do 1031.
+    # Brojevi južnog reda: korisnik je 12.11. upisao 014, 12, 16, 17 na fotografiju plana (teren/izveštaj41/IMG_20261112_180909.jpg,
+    # 3,15 px fotografije po px plana) - redosled vrata od ulaza 017, 016, 012, 014. Prva verzija istog dana je pogrešno pročitala stari
+    # (mutan) plan: "SERVER SALA" kao veliku sobu sa vratima na hodnik, predsoblje kao zasebnu sobu, i 013 iza njega; FtnGO oznake 013 i
+    # 015 na planu nemaju mesta.
+    r018 = R(416, 486, 311, 378, "018")
+    r018["poly"] = [(416, 311), (486, 311), (486, 378), (452, 378), (452, 368), (416, 368)]
+    r014 = R(416, 514, 449, 505, "014", door=(514, 463))
+    r014["poly"] = [(416, 449), (514, 449), (514, 470), (486, 470), (486, 505), (416, 505)]
+    r012 = R(514, 556, 449, 505, "012", door=(524, 449))
+    r012["poly"] = [(514, 449), (556, 449), (556, 505), (522, 505), (522, 470), (514, 470)]
     return {
         "title": "Prizemlje",
-        # + predvorje ka glavnom ulazu; do naspram vrata Portirnice i 002 - pravi uglovi (27.10.2026; do tada 1015 i 480, vrata koso)
-        "paths": spine(420, 425, 1021) + [[(666, 420), (666, 488)]],
+        "roof": rect_poly(*WALL),  # trem sa stubovima uz istočni (i severni) zid
+        "outline": [rect_poly(413, 311, 1033, 505)],
+        # + predvorje do spoljnih vrata glavnog ulaza; + kroz dvokrilna vrata 012, pa vratima u 014 do naspram vrata male sobe (pravi uglovi)
+        # (linija kroz 012 i 014 je 3 px pored vrata - na samoj liniji bi ivica vrata - hodnik bila dužine 0; linija ka ulazu na x 677
+        # kao dno kraka naniže, inače dva čvora hodnika 1 px jedan od drugog)
+        "paths": spine(420, 425, 1021) + [[(677, 420), (677, 498)], [(527, 420), (527, 466), (496, 466)]],
         "corridors": [
-            [(416, 383), (692, 383), (692, 378), (760, 378), (760, 405), (1038, 405), (1038, 456), (688, 456),
-             (688, 519), (645, 519), (645, 456), (416, 456)],
-            rect_poly(305, 403, 416, 442),  # spojni prolaz ka Kuli
+            [(452, 378), (760, 378), (760, 405), (1031, 405), (1031, 449), (691, 449), (691, 505), (662, 505), (662, 449),
+             (446, 449), (446, 439), (416, 439), (416, 400), (452, 400)],
+            rect_poly(305, 398, 416, 432),  # spojni prolaz ka Kuli
             rect_poly(668, 305, 692, 311),  # prolaz ka Amfiteatrima (stepenicama naviše)
         ],
         "rooms": [
-            *row(311, 383, [(416, 487, "018"), (487, 520, "019"), (520, 554, "021-3"), (554, 589, "021-2"),
-                            (589, 624, "021-1")]),
-            R(416, 452, 373, 407, "018A"),
+            r018,
+            *row(311, 378, [(486, 520, "019"), (520, 554, "021-3"), (554, 589, "021-2"), (589, 625, "021-1")]),
+            R(416, 452, 368, 400, "018A", door=(452, 387)),
             # Toalet: na FtnGO-u "008" sa ikonicama M i Ž; 008 nije u rasporedu (kao 113/110 na I-IV spratu).
-            R(692, 727, 311, 378), R(727, 760, 311, 378, amenity=TOALET),
-            R(760, 1038, 311, 405, "Svečana sala"),
-            *row(456, 519, [(416, 487, "015"), (487, 520, "013"), (520, 543, "014"), (543, 566, "012"), (566, 589, "016"),
-                            (589, 618, "017"), (618, 645, "Portir"), (688, 760, None),
-                            (760, 1003, "Studentska služba"), (1003, 1038, "002")]),
+            R(692, 727, 311, 378, door=(721, 378)), R(727, 760, 311, 378, amenity=TOALET, door=(736, 378)),
+            R(760, 1031, 311, 405, "Svečana sala"),
+            R(416, 446, 439, 449, door=(446, 444)),  # "SERVER SALA" na planu
+            r014,
+            R(486, 522, 470, 505, door=(496, 470)),  # mala soba iza 012 (vrata ka 014; naziv nepoznat)
+            r012,
+            R(556, 590, 449, 505, "016", door=(568, 449)),
+            R(590, 627, 449, 505, "017", door=(595, 449)),
+            R(627, 662, 449, 476, door=(662, 470)),
+            R(627, 662, 476, 505, "Portir", door=(662, 482)),
+            R(691, 760, 449, 505),
+            R(760, 1000, 449, 505, "Studentska služba"),
+            R(1000, 1031, 449, 505, "002"),
         ],
-        "columns": [(452, 403), (487, 403), (554, 403), (622, 403), (487, 442), (554, 442), (622, 442)],
-        "entrances": [(645, 519, 688, 527), (1034, 408, 1042, 452)],
-        "steps": [(638, 527, 695, 545)],
+        "columns": [(486, 397), (556, 397), (626, 397), (486, 434), (556, 434), (626, 434), (694, 434), (763, 434), (830, 434),
+                    (898, 434), (967, 434),
+                    # stubovi trema
+                    (420, 515), (489, 515), (558, 515), (626, 515), (694, 515), (761, 515), (830, 515), (898, 515),
+                    (965, 515), (1033, 515)],
+        "entrances": [(662, 503, 691, 507), (1031, 405, 1037, 432)],
+        "steps": [(629, 519, 692, 548)],  # spoljne stepenice ispred trema
         "stairs": STAIRS,
         "lifts": LIFTS,
         "flights": {"S": FLIGHTS},
@@ -261,8 +301,10 @@ def floor_5():
 # prizemlju, AH1A, 406, toaleti) ostaju sa vratima na sredini zida; P17/P18 su sa terena (27.10.).
 DOORS = {
     -1: {"P01": [(610, 413)], "P08": [(568, 450)], "P21": [(713, 387)], "P20": [(740.5, 387)]},
-    0: {"018": [(480, 383)], "019": [(498, 383)], "021-3": [(547.5, 383)], "021-2": [(582, 383)], "021-1": [(611.5, 383)],
-        "Svečana sala": [(815, 405), (975, 405)], "Studentska služba": [(768.5, 456)], "002": [(1009, 456)]},
+    # Prizemlje: evakuacioni plan (12.11.2026; vrata se slažu sa FtnGO-om do ~2 px, zid hodnika je sada na y 378 i 449). Studentska
+    # služba ima i druga vrata na severnom kraju.
+    0: {"018": [(480, 378)], "019": [(497.5, 378)], "021-3": [(547.5, 378)], "021-2": [(581.5, 378)], "021-1": [(613, 378)],
+        "Svečana sala": [(815, 405), (975, 405)], "Studentska služba": [(768, 449), (990, 449)], "002": [(1006, 449)]},
     1: {"102": [(462, 406)], "101": [(502, 406)], "109A": [(802, 406)], "109": [(982, 406)], "103": [(440, 441)],
         "104": [(538, 441)], "105": [(604, 441)], "106": [(710, 441)], "107": [(777, 441)], "108": [(854, 441)],
         "108A": [(982, 441)]},

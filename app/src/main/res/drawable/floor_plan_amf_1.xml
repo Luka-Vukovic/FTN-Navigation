@@ -24,12 +24,12 @@
         <!-- Unutrašnjost -->
         <path
             android:fillColor="#FFFFFFFF"
-            android:pathData="M553,168 L711,168 L711,207 L553,207 Z" />
+            android:pathData="M566,174 L704,174 L704,210 L566,210 Z" />
 
         <!-- Hodnici -->
         <path
             android:fillColor="#FFE8EEF4"
-            android:pathData="M664,190 L711,190 L711,240 L664,240 Z" />
+            android:pathData="M667,210 L704,210 L704,226 L667,226 Z" />
 
         <!-- Stepeništa -->
         <path
@@ -44,13 +44,13 @@
         <path
             android:strokeColor="#FF455A64"
             android:strokeWidth="1.5"
-            android:pathData="M553,168 L664,168 L664,207 L553,207 Z" />
+            android:pathData="M566,174 L704,174 L704,210 L566,210 Z" />
 
         <!-- Spoljni zid -->
         <path
             android:strokeColor="#FF263238"
             android:strokeWidth="3"
-            android:pathData="M553,168 L711,168 L711,207 L553,207 Z" />
+            android:pathData="M566,174 L704,174 L704,210 L566,210 Z" />
 
     </group>
 </vector>

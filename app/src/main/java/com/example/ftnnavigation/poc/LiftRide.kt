@@ -40,15 +40,12 @@ private const val MAX_RIDE_NS = 45_000_000_000L
 private const val MAX_STEPS_IN_RIDE = 2
 
 /**
- * Koraci do ovoliko posle kraja polaska i pre početka kočenja se ne broje ako je njihova korpa tiha (std |a| ispod
- * [JERK_QUIET_STD]) - to je trzaj lifta (korpa sa "korakom" nije mirna, pa impuls počinje tek posle nje). Teren 13.10.2026,
- * NTP V -> P u ruci: jedan "korak" odmah posle polaska i dva na početku kočenja (korisnik je stajao) - vožnja nije prepoznata.
- */
-private const val JERK_NS = 1_000_000_000L
-
-/**
- * Korpa trzaja: std |a| ispod ovoga. V -> P 13.10.2026: 0,31-0,47. Lažna "vožnja" 11.10. kod kuće (telefon u džep stojeći,
- * mali impuls pa suprotan) ima korake u korpama 0,67 / 1,03 / 1,42 - sa pragom [BIN_CALM_STD] (0,8) je prošla. PROCENA.
+ * Korpa trzaja: std |a| ispod ovoga - "korak" u njoj je trzaj ili podrhtavanje kabine, ne hod (hod: std 1-3), pa se između polaska i
+ * kočenja ne broji. Teren 13.10.2026, NTP V -> P u ruci: jedan "korak" odmah posle polaska i dva na početku kočenja (korisnik je stajao,
+ * korpe 0,31-0,47) - vožnja nije prepoznata; tada su se praštali samo koraci do 1 s od impulsa. Teren 12.11.2026, NTP L1 III -> P u ruci:
+ * 11 "koraka" za 10 s vožnje, i usred vožnje u tihim korpama (0,33-0,38) - 4 koraka između, vožnja nije prepoznata; sada se tihe korpe
+ * ne broje nigde u vožnji. Lažna "vožnja" 11.10. kod kuće (telefon u džep stojeći, mali impuls pa suprotan) ima korake u korpama
+ * 0,67 / 1,03 / 1,42 - sa pragom [BIN_CALM_STD] (0,8) je prošla. PROCENA.
  */
 private const val JERK_QUIET_STD = 0.55
 
@@ -190,13 +187,18 @@ class LiftRideDetector {
         // Korak u tihoj korpi usred impulsa je trzaj kabine, ne hod - impuls se nastavlja. Teren 21.10.2026, NTP L1 I -> V: korak
         // usred polaska (std 0,53) je prelomio impuls na dva dela, a odnos kočenja i drugog dela (2,7) nije prošao - vožnja nije
         // prepoznata ("prvi put se dešava").
-        val jerkInPulse = pulse != null && bin.steps > 0 && bin.stdMag < JERK_QUIET_STD
+        val jerk = bin.steps > 0 && bin.stdMag < JERK_QUIET_STD
+        val jerkInPulse = pulse != null && jerk
         val sign = when {
             a > PULSE_THRESHOLD -> 1
             a < -PULSE_THRESHOLD -> -1
             else -> 0
         }
-        val quiet = bin.calm || jerkInPulse
+        // I kočenje sme da počne tihom korpom sa "korakom" (polazak čeka suprotan impuls). Teren 12.11.2026, NTP L1 III -> P u ruci:
+        // detektor je javio "korak" u prve dve korpe kočenja (std 0,33 i 0,54) - kočenje je počelo tek u trećoj, prelomilo se i vožnja
+        // nije prepoznata ("Nešto se desilo pa nije prepoznato putovanje liftom").
+        val jerkAtBraking = pulse == null && jerk && sign != 0 && pending?.let { it.sign == -sign } == true
+        val quiet = bin.calm || jerkInPulse || jerkAtBraking
         if (pulse != null && sign == pulse.sign) {
             if (quiet) {
                 // Bučna korpa pre ove je deo impulsa tek kad se impuls posle nje nastavi.
@@ -231,10 +233,7 @@ class LiftRideDetector {
         if (pulse.bins < PULSE_MIN_BINS || pulse.std >= PULSE_MAX_STD || abs(pulse.dv) < MIN_PULSE_DV) return null
         val start = pending
         if (start != null && start.sign == -pulse.sign && pulse.startNs - start.endNs <= MAX_RIDE_NS) {
-            val between = steps.count { t ->
-                val jerk = t < start.endNs + JERK_NS || t >= pulse.startNs - JERK_NS
-                t >= start.endNs && t < pulse.startNs && !(jerk && quietAt(t))
-            }
+            val between = steps.count { t -> t >= start.endNs && t < pulse.startNs && !quietAt(t) }
             val inRide = steps.filter { it >= start.endNs && it < pulse.startNs }
             val handled = abs(start.dv) >= HANDLED_RIDE_MIN_DV && abs(pulse.dv) >= HANDLED_RIDE_MIN_DV &&
                 inRide.size <= HANDLED_MAX_STEPS && (inRide.isEmpty() || inRide.last() - inRide.first() <= HANDLED_SPAN_NS)

@@ -326,8 +326,15 @@ def rect(x0, y0, x1, y1):
     return poly(rect_poly(x0, y0, x1, y1))
 
 
-def treads(x0, y0, x1, y1, step=6):
-    """Gazišta: linije popreko duže strane stepeništa."""
+def treads(x0, y0, x1, y1, count=None, step=6):
+    """
+    Gazišta: linije popreko duže strane stepeništa, na svakih [step] px - ili tačno [count] gazišta, kad je zadat peti član
+    pravougaonika (DGG: 11 po bočnom kraku, 6 iza lifta - korisnik, 12.11.2026).
+    """
+    if count:
+        if x1 - x0 >= y1 - y0:
+            return " ".join(f"M{x0 + (x1 - x0) * k / count:g},{y0} V{y1}" for k in range(1, count))
+        return " ".join(f"M{x0},{y0 + (y1 - y0) * k / count:g} H{x1}" for k in range(1, count))
     if x1 - x0 >= y1 - y0:
         return " ".join(f"M{x},{y0} V{y1}" for x in range(int(x0) + step, int(x1), step))
     return " ".join(f"M{x0},{y} H{x1}" for y in range(int(y0) + step, int(y1), step))
@@ -363,7 +370,7 @@ def drawable(plan, viewport, wall, building_name, script, source="snimaka aplika
     all_variants = [v for fl in flights.values() for v in variants(fl)]
     runs = list(dict.fromkeys(r for v in all_variants for r in ([v["up"]] if v["draw_up"] else []) + ([v["down"]] if v["draw_down"] else [])))
     if stairs or runs:
-        parts.append(("Stepeništa", path(fill=C_STAIRS, data=" ".join(rect(*s) for s in stairs + runs))
+        parts.append(("Stepeništa", path(fill=C_STAIRS, data=" ".join(rect(*s[:4]) for s in stairs + runs))
                       + path(stroke=C_TREAD, width=0.8, data=" ".join(treads(*s) for s in stairs + runs))))
     spiral_corners = []
     for spec in spiral.values():
