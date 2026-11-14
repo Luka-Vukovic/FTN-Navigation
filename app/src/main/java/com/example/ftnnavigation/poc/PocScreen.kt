@@ -657,6 +657,9 @@ private const val LEG_TIE_FRACTION = 0.01f
 /** Čvor rute do ovoliko od linije kraka je na njoj ([legBackTo]). */
 private val ROUTE_ON_LEG_TOLERANCE = 3.dp
 
+/** Linija rute preko vrata prolaza kroz koji ruta napušta zgradu (na ekranu, bez obzira na zum). */
+private val EXIT_STUB = 24.dp
+
 /** Natpis toaleta na planu (toaleti nemaju naziv). */
 private const val TOILET_LABEL = "WC"
 
@@ -856,6 +859,14 @@ private fun DrawScope.drawRoute(
         if (!node.isHere()) {
             // Napušta sprat stepeništem sa krakovima: linija još krakom do međupodesta ([stairLegs]).
             if (previous != null && !legDone) legOf(previous.id, node.id)?.forEach { lineTo(it.toOffset()) }
+            // Napušta zgradu kroz prolaz: linija još malo preko vrata, pravcem dolaska do njih. Teren 13.11.2026 (AMF S1): linija ka
+            // tremu za Kulu se završavala na ivici podesta - "treba nacrtati liniju koja vodi ili ka tremu, ili ka srednjem delu stepenica".
+            if (previous != null && previous.type == NodeType.PROLAZ && node.buildingId != buildingId) {
+                val gate = previous.toOffset()
+                val before = nodes.getOrNull(i - 2)?.takeIf { it.isHere() }?.toOffset()
+                val length = before?.let { (gate - it).getDistance() } ?: 0f
+                if (before != null && length > 0f) lineTo(gate + (gate - before) * (EXIT_STUB.toPx() * k / length))
+            }
             drawing = false
             legDone = false
             previous = null

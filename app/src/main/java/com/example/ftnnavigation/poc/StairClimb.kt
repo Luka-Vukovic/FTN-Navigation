@@ -64,6 +64,9 @@ private const val MIN_TURN_STEPS = 2
 private const val ACROSS_LANDING_DEG = 30f
 private const val MAX_LANDING_SPAN_STEPS = 16
 
+/** Linija rute sa višeg sprata ide ovaj deo drugog kraka (od međupodesta ka nižem spratu) - [stairLegVariants]. */
+private const val SECOND_FLIGHT_LEAD = 0.35f
+
 /** Pauza duža od ovoga prekida let (NB 04.10.: "koraci" dok korisnik stoji, na 4-42 s). */
 private const val PAUSE_NS = 2_000_000_000L
 
@@ -191,6 +194,8 @@ fun flightBends(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, 
  * završavala na vrhu stepeništa, pa je "nestajala" pri silasku na međupodest - na spratu se nije videlo kuda dalje.
  * Čvor stepeništa van putanje (AMF S1 u prizemlju: račvanje hodnika ka oba bočna kraka) do kraka ide pod pravim uglom, preko
  * tačke ose kraka naspram čvora. Stepeništa sa više varijanti krakova (AMF S1): prva - za izbor varijante [stairLegVariants].
+ * Sa višeg sprata linija ide i preko međupodesta na početak drugog kraka i deo niz njega. Teren 13.11.2026 (F 010 -> Skriptarnica,
+ * AMF P): linija se završavala na dnu bočnog kraka S1 - "treba nacrtati liniju koja vodi ili ka tremu, ili ka srednjem delu stepenica".
  */
 fun stairLegs(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<String, String>, List<PlanPoint>> =
     stairLegVariants(graph, paths).mapValues { it.value.first() }
@@ -217,7 +222,14 @@ fun stairLegVariants(graph: BuildingGraph, paths: List<StairPath>): Map<Pair<Str
         val lows = byStair[stairKey(lower) to lower.floor]?.takeIf { it.isNotEmpty() } ?: continue
         val highs = byStair[stairKey(upper) to upper.floor]?.takeIf { it.isNotEmpty() } ?: continue
         legs[lower.id to upper.id] = lows.map { low -> onAxis(lower, low[0], low[1]) + listOf(low[1], low[2]) }
-        legs[upper.id to lower.id] = highs.map { high -> onAxis(upper, high[3], high[2]) + listOf(high[2]) }
+        // Naniže: krak do međupodesta, preko njega do početka drugog kraka i deo niz njega ([SECOND_FLIGHT_LEAD]) - kao naviše.
+        legs[upper.id to lower.id] = highs.map { high ->
+            val lead = PlanPoint(
+                high[1].x + (high[0].x - high[1].x) * SECOND_FLIGHT_LEAD,
+                high[1].y + (high[0].y - high[1].y) * SECOND_FLIGHT_LEAD,
+            )
+            onAxis(upper, high[3], high[2]) + listOf(high[2], high[1], lead)
+        }
     }
     return legs
 }

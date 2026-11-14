@@ -1889,6 +1889,77 @@ class PdrLocatorTest {
     }
 
     /**
+     * Teren 13.11.2026 (hod-20261113-094747, 416-495 s, zadatak 205 -> A1): II -> I, okret na podestu sprata, niz krak i 13 koraka pravo
+     * u stakleni prolaz. Znak postoji (ravan hod pre stepenica), ali je medijana u prolazu 0,4-0,7 (na kraju prolaza su stepenice naniže
+     * ka A1), pa prolaz nije puštan - tačka je stajala na međupodestu i vraćena na vrh kraka ("Tačka nikako nije mogla da uđe u
+     * prolaz"). Odredište u AMF-u je dovoljno i uz znak.
+     */
+    @Test
+    fun nbFirstFloor_gaitNotFlatInGlassPassage_destinationInAmf_entersAmf() {
+        val recorded = timedSteps(
+            """
+            297|0.39|-0.32|416.46 297|0.18|-0.71|424.44 298|0.29|-0.82|425.04 290|0.78|-0.89|425.29 295|0.23|-0.08|425.76
+            297|0.80|0.60|426.42 291|0.80|0.30|427.15 286|0.80|0.38|427.61 300|0.80|1.03|428.21 305|0.80|0.60|428.79
+            310|0.80|0.56|429.37 309|0.80|0.69|429.94 313|0.80|0.97|430.45 325|0.80|0.47|431.15 336|0.80|0.63|431.81
+            344|0.80|0.11|432.27 355|0.67|0.29|432.86 357|0.80|0.40|433.64 358|0.50|0.44|434.17 0|0.80|0.48|434.42
+            3|0.80|0.82|435.00 360|0.80|1.30|435.55 356|0.80|1.24|436.06 353|0.80|1.67|436.60 351|0.80|0.63|437.24
+            351|0.80|0.95|437.77 350|0.80|1.23|438.34 339|0.80|1.28|438.90 325|0.80|0.85|439.53 309|0.80|1.14|439.92
+            295|0.80|0.62|440.42 283|0.80|0.48|440.96 271|0.80|0.73|441.55 256|0.80|0.52|442.09 237|0.80|0.69|442.71
+            221|0.39|0.17|443.29 200|0.80|0.48|444.05 189|0.80|1.55|444.64 181|0.80|0.69|445.24 176|0.80|1.27|445.87
+            171|0.80|1.58|446.45 166|0.80|1.47|447.07 164|0.80|1.20|447.65 162|0.80|0.88|448.22 159|0.80|1.08|448.84
+            156|0.80|1.54|449.42 156|0.80|1.46|449.92 148|0.80|0.30|450.38 132|0.80|0.95|450.86 108|0.80|0.79|451.36
+            82|0.80|0.89|451.94 61|0.80|0.41|452.52 45|0.62|-0.11|453.16 33|0.80|-0.03|453.76 15|0.80|0.05|454.62
+            7|0.80|1.06|455.16 8|0.34|0.85|455.44 10|0.80|0.80|455.77 6|0.80|1.09|456.32 3|0.80|1.43|456.88
+            360|0.80|1.35|457.44 358|0.80|1.28|458.00 356|0.80|1.02|458.56 351|0.80|1.60|459.13 348|0.80|1.35|459.63
+            347|0.54|0.70|459.89 347|0.80|1.41|460.16 345|0.80|1.40|460.59 350|0.80|0.11|461.12 351|0.80|0.64|461.79
+            348|0.80|0.17|462.32 349|0.80|0.79|462.93 352|0.80|0.70|463.45 353|0.80|0.63|464.04 355|0.80|0.56|464.64
+            0|0.80|0.37|465.30 10|0.80|0.51|465.82 14|0.80|0.44|466.42 10|0.80|0.32|467.27 7|0.80|0.96|467.90
+            4|0.80|1.03|468.58 3|0.80|1.08|469.21 4|0.80|0.99|469.92 4|0.80|1.27|470.53 7|0.80|0.40|471.22
+            8|0.80|0.82|471.85 6|0.80|0.80|472.59 10|0.80|0.82|473.23 15|0.80|0.52|474.00 18|0.80|0.52|474.56
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("NB", 2), Offset(0.6030458f, 0.39227045f), measure = false)
+            destination = PdrPlace("AMF", 0)
+        }
+        val reasons = recorded.mapNotNull { locator.walk("NB", it) }
+        assertEquals("$reasons", PlaceReason.STEPENICE, reasons.first())
+        assertTrue("$reasons", PlaceReason.PROLAZ in reasons && reasons.count { it == PlaceReason.STEPENICE } == 1)
+        assertEquals(PdrPlace("AMF", 0), locator.place)
+    }
+
+    /**
+     * Teren 13.11.2026 (hod-20261113-094747, 646-670 s, F 010 posle Skriptarnice; pasarela AMF -> F je u grafu 2,5 m): posle 1,5 m
+     * korisnik je skrenuo ~110° ulevo niz krak ka F prizemlju. Koraci u stranu nisu povećavali pređeno, pa se tačka vratila u AMF i
+     * stajala na vratima pasarele do "Ovde sam" na dnu kraka F. Skretanje pred krajem prolaza ga završava.
+     */
+    @Test
+    fun pasarelaToF_turnNearEnd_staysInF() {
+        val recorded = timedSteps(
+            """
+            233|0.80|0.19|646.33 236|0.80|0.23|646.89 240|0.80|-0.08|647.49 244|0.80|0.30|648.02 243|0.80|0.12|648.59
+            248|0.80|0.20|649.16 252|0.80|-0.40|649.77 259|0.80|-0.05|650.33 262|0.80|0.05|650.90 264|0.80|-0.01|651.48
+            263|0.80|0.13|652.06 264|0.80|-0.08|652.62 261|0.80|-0.03|653.23 263|0.80|-0.22|653.82 262|0.80|0.12|654.43
+            262|0.80|0.03|655.07 253|0.80|0.28|655.69 234|0.80|0.11|656.31 301|0.80|-0.87|657.06 276|0.80|-0.27|657.78
+            262|0.80|-0.27|658.66 163|0.80|0.26|659.30 162|0.80|0.74|659.90 169|0.80|0.38|660.54 173|0.80|-0.17|661.33
+            175|0.80|-0.05|662.01 179|0.80|0.48|662.62 179|0.70|0.50|663.15 174|0.80|-0.45|663.41 173|0.80|0.36|664.02
+            174|0.80|0.02|664.71 172|0.80|0.37|665.34 175|0.80|0.10|666.07 184|0.80|-0.07|666.74 192|0.80|0.12|667.35
+            """,
+        )
+        // Slobodna PDR pozicija iz replay-a (645,8 s, metri kampusa) - ~2 m istočnije od tačke na grafu.
+        val (x, y) = graph.placement("AMF").toRelative(PointM(353.01, 157.87))
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("AMF", 0), Offset(x, y), measure = false)
+            destination = PdrPlace("F", 0)
+        }
+        // Smer je prepisan iz replay-a stare verzije, na planu zgrade u kojoj je tačka tada bila: 657-659 s F (plan F je zakrenut 90° u
+        // odnosu na AMF), inače AMF.
+        val reasons = recorded.mapNotNull { locator.walk(if (it.timeS in 657.0..659.0) "F" else "AMF", it) }
+        assertEquals("$reasons", listOf(PlaceReason.PROLAZ), reasons.distinct())
+        assertEquals(PdrPlace("F", 0), locator.place)
+    }
+
+    /**
      * Teren 12.11.2026 (F 010 -> Skriptarnica): na kraku naviše iz prizemlja F-a ruta je kretala od dna kraka naniže I sprata ("Niz
      * stepenice do podesta · pa desno u prolaz") - nemoguć put preko I sprata nazad na isti podest. Ta ruta se odbacuje.
      */
@@ -1974,15 +2045,22 @@ class PdrLocatorTest {
         val down = checkNotNull(legs["AMF-0-S1-D" to "AMF-m1-S1"])
         val up = checkNotNull(legs["AMF-m1-S1" to "AMF-0-S1-D"])
         val fork = node("AMF-0-S1-D")
-        assertEquals(3, down.size)
+        assertEquals(5, down.size)
         assertEquals(fork.y, down[0].y, 1e-4f)
         assertEquals(down[0].x, down[1].x, 1e-4f)
-        assertEquals(down.last(), up.last())
-        // NTP S1, I -> II: krak naviše i međupodest na I, krak naniže na II do dna kraka (čvor S1-D je na kraju putanje).
+        assertEquals(down[2], up.last())
+        // Teren 13.11.2026: sa P linija ide i preko podesta na vrh srednjeg kraka (gde na −1 počinje) i deo niz njega - ka −1.
+        assertEquals(down[3], up.first())
+        assertEquals(down[3].x, down[4].x, 1e-4f)
+        assertTrue(down[4].y < down[3].y && down[4].y > node("AMF-m1-S1").y)
+        // NTP S1, I -> II: krak naviše i međupodest na I, krak naniže na II do dna kraka (čvor S1-D je na kraju putanje), pa preko
+        // međupodesta na drugi krak.
         val ntpUp = checkNotNull(legs["NTP-1-S1" to "NTP-2-S1-D"])
         val ntpDown = checkNotNull(legs["NTP-2-S1-D" to "NTP-1-S1"])
         assertEquals(2, ntpUp.size)
-        assertEquals(listOf(ntpUp.last()), ntpDown)
+        assertEquals(3, ntpDown.size)
+        assertEquals(ntpUp.last(), ntpDown.first())
+        assertEquals(ntpUp.first(), ntpDown[1])
         // Samo ivice stepenica između spratova, i samo stepeništa sa krakovima (Kula je spirala).
         assertTrue(legs.keys.all { (a, b) -> graph.edge(a, b)?.type == EdgeType.STEPENICE && node(a).floor != node(b).floor })
         assertTrue(legs.keys.none { (a, _) -> a.startsWith("KULA") })
@@ -2002,7 +2080,7 @@ class PdrLocatorTest {
         assertEquals(2, down.size)
         assertEquals(2, up.size)
         // Varijanta i se na oba sprata sastaje na istom mestu podesta, a desni i levi krak su na suprotnim stranama račvanja.
-        for (i in 0..1) assertEquals(down[i].last(), up[i].last())
+        for (i in 0..1) assertEquals(down[i][down[i].size - 3], up[i].last())
         val fork = node("AMF-0-S1-D")
         assertTrue((down[0][1].x - fork.x) * (down[1][1].x - fork.x) < 0f)
         assertEquals(stairLegs(graph, stairPaths)["AMF-0-S1-D" to "AMF-m1-S1"], down[0])

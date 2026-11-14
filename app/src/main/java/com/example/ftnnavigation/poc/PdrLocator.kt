@@ -277,6 +277,11 @@ private const val AT_GATE_M = 0.3
 /** Izlazak kroz kraj hodnika: slobodna PDR pozicija je bar ovoliko iza čvora, napolje. */
 private const val PASS_BEYOND_M = 1.0
 
+/** Prolaz se završava skretanjem ovoliko pred krajem ([PdrLocator] passageStep) - PROCENA. */
+private const val PASS_END_TURN_M = 1.5
+private const val PASS_END_TURN_MIN_DEG = 60.0
+private const val PASS_END_TURN_MAX_DEG = 135.0
+
 /** Izlazak kroz spoljna vrata kad tačka kasni ([PdrLocator] leaveThroughOuterDoor): slobodna pozicija iza linije zida bar ovoliko... */
 private const val OUTER_DOOR_BEYOND_M = 0.3
 
@@ -3667,11 +3672,14 @@ class PdrLocator(
         // Bez znaka (nema baze - snimak je počeo na stepeništu, džep) prolaz važi kad je odredište u zgradi u koju vodi. Teren 12.11.2026
         // (205 -> A1, praćenje uključeno na II spratu pored stepeništa): znaka nije bilo, pa je tačka 50 s stajala na međupodestu dok je
         // korisnik prošao prolaz i sišao do A1 ("Tačka nije skrenula u prolaz").
+        // Odredište u toj zgradi je dovoljno i uz znak. Teren 13.11.2026 (205 -> A1): znak je postojao (ravan hod pre stepenica), a
+        // medijana u prolazu je bila 0,4-0,7 (na kraju prolaza su stepenice naniže ka A1) - tačka je stajala na međupodestu, pa
+        // vraćena na vrh kraka ("Tačka nikako nije mogla da uđe u prolaz").
         val gate = landingGate(c.stair, start)
             ?: landingGate(c.stair, start, viaFlight = true)
                 ?.takeIf {
                     !c.up && c.straight >= FLIGHT_PASSAGE_STEPS &&
-                        (gaitBelow(c, DESCENT_FLAT_SCORE) || (gaitMedian(c) == null && leadsToDestination(it.second)))
+                        (gaitBelow(c, DESCENT_FLAT_SCORE) || leadsToDestination(it.second))
                 }
             ?: return null
         val (a, b) = firstFlight(c) ?: return null
@@ -4382,10 +4390,25 @@ class PdrLocator(
         return true
     }
 
-    /** Korak u prolazu: računa se deo koraka u pravcu izlaza (nazad umanjuje pređeno). */
+    /**
+     * Korak u prolazu: računa se deo koraka u pravcu izlaza (nazad umanjuje pređeno). Preko pola prolaza i najviše
+     * [PASS_END_TURN_M] pred krajem, korak u stranu ([PASS_END_TURN_MIN_DEG]..[PASS_END_TURN_MAX_DEG] od pravca izlaza) završava
+     * prolaz: korisnik je stigao i skreće. Teren 13.11.2026 (pasarela AMF -> F, u grafu 2,5 m): posle 1,5 m korisnik je skrenuo
+     * ~110° niz krak ka F prizemlju, koraci u stranu nisu povećavali pređeno, pa se tačka vratila u AMF i stajala 12 s na vratima.
+     */
     private fun passageStep(passage: Passage, azimuthDeg: Float, lengthM: Float): PlaceReason? {
         val (dx, dy) = stepVector(PdrPlace.CAMPUS, azimuthDeg, lengthM)
-        passage.doneM += dx * passage.outward.x + dy * passage.outward.y
+        val along = dx * passage.outward.x + dy * passage.outward.y
+        val stepM = hypot(dx, dy)
+        if (stepM > 0 && passage.doneM >= passage.lengthM / 2 && passage.lengthM - passage.doneM <= PASS_END_TURN_M) {
+            val off = Math.toDegrees(kotlin.math.acos((along / stepM).coerceIn(-1.0, 1.0)))
+            if (off in PASS_END_TURN_MIN_DEG..PASS_END_TURN_MAX_DEG) {
+                trace?.invoke("prolaz ${passage.target.id}: skretanje ${off.toInt()}° pred krajem - stigao")
+                passage.doneM = passage.lengthM
+                return updatePassage(passage)
+            }
+        }
+        passage.doneM += along
         passage.lastHeading?.let { passage.turned += angleDiffDeg(azimuthDeg, it) }
         passage.lastHeading = azimuthDeg
         return updatePassage(passage)

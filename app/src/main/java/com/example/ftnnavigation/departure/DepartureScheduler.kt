@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.edit
+import com.example.ftnnavigation.MainActivity
 import com.example.ftnnavigation.R
 import com.example.ftnnavigation.campus.CampusData
 import com.example.ftnnavigation.campus.PlaceLocation
@@ -73,7 +74,17 @@ object DepartureScheduler {
         val notifyAtMs = departure.notifyAt.toEpochMilli(zone)
         val pending = alarmIntent(context, content(context, departure, planner.location(context, departure), zone))
         val exact = alarms.canScheduleExactAlarms()
-        if (exact) {
+        if (exact && departure.reminder) {
+            // Drugi podsetnik kao budilnik: `setExactAndAllowWhileIdle` je kasnio 35-154 s (teren 10.11., 12.11., 13.11.2026), a prvi
+            // podsetnik nikad. Budilnik sistem uvek isporučuje tačno; cena je ikonica budilnika u statusnoj traci dok čeka (korisnik: "Može").
+            val open = PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+            alarms.setAlarmClock(AlarmManager.AlarmClockInfo(notifyAtMs, open), pending)
+        } else if (exact) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, notifyAtMs, pending)
         } else {
             alarms.setWindow(AlarmManager.RTC_WAKEUP, notifyAtMs - INEXACT_WINDOW_MS, INEXACT_WINDOW_MS, pending)
