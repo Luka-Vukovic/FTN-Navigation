@@ -39,6 +39,10 @@ M_PER_PX = 63.4 / 625  # NB: OSM obris 63,4 m = 625 px plana
 
 # Oznaka HOD ivice sa stepenicima (krak do podesta/međunivoa, pasarela na podest) - ruta "bez stepenica" je ne koristi.
 STEPS = "STEPENICI"
+# Oznaka HOD ivice samo za lociranje (map-matching), ruta je ne koristi - AMF prizemlje: sredina hodnika pred S1 (teren 16.11.2026).
+LOCATE_ONLY = "SAMO_LOCIRANJE"
+# Oznaka HOD ivice samo za rutu, lociranje je ne vidi - AMF prizemlje: trake uz zidove pred S1 (teren 16.11.2026).
+ROUTE_ONLY = "SAMO_RUTA"
 
 
 # Vrsta prostorije bez naziva koja ipak ide u graf (aplikacija: "najbliži toalet"). Čvor PROSTORIJA bez naziva.
@@ -100,6 +104,8 @@ class Graph:
         self.nodes = {}  # id -> (sprat, x, y, tip, naziv)
         self.edges = {}  # (a, b) -> tip
         self.steps = set()  # (a, b) HOD ivica sa stepenicima (krak do podesta/međunivoa) - "bez stepenica" ih ne koristi
+        self.locate_only = set()  # (a, b) HOD ivica samo za lociranje (LOCATE_ONLY) - ruta je ne koristi
+        self.route_only = set()  # (a, b) HOD ivica samo za rutu (ROUTE_ONLY) - lociranje je ne vidi
         self.amenities = {}  # id -> vrsta prostorije bez naziva (TOALET)
 
     def nid(self, floor, key):
@@ -302,7 +308,9 @@ def write_json(g, path, viewport, floors, entrance, campus_links, indoor_links=(
             for n, (f, x, y, kind, name) in g.nodes.items()
         ],
         # [a, b, tip] ili [a, b, "HOD", STEPS] - hod krakom stepeništa (do podesta/međunivoa)
-        "edges": [[a, b, kind] + ([STEPS] if (a, b) in g.steps else []) for (a, b), kind in g.edges.items()],
+        "edges": [[a, b, kind] + ([STEPS] if (a, b) in g.steps else [LOCATE_ONLY] if (a, b) in g.locate_only
+                                  else [ROUTE_ONLY] if (a, b) in g.route_only else [])
+                  for (a, b), kind in g.edges.items()],
         # [čvor kampusa, čvor zgrade] ili [..., STEPS] - npr. pasarela F-bloka stiže na podest između spratova
         "campusLinks": [list(link) for link in campus_links],
         # [čvor ove zgrade, čvor druge zgrade sa planom] - prolaz mimo kampusa (npr. NB - Kula na I spratu)

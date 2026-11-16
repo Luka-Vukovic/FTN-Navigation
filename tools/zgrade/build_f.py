@@ -118,8 +118,9 @@ def floor_0():
     je crtala kao predvorje (deo hodnika), a niše kao otvorene ka hodniku; korisnik: "pravougaonik levo predstavlja prostoriju
     ... druga dva su mali hodnici koji vode do drugih učionica, ograđeni su zidom i postoje vrata do njih". Južni red: 007-009,
     010 (vrata u nišu), niša sa 010A-C, 011A, 011B (vrata u nišu), niša sa 011C/D, 011E (vrata u nišu), 012, 012A, soba bez
-    broja. Severni red: soba bez broja, 006-003, 002 (izlaz na spoljne stepenice), 001B, 001A, hol, stepenište, međupodest sa
-    pasarelom ("IZLAZ"), soba bez broja, toaleti.
+    broja. Severni red: soba bez broja, 005-002, 001 (izlaz na spoljne stepenice), 001B, 001A, hol, stepenište, međupodest sa
+    pasarelom ("IZLAZ"), soba bez broja, toaleti; istočna prostorija na kraju hodnika je 006 (teren 16.11.2026 - do tada je
+    severni red bio 006-003, 002, a istočna prostorija bez broja).
     Stepenište (fotografija sa terena IMG_20261010_120816 i strelice na planu): iz hola severni krak vodi gore, ka zapadu, na
     međupodest odakle ide pasarela; južni krak vodi dole (ispod nema plana). Na I sprat se ide sa međupodesta.
     """
@@ -142,14 +143,15 @@ def floor_0():
         "steps": [box(249, 302, 177, 205)],
         "flights": {"S": flights(400, 454)},
         "rooms": [
-            # Istočni kraj: prostorija (ne zna se kakva - korisnik: "nije prazan prostor"), vrata ka hodniku u pregradi; iz nje
+            # Istočni kraj: 006, "čeono" na kraju hodnika (teren 16.11.2026, korisnik: "ide 001A, 001B, 001, pa dalje, a 006 je
+            # čeono"; do tada prostorija bez naziva - korisnik 10.10.: "nije prazan prostor"), vrata ka hodniku u pregradi; iz nje
             # se ulazi u dve krajnje sobe. Donji zid je stepenast (kao na planu).
-            {**R(0, 74, 79, 115), "poly": [(0, 79), (74, 79), (74, 112), (50, 112), (50, 115), (0, 115)]},
+            {**R(0, 74, 79, 115, "F 006"), "poly": [(0, 79), (74, 79), (74, 112), (50, 112), (50, 115), (0, 115)]},
             R(0, 50, 0, 79, door=(28, 79)),
             # Zidovi niša (zatvoreni mali hodnici).
             R(225, 300, 59, 79),
             R(375, 425, 64, 79),
-            # 007 i 006: vrata desno od pregrade istočne prostorije (na planu x 82-92; na sredini zida su padala na pregradu).
+            # 007 i 005 (do 16.11.2026 "006"): vrata desno od pregrade istočne prostorije (na planu x 82-92; na sredini zida su padala na pregradu).
             R(50, 100, 0, 79, "F 007", door=(87, 79)),
             *rooms(0, 0, 79, [(100, 150, 8), (150, 200, 9)]),
             R(200, 225, 0, 79, "F 010", door=(225, 70)),
@@ -165,9 +167,11 @@ def floor_0():
             R(500, 550, 0, 79, "F 012A", door=(508, 79)),
             R(550, 600, 0, 79),
             R(0, 50, 115, 163),
-            R(50, 100, 113, 163, "F 006", door=(87, 113)),
-            *rooms(0, 113, 163, [(100, 150, 5), (150, 200, 4), (200, 250, 3)]),
-            R(250, 300, 113, 163, "F 002", door=(260, 113)),
+            # Severni red od hola ka istoku: 001A, 001B, 001, 002 ... 005 (teren 16.11.2026; do tada 001A, 001B, 002 ... 006 - oznake
+            # upisane na fotografiju 10.10. su bile pomerene za jednu sobu).
+            R(50, 100, 113, 163, "F 005", door=(87, 113)),
+            *rooms(0, 113, 163, [(100, 150, 4), (150, 200, 3), (200, 250, 2)]),
+            R(250, 300, 113, 163, "F 001", door=(260, 113)),
             R(300, 325, 113, 163, "F 001B", door=(314, 113)),
             R(325, 350, 113, 163, "F 001A", door=(332, 113)),
             R(490, 550, 113, 163),

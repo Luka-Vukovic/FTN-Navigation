@@ -18,6 +18,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.hypot
 
 /** Amfiteatri i Kula (assets/amf.json, kula.json; tools/zgrade) spojeni sa NB-om i kampusom kao u aplikaciji. */
@@ -229,6 +230,47 @@ class AmfKulaGraphTest {
         // Teren 07.11.2026: "voleo bih da bude upravna na vrata, a ne kosa" - čvor trake je naspram bočnih vrata.
         assertEquals(graph.node("AMF-0-V287_154")!!.y, graph.node("AMF-0-S1-D-VRATA")!!.y, 1e-4f)
         assertEquals(graph.node("AMF-0-S1-D-DESNO")!!.x, graph.node("AMF-0-S1-D-VRATA")!!.x, 1e-4f)
+    }
+
+    /**
+     * Teren 16.11.2026 (snimak ekrana 13:33, F 006 -> Skriptarnica; korisnik nacrtao): "da se dodaju i dve trake uz zidove, da ne
+     * sugeriše aplikacija da se ide ka sredini, pa opet u stranu". Od glavnog hodnika pravo uz levi i desni zid do bočnih krakova S1;
+     * trake su samo za rutu, a sredina hodnika samo za lociranje - graf za lociranje je isti kao do tada.
+     */
+    @Test
+    fun amfS1_lanesAlongWallsFromMainCorridor() {
+        val fork = graph.node("AMF-0-S1-D")!!
+        // Trake počinju na glavnom hodniku, pod pravim uglom; samo za rutu.
+        val lanes = listOf("AMF-0-H222_-10" to "AMF-0-S1-D-LEVO", "AMF-0-H277_-10" to "AMF-0-H277_50", "AMF-0-H277_50" to "AMF-0-S1-D-DESNO")
+        for ((a, b) in lanes) {
+            val edge = checkNotNull(graph.edge(a, b)) { "$a - $b" }
+            assertEquals(graph.node(a)!!.x, graph.node(b)!!.x, 1e-4f)
+            assertTrue("$a - $b", graph.routeOnly(edge) && !graph.locateOnly(edge))
+        }
+        // Sredina do vrata Čitaonice samo za lociranje; za lociranje su glavna vrata Čitaonice na sredini, za rutu na traci.
+        assertTrue(graph.locateOnly(checkNotNull(graph.edge("AMF-0-H250_-10", "AMF-0-H250_50"))))
+        assertTrue(graph.locateOnly(checkNotNull(graph.edge("AMF-0-V287_50", "AMF-0-H250_50"))))
+        assertTrue(graph.routeOnly(checkNotNull(graph.edge("AMF-0-V287_50", "AMF-0-H277_50"))))
+        // Graf za lociranje: bez traka - vrh trake ka levom kraku ima samo račvanje i krak (kao do 16.11.2026).
+        val locating = graph.forLocating()
+        assertEquals(setOf("AMF-0-S1-D", "AMF-0-S1-D-KRAK-L"), locating.neighbors("AMF-0-S1-D-LEVO").map { it.first.id }.toSet())
+        assertEquals(setOf("AMF-0-H250_50", "AMF-0-Čitaonica"), locating.neighbors("AMF-0-V287_50").map { it.first.id }.toSet())
+        assertTrue(locating.neighbors("AMF-0-H277_50").isEmpty())
+        // Glavni hodnik za lociranje bez čvorova traka - jedna ivica kao do tada (pravac hodnika se uči na dugim ivicama).
+        for ((a, b) in listOf("AMF-0-H175_-10" to "AMF-0-H250_-10", "AMF-0-H263_-10" to "AMF-0-H311_-10")) {
+            assertNotNull("$a - $b", locating.edge(a, b))
+        }
+        assertTrue(locating.neighbors("AMF-0-H222_-10").isEmpty() && locating.neighbors("AMF-0-H277_-10").isEmpty())
+        // Sa pasarele iz F-a (zapad) na −1: levom trakom do račvanja; na prizemlju sve ivice pre račvanja pod pravim uglom.
+        val down = graph.route("AMF-0-PROLAZ-F", room("Skriptarnica").id)!!.nodes
+        val ground = down.takeWhile { it.floor == 0 }
+        assertEquals(down.map { it.id }.toString(), listOf("AMF-0-S1-D-LEVO", "AMF-0-S1-D"), ground.takeLast(2).map { it.id })
+        assertTrue(down.map { it.id }.toString(), ground.none { it.id == "AMF-0-H250_101" })
+        // (Prva ivica, od prolaza ka F-bloku do početka hodnika, je od ranije - nije deo ove izmene.)
+        for ((a, b) in ground.dropLast(1).zipWithNext().drop(1)) assertTrue("${a.id} - ${b.id}", abs(a.x - b.x) < 1e-4f || abs(a.y - b.y) < 1e-4f)
+        // Iz A1 u trem ka Kuli: desnom trakom pravo na bočni krak, ne preko račvanja.
+        val porch = graph.route(room("A1").id, "AMF-0-PROLAZ-KULA")!!.nodes.map { it.id }
+        assertTrue(porch.toString(), "AMF-0-S1-D-DESNO" in porch && "AMF-0-S1-D-KRAK" in porch && fork.id !in porch)
     }
 
     /** Teren 01.10.2026: trem iz Kule stiže na međunivo - odatle dole na -1 ili gore u prizemlje Amfiteatara. */

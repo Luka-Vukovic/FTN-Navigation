@@ -257,6 +257,8 @@ class BuildingGraphTest {
             // Kao u A*: sala nije usputni čvor.
             if (g.node(id)!!.type == NodeType.PROSTORIJA && id != fromId) continue
             for ((next, type) in g.neighbors(id)) {
+                // Kao u A*: ivica samo za lociranje nije deo rute.
+                if (type == EdgeType.HOD && g.edge(id, next.id)?.let(g::locateOnly) == true) continue
                 val nd = d + (g.cost(g.node(id)!!, next, type, profile) ?: continue)
                 if (nd < (dist[next.id] ?: Double.POSITIVE_INFINITY)) {
                     dist[next.id] = nd

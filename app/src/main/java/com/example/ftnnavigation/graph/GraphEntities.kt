@@ -74,7 +74,23 @@ data class Edge(
      * pasarela F-bloka na podest. Za PDR i map-matching je hod; ruta "bez stepenica" je ne koristi.
      */
     val steps: Boolean = false,
+    /**
+     * HOD ivica samo za lociranje (map-matching), ruta je ne koristi ([BuildingGraph.locateOnly]). AMF prizemlje: sredina hodnika
+     * pred S1 - ruta ide trakama uz zidove (teren 16.11.2026), a lociranje zadržava sredinu.
+     */
+    val locateOnly: Boolean = false,
+    /**
+     * HOD ivica samo za rutu - lociranje je ne vidi ([BuildingGraph.routeOnly], [BuildingGraph.forLocating]). AMF prizemlje: trake
+     * uz zidove pred S1 (teren 16.11.2026) - lociranje ostaje na sredini hodnika, kao do tada.
+     */
+    val routeOnly: Boolean = false,
 )
 
 /** Oznaka [Edge.steps] u JSON-u plana (generatori `tools/zgrade`: `STEPS`). */
 const val STEPS_MARK = "STEPENICI"
+
+/** Oznaka [Edge.locateOnly] u JSON-u plana (generatori `tools/zgrade`: `LOCATE_ONLY`). */
+const val LOCATE_ONLY_MARK = "SAMO_LOCIRANJE"
+
+/** Oznaka [Edge.routeOnly] u JSON-u plana (generatori `tools/zgrade`: `ROUTE_ONLY`). */
+const val ROUTE_ONLY_MARK = "SAMO_RUTA"

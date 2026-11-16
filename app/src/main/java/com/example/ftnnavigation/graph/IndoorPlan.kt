@@ -19,7 +19,10 @@ data class IndoorPlan(
     /** Glavni ulaz (u prizemlju) - čvor koji predstavlja zgradu u ruti "do zgrade". */
     val entranceId: String,
     val nodes: List<IndoorNode>,
-    /** [od, do, EdgeType] ili [od, do, "HOD", [STEPS_MARK]] - hod krakom stepeništa ([Edge.steps]). */
+    /**
+     * [od, do, EdgeType] ili [od, do, "HOD", [STEPS_MARK]] - hod krakom stepeništa ([Edge.steps]), [od, do, "HOD",
+     * [LOCATE_ONLY_MARK]] - samo za lociranje ([Edge.locateOnly]), ili [od, do, "HOD", [ROUTE_ONLY_MARK]] - samo za rutu ([Edge.routeOnly]).
+     */
     val edges: List<List<String>>,
     /** [čvor kampusa (ulaz K-U-... ili prolaz K-P-...), čvor zgrade], opciono + [STEPS_MARK] (pasarela F na podest). */
     val campusLinks: List<List<String>>,
@@ -45,7 +48,10 @@ data class IndoorPlan(
     }
 
     fun graphEdges(): List<Edge> =
-        edges.map { e -> Edge(e[0], e[1], EdgeType.valueOf(e[2]), steps = e.getOrNull(3) == STEPS_MARK) } +
+        edges.map { e ->
+            val mark = e.getOrNull(3)
+            Edge(e[0], e[1], EdgeType.valueOf(e[2]), steps = mark == STEPS_MARK, locateOnly = mark == LOCATE_ONLY_MARK, routeOnly = mark == ROUTE_ONLY_MARK)
+        } +
             (campusLinks + indoorLinks).map { l -> Edge(l[0], l[1], EdgeType.HOD, steps = l.getOrNull(2) == STEPS_MARK) }
 
     companion object {

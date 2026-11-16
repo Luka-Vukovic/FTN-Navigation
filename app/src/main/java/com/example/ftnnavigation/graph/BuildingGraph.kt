@@ -7,6 +7,9 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
+/** Vektorski proizvod (m²) do koga su tri čvora na istoj pravoj ([BuildingGraph.forLocating]: čvor usput na hodniku se preskače). */
+private const val COLLINEAR_M2 = 0.01
+
 /** Dimenzije plana sprata u metrima - pretvaraju relativne koordinate čvorova u metre. */
 data class FloorScale(val widthM: Float, val heightM: Float)
 
@@ -236,8 +239,11 @@ class BuildingGraph(
      *   okreta ka drugom kraku, pa je lociranje to uzimalo za izlazak u prolaz (replay 19.10. i 30.10.2026);
      * - podest sprata između dna dva kraka (NB, ispred lifta, 30.10.2026): tačka u holu se lepila za njega, pa posle povratka
      *   sa kraka više nije ulazila na stepenište (replay 12.10.2026, NB II). Hod po stepeništu vodi putanja krakova.
+     * - ivica označena u planu ([Edge.routeOnly]): AMF prizemlje, trake uz zidove pred S1 (teren 16.11.2026) - graf za lociranje je
+     *   nema ([forLocating]).
      */
     fun routeOnly(edge: Edge): Boolean {
+        if (edge.routeOnly) return true
         val a = node(edge.fromId) ?: return false
         val b = node(edge.toId) ?: return false
         if (a.type == NodeType.STEPENISTE && b.type == NodeType.STEPENISTE) return edge.type == EdgeType.HOD
@@ -251,21 +257,45 @@ class BuildingGraph(
      * na istom spratu). F prizemlje: pasarela je na međupodestu (krakom naviše pa desno), ali lociranje je drži vezanu pravo za
      * hodnik (replay 04.10.2026 - korisnik je iz hodnika išao ravnim hodom ka njoj). Teren 09.11.2026 (F 010 -> Skriptarnica,
      * snimak ekrana): linija rute je išla hodnikom pored kraka i preko podesta ("opet čudna ponuđena putanja").
+     * I ivica označena u planu ([Edge.locateOnly]): AMF prizemlje, sredina hodnika pred S1 - ruta ide trakama uz zidove (teren
+     * 16.11.2026: "da ne sugeriše aplikacija da se ide ka sredini, pa opet u stranu").
      */
     fun locateOnly(edge: Edge): Boolean = (edge.fromId to edge.toId) in locateOnlyEdges
 
     /**
      * Graf za lociranje: bez ivica samo za rutu ([routeOnly]) do prolaza koji lociranje drži ravnom vezom sa hodnikom ([locateOnly]) -
      * F prizemlje: krak do pasarele. Za lociranje je taj prolaz isti kao do 09.11.2026 (sa krakom su se u replay-u menjali ulazak na
-     * krak i izlazak na pasarelu). Isti čvorovi (ista id), bez tih ivica; ako ih nema - isti graf.
+     * krak i izlazak na pasarelu). Isti čvorovi (ista id), bez tih ivica; ako ih nema - isti graf. Bez ivica označenih samo za rutu
+     * ([Edge.routeOnly]: AMF prizemlje, trake uz zidove pred S1 - lociranje je isto kao do 16.11.2026). Čvor koji posle toga ostane
+     * samo usput na pravoj liniji hodnika (kraj trake na glavnom hodniku) se preskače - hodnik je opet jedna ivica: lociranje uči pravac
+     * hodnika samo na dugim ivicama, pa je deljenje ivice menjalo replay (teren 16.11.2026, prva verzija traka).
      */
     fun forLocating(): BuildingGraph {
-        val gates = locateOnlyEdges.map { it.first }.toSet()
-        val drop = edges.filter { routeOnly(it) && (it.fromId in gates || it.toId in gates) }.toSet()
-        return if (drop.isEmpty()) this else BuildingGraph(nodes, edges - drop, placements)
+        val gates = passageLocateOnlyEdges.map { it.first }.toSet()
+        val drop = edges.filter { it.routeOnly || (routeOnly(it) && (it.fromId in gates || it.toId in gates)) }.toMutableSet()
+        val add = mutableListOf<Edge>()
+        for (id in edges.filter { it.routeOnly }.flatMap { listOf(it.fromId, it.toId) }.toSet()) {
+            val kept = edges.filter { (it.fromId == id || it.toId == id) && it !in drop }
+            if (kept.size != 2 || kept.any { it.type != EdgeType.HOD || it.steps || it.locateOnly }) continue
+            val (a, b) = kept.map { requireNotNull(byId[if (it.fromId == id) it.toId else it.fromId]) }
+            if (a.floor != b.floor || a.buildingId != b.buildingId) continue
+            val p = position(byId.getValue(id))
+            val pa = position(a)
+            val pb = position(b)
+            val cross = (pa.x - p.x) * (pb.y - p.y) - (pa.y - p.y) * (pb.x - p.x)
+            if (abs(cross) > COLLINEAR_M2) continue
+            drop += kept
+            add += Edge(a.id, b.id, EdgeType.HOD)
+        }
+        return if (drop.isEmpty()) this else BuildingGraph(nodes, edges - drop + add, placements)
     }
 
+    /** Ivice samo za lociranje: ravne veze hodnika sa prolazom ([passageLocateOnlyEdges]) i označene u planu ([Edge.locateOnly]). */
     private val locateOnlyEdges: Set<Pair<String, String>> by lazy {
+        passageLocateOnlyEdges + edges.filter { it.locateOnly }.flatMap { listOf(it.fromId to it.toId, it.toId to it.fromId) }
+    }
+
+    private val passageLocateOnlyEdges: Set<Pair<String, String>> by lazy {
         val result = HashSet<Pair<String, String>>()
         for (gate in nodes.filter { it.type == NodeType.PROLAZ }) {
             val near = neighbors(gate.id).filter { (n, _) -> n.buildingId == gate.buildingId && n.floor == gate.floor }

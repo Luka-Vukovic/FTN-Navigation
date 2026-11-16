@@ -181,6 +181,25 @@ class FGraphTest {
     }
 
     /**
+     * Teren 16.11.2026, korisnik: "ide 001A, 001B, 001, pa dalje, a 006 je čeono". Severni red od hola ka istoku 001A, 001B, 001,
+     * 002 ... 005; 006 je prostorija na kraju hodnika, sa vratima pravo na njegovom kraju. Do tada 001A, 001B, 002 ... 006.
+     */
+    @Test
+    fun groundFloor_northRowFrom001A_006AtCorridorEnd() {
+        fun doorOf(name: String) = graph.neighbors(room(name).id).single().first
+        val order = listOf("F 001A", "F 001B", "F 001", "F 002", "F 003", "F 004", "F 005").map { doorOf(it) }
+        assertTrue(order.all { it.floor == 0 })
+        // Plan F: x raste ka zapadu (hol i stepenište), pa vrata od hola ka istoku idu ka manjem x.
+        assertEquals(order.map { it.x }.sortedDescending(), order.map { it.x })
+        val end = doorOf("F 006")
+        assertTrue("006 je istočnije od svih vrata severnog reda", order.all { it.x > end.x })
+        // Vrata 006 su na kraju hodnika (pravo, ne sa strane): naspram osovine hodnika, ne na severnom ili južnom zidu.
+        val corridorEnd = graph.neighbors(end.id).single { it.first.type == NodeType.HODNIK }.first
+        assertEquals(corridorEnd.y, end.y, 0.01f)
+        assertTrue(end.x < corridorEnd.x)
+    }
+
+    /**
      * Teren 09.11.2026 (F 010 -> Skriptarnica, snimak ekrana): linija rute je iz hodnika prizemlja išla pored kraka i preko podesta na
      * pasarelu. Ruta ide krakom naviše (dno kraka, ivica sa stepenicima samo za rutu), a ravna veza hodnika sa pasarelom je samo za
      * lociranje.
@@ -195,8 +214,8 @@ class FGraphTest {
         assertTrue(graph.locateOnly(direct))
         assertFalse(graph.routeOnly(direct))
         assertTrue(graph.routeOnly(checkNotNull(graph.edge("F-0-S", "F-0-PROLAZ-AMF"))))
-        // I sprat: pasarela samo krakom (bez ravne veze) - ništa samo za lociranje.
-        assertFalse(graph.edges.any { graph.locateOnly(it) && "F-0-PROLAZ-AMF" !in listOf(it.fromId, it.toId) })
+        // I sprat: pasarela samo krakom (bez ravne veze) - ništa samo za lociranje (u F-bloku; AMF ima sredinu hodnika pred S1).
+        assertFalse(graph.edges.any { graph.locateOnly(it) && it.fromId.startsWith("F-") && "F-0-PROLAZ-AMF" !in listOf(it.fromId, it.toId) })
     }
 
     /** Iz Amfiteatara na III sprat F-bloka: pasarelom (bez staza) pa stepeništem. */

@@ -62,6 +62,13 @@ S1_FLIGHTS_M1 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, draw_down=Fals
 # kretanja"). Do tada je S1-D bio na sredini kraja hodnika, uz ogradu, a krakovi koso od njega (replay 04.10.: AMF -> Kula).
 # Od račvanja koso do trake (~38° od hodnika): korak koji se blago otkloni ka zidu ide punom dužinom duž te ivice
 # (MapMatcher, [FULL_STEP_DEG] 35°); vodoravna spojnica (prva verzija, kao na crtežu) je zadržavala tačku na račvanju.
+# Teren 16.11.2026 (snimak ekrana 13:33, F 006 -> Skriptarnica; korisnik nacrtao dve trake uz zidove): "da se dodaju i dve trake uz
+# zidove, da ne sugeriše aplikacija da se ide ka sredini, pa opet u stranu" - linija rute je išla sredinom do račvanja, pa koso do
+# trake. Sada trake (S1_LANE_PATHS) idu od glavnog hodnika pravo uz levi i desni zid do vrha bočnih krakova, samo za rutu
+# (ROUTE_ONLY), a sredina hodnika do vrata Čitaonice je samo za lociranje (LOCATE_ONLY): ruta stiže trakom, a linija ide trakom pravo
+# na krak (drawRoute: legFromPosition), ne preko račvanja. Graf za lociranje je isti kao do tada (sredina, račvanje, lanci ka bočnim
+# krakovima sa po jednim nastavkom). Prva verzija (trake i za lociranje, sredina samo za lociranje, PdrLocator.downChain sa
+# grananjem): replay svih snimaka - tačka na traci 2,8 m od sredine, u AMF prizemlju više oznaka gore za 1-2 m, drugo mesto 65 -> 68.
 S1_TOP = (250, 105)
 # Vrata Čitaonice uz desni krak (korisnik nacrtao, teren 16.10.2026; 17.10.: "malo bliže stepenicama" - y 142 -> 154) - uz
 # ona sa FtnGO-a na sredini zida.
@@ -76,6 +83,12 @@ S1_LANE_AT_DOOR = (277, READING_ROOM_STAIR_DOOR[1])
 S1_VOID = S1_MID
 S1_FLIGHTS_0 = [Flights(S1_MID, S1_RIGHT, S1_LANDING, S1_PATH_R, down_node=S1_TOP, draw_up=False),
                 Flights(S1_MID, S1_LEFT, S1_LANDING, S1_PATH_L, down_node=S1_TOP, draw_up=False)]
+# Sredina hodnika do račvanja (S1-D, 0,4 m dalje), sa čvorom naspram glavnih vrata Čitaonice. Od glavnog hodnika do tog čvora samo za
+# lociranje (build); dalje do račvanja i za rutu - ruta od tačke na sredini ide napred preko račvanja, ne nazad u glavni hodnik.
+READING_ROOM_DOOR = (287, 50)
+S1_MIDDLE_PATH = [(250, -10), (250, READING_ROOM_DOOR[1]), (250, S1_TOP[1] - 4)]
+# Trake uz zidove od glavnog hodnika (y -10) do čvorova S1-D-DESNO / S1-D-LEVO (build: krajevi traka se spajaju sa njima).
+S1_LANE_PATHS = [[(S1_LANES[side][0], -10), S1_LANES[side]] for side in ("LEVO", "DESNO")]
 # Trem iz Kule: sa podesta S1 (na -1 uz srednji krak, u prizemlju niz bočni krak).
 # Krakovi do podesta su HOD ivice sa stepenicima (STEPS) - ruta "bez stepenica" ne ide tuda.
 KULA_VIA_M1 = ("S1", [("PODEST-S1", (250, 207), STEPS)])
@@ -153,11 +166,12 @@ def floor_m1():
 def floor_0():
     return {
         "title": "Prizemlje",
-        # Sredinom hodnika do račvanja ka krakovima S1 (S1-D, 0,4 m dalje).
+        # Uz levi i desni zid hodnika do bočnih krakova S1 (S1_LANE_PATHS, od 16.11.2026) i sredinom do račvanja (S1_MIDDLE_PATH,
+        # samo za lociranje - build).
         # Hodnik iza amfiteatara: 27.10.2026 produžen do ispod S3 (x 696, da stepenište ne bude koso); od 31.10.2026 se završava
         # na prolazu (x 680), a S3 se kači sa strane puta kroz prolaz.
         # + niz prolaz ka NB-u do vrha širokog kraka (dno S3 sa strane, pod pravim uglom).
-        "paths": [[(175, -10), (825, -10)], [(250, -10), (250, S1_TOP[1] - 4)], [(555, 188), (680, 188)],
+        "paths": [[(175, -10), (825, -10)], S1_MIDDLE_PATH, *S1_LANE_PATHS, [(555, 188), (680, 188)],
                   [(680, 188), (680, PASSAGE_NB[1] - 13)]],
         "corridors": [rect_poly(170, -28, 832, 7), rect_poly(212, 7, 287, 172),  # hodnik do ograde iznad S1
                       rect_poly(30, -32, 170, 5),  # prolaz ka F-bloku
@@ -171,7 +185,7 @@ def floor_0():
             *row(-65, -28, [(170, 259, "AR0"), (259, 331, "AR1"), (331, 420, "AR2"), (420, 497, "AR3"),
                             (587, 665, "AR4"), (665, 735, "AR5"), (735, 832, "AR6")]),
             *col(170, 212, [(7, 48, None), (48, 89, None), (89, 130, None), (130, 207, None)]),
-            R(287, 402, 7, 207, "Čitaonica", door=(287, 50)),  # FtnGO "Čitaonica (A0)"
+            R(287, 402, 7, 207, "Čitaonica", door=READING_ROOM_DOOR),  # FtnGO "Čitaonica (A0)"
             # A1 i A2: leva i desna vrata na hodnik (teren 29.10.2026; ranije jedna, na sredini zida) + zadnja vrata
             R(402, 545, 7, 207, "A1", doors=[(418, 7), (529, 7), (545, 188)]),  # Amfiteatar "Nikola Tesla"
             R(545, 693, 7, 168, "A2", doors=[(561, 7), (677, 7), (650, 168)]),  # Amfiteatar "Milutin Milanković"
@@ -235,7 +249,40 @@ def build():
     door = g.node(0, "V{}_{}".format(*READING_ROOM_STAIR_DOOR), *READING_ROOM_STAIR_DOOR, kind="VRATA")
     g.edge(g.nid(0, "Čitaonica"), door)
     g.edge(door, g.nid(0, "S1-D-VRATA"))
+    # Kraj trake uz zid (čvor mreže hodnika) je isto mesto kao čvor trake ka kraku (S1-D-LEVO / S1-D-DESNO) - jedan čvor.
+    for side in ("LEVO", "DESNO"):
+        merge_node(g, 0, "H{}_{}".format(*S1_LANES[side]), "S1-D-" + side)
+    # Trake uz zidove samo za rutu: lociranje ih ne vidi (graf za lociranje isti kao do 16.11.2026).
+    # Čvorovi traka: krajevi i čvor naspram vrata Čitaonice (kačenje vrata) - po koordinatama.
+    lanes = {n for n, (f, x, y, *_) in g.nodes.items() for (a, b) in S1_LANE_PATHS if f == 0 and x == a[0] and a[1] <= y <= b[1]}
+    lane_edges = [(a, b) for (a, b) in g.edges if a in lanes and b in lanes]
+    assert len(lane_edges) == 3, lane_edges  # levo: hodnik - vrh; desno: hodnik - naspram vrata Čitaonice - vrh
+    g.route_only.update(lane_edges)
+    # Glavna vrata Čitaonice: za rutu na desnoj traci (najbliža), za lociranje na sredini (kao do tada).
+    door, middle = g.nid(0, "V{}_{}".format(*READING_ROOM_DOOR)), g.nid(0, "H{}_{}".format(*S1_MIDDLE_PATH[1]))
+    lane_door = [(a, b) for (a, b) in g.edges if door in (a, b) and (a in lanes or b in lanes)]
+    assert len(lane_door) == 1, lane_door
+    g.route_only.update(lane_door)
+    g.edge(door, middle)
+    # Sredina od glavnog hodnika do čvora naspram vrata Čitaonice samo za lociranje (ruta ide trakama).
+    top = g.nid(0, "H{}_{}".format(*S1_MIDDLE_PATH[0]))
+    g.locate_only.update({(a, b) for (a, b) in g.edges if {a, b} in ({top, middle}, {door, middle})})
+    assert len(g.locate_only) == 2, g.locate_only
     return g
+
+
+def merge_node(g, floor, drop, keep):
+    """Čvor drop (isto mesto kao keep) se briše, a njegove ivice prelaze na keep."""
+    d, k = g.nid(floor, drop), g.nid(floor, keep)
+    assert g.nodes[d][1:3] == g.nodes[k][1:3], (g.nodes[d], g.nodes[k])
+    for (a, b), kind in list(g.edges.items()):
+        if d not in (a, b):
+            continue
+        del g.edges[(a, b)]
+        steps = (a, b) in g.steps
+        g.steps.discard((a, b))
+        g.edge(k if a == d else a, k if b == d else b, kind, steps)
+    del g.nodes[d]
 
 
 def main():
