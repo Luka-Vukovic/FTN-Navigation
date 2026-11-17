@@ -1246,6 +1246,28 @@ class PdrLocatorTest {
         assertTrue(distance(old.position(), path[3]) > 0.5)
     }
 
+    /**
+     * Teren 17.11.2026 (NB P posle ulaska, odredište Čitaonica u AMF-u kroz Kulu): tačka je iz hola dvaput otišla na krak ka
+     * suterenu - prvo bez znaka silaska, pa pri skretanju ka Kuli. Kad odredište nije dole (suteren NB-a nema izlaz ni prolaz),
+     * krak naniže samo uz znak silaska; sa odredištem u suterenu ili bez odredišta - kao ranije.
+     */
+    @Test
+    fun nbGroundFloor_downFlightAwayFromDestination_onlyWithGait() {
+        fun approach(destination: PdrPlace?, gait: Float): PdrLocator {
+            val foot = node("NB-0-S-D")
+            val corridor = stairs.getValue("NB/S").corridor(foot)
+            val locator = locatorAt(corridor.id).apply { this.destination = destination }
+            val toStair = magneticAzimuth(graph.position(corridor), graph.position(foot))
+            repeat(5) { locator.step(toStair, stepM, timeNs = it * 550_000_000L, stairScore = gait) }
+            return locator
+        }
+        assertFalse("odredište u AMF-u, ravan hod", approach(PdrPlace("AMF", 0), flatGait).onStairs)
+        assertFalse("odredište na II spratu NB-a", approach(PdrPlace("NB", 2), flatGait).onStairs)
+        assertTrue("odredište u AMF-u, znak silaska", approach(PdrPlace("AMF", 0), stairGait).onStairs)
+        assertTrue("odredište u suterenu", approach(PdrPlace("NB", -1), flatGait).onStairs)
+        assertTrue("bez odredišta", approach(null, flatGait).onStairs)
+    }
+
     /** Silazak sa II na I, drugi krak; posle [secondSteps] koraka drugog kraka još [after] koraka pravo sa znakom [gait]. */
     private fun descentThenStraight(secondSteps: Int, after: Int, gait: Float?): Pair<PdrLocator, Int?> {
         val (locator, _) = atStairNode("NB-2-S-D")
@@ -3373,6 +3395,23 @@ class PdrLocatorTest {
         assertTrue(distance(locator.position(), graph.position(node("NB-0-L"))) > 3.0)
         assertEquals(LiftOutcome.Moved(LiftChange("NB", 0, 2)), locator.liftRide(ride(2.0)))
         assertTrue(distance(locator.position(), graph.position(node("NB-2-L"))) < 0.5)
+    }
+
+    /**
+     * Teren 17.11.2026 (NTP L1 I -> P u ruci, okretao se u kabini): labava vožnja ([LiftRide.relaxed]) važi samo tik uz lift - tada
+     * je tačka stajala na čvoru lifta; dalje od lifta (lažni koraci) se ne prihvata, a sigurna vožnja i tada važi.
+     */
+    @Test
+    fun lift_relaxedRide_onlyRightAtLift() {
+        val near = atLift("NTP-1-L1A")
+        assertEquals(LiftOutcome.Moved(LiftChange("NTP", 1, 0)), near.liftRide(LiftRide(0, 6 * sec, -3.3, relaxed = true)))
+        val away = atLift("NB-0-L")
+        val out = outOfLift("NB-0-L")
+        repeat(8) { away.step(out, stepM, timeNs = it * 300_000_000L) }
+        assertTrue(distance(away.position(), graph.position(node("NB-0-L"))) > 4.0)
+        assertNull(away.liftRide(LiftRide(0, 8 * sec, 2 * floorM, relaxed = true)))
+        assertEquals(PdrPlace("NB", 0), away.place)
+        assertEquals(LiftOutcome.Moved(LiftChange("NB", 0, 2)), away.liftRide(ride(2.0)))
     }
 
     @Test

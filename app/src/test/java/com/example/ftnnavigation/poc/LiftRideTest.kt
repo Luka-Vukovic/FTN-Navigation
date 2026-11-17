@@ -285,14 +285,50 @@ class LiftRideTest {
         assertTrue(!s.rides.single().up)
     }
 
+    /**
+     * Od 17.11.2026 ovo je labava vožnja ([LiftRide.relaxed]): lokator je prihvata samo tik uz lift. Na snimku 11.10. pre "polaska"
+     * je bilo rukovanje telefonom ([handlingRightBeforeStart_noRide]) - ta lažna vožnja ni labava nije.
+     */
     @Test
-    fun handlingBetweenPulses_noRide() {
+    fun handlingBetweenPulses_onlyRelaxed() {
         val s = sim()
         s.run(10.0)
         s.run(2.0) { 0.4 }
         s.run(1.5, noise = 0.7, stepEveryS = 0.4)
         s.run(2.0) { -0.4 }
         s.run(10.0)
+        assertTrue("${s.rides}", s.rides.all { it.relaxed })
+    }
+
+    /**
+     * Teren 17.11.2026, NTP L1 I -> P u ruci: polazak sa bučnom prvom korpom (std 0,75, pa 0,23-0,45 - prosek 0,47), pa 6 "koraka" za
+     * 2,3 s (okretao se u kabini, std 1,0-1,2), kočenje slabije (|dv| 0,65) - vožnja nije prepoznata. Sada labava vožnja.
+     */
+    @Test
+    fun noisyStartAndHandlingInShortRide_relaxed() {
+        val s = sim()
+        s.run(10.0)
+        s.run(0.5, noise = 0.65) { -0.5 }
+        s.run(1.5, noise = 0.42) { -0.5 }
+        s.run(2.3, noise = 0.9, stepEveryS = 0.45)
+        s.run(1.5) { 0.5 }
+        s.run(5.0)
+        val ride = s.rides.single()
+        assertTrue(ride.relaxed)
+        assertTrue("${ride.heightM}", !ride.up && ride.heightM in -5.0..-1.5)
+    }
+
+    /** 11.10.2026 kod kuće: rukovanje telefonom (stavljanje u džep, std 1,1-4,1) neposredno pre "polaska" - ni labava vožnja. */
+    @Test
+    fun handlingRightBeforeStart_noRide() {
+        val s = sim()
+        s.run(10.0)
+        s.run(1.5, noise = 2.0, stepEveryS = 0.4)
+        s.run(0.5, noise = 0.65) { 0.5 }
+        s.run(1.5, noise = 0.42) { 0.5 }
+        s.run(2.3, noise = 0.9, stepEveryS = 0.45)
+        s.run(1.5) { -0.5 }
+        s.run(5.0)
         assertEquals(emptyList<LiftRide>(), s.rides)
     }
 }

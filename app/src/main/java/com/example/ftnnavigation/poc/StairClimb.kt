@@ -534,7 +534,12 @@ class StairWalk {
     private fun turnFrom(from: Int, fromRun: IntRange, current: IntRange, changes: Int, sense: Int, onStair: Boolean, keepRun: IntRange?): Int {
         // Prva promena: let pre okreta nije duži hod (hodnik), a okret se hodao (na podestu se okreće u hodu kroz više
         // koraka; u hodniku se korisnik okrene u mestu) - šetnja hodnikom gore-dole pored stepeništa nije stepenište.
-        if (anchor == null && (from - flightFirst(from) + 1 > MAX_FLIGHT_STEPS || current.first - from < MIN_TURN_STEPS)) return 0
+        // Let iz kliznog prozora ([keepRun]) je samo sa stepeništa ([driftWindow] počinje ulaskom) - meri se on, ne [flightFirst]
+        // od njegovog kraja: kraj prozora je u nizu koji počinje okretom, pa je [flightFirst] od smera tog niza išao unazad kroz
+        // ceo hodnik istog pravca. Teren 17.11.2026 (AMF S1 −1 -> P, hodnik −1 ~20 koraka pa srednji krak, okret udesno, levi
+        // bočni krak): "let" od 30 koraka - hodnik, sprat nije promenjen ("drugi krak bez promene sprata"), "Ovde sam" na P.
+        val flightSteps = keepRun?.let { from - it.first + 1 } ?: (from - flightFirst(from) + 1)
+        if (anchor == null && (flightSteps > MAX_FLIGHT_STEPS || current.first - from < MIN_TURN_STEPS)) return 0
         // Okret u mestu, za vreme pauze - samo pre prve promene. Posle nje je korisnik na stepeništu, a na podestu sme da
         // zastane (teren 05.10.2026: NB I -> III i NTP I -> II, zastao 2,2-3,3 s - pa ovo pravilo, dok je važilo za ceo
         // hod, nijedan sledeći sprat više nije prihvatalo).

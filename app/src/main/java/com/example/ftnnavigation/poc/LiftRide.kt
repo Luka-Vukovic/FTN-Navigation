@@ -66,6 +66,19 @@ private const val HANDLED_SPAN_NS = 3_000_000_000L
  */
 private const val MAX_NOISY_BINS_IN_PULSE = 1
 
+/**
+ * Labava vožnja ([LiftRide.relaxed] - lokator je prihvata samo kad je tačka tik uz lift, [PdrLocator.liftRide]): (1) prva korpa
+ * impulsa sme biti bučna (std do [BIN_CALM_STD]) - prosečna std se tada računa bez nje (bar još dve tihe korpe); (2) rukovanje
+ * telefonom usred vožnje ([HANDLED_MAX_STEPS], [HANDLED_SPAN_NS]) i uz slabije impulse - od [RELAXED_HANDLED_MIN_DV] (vožnja
+ * jedan sprat); (3) korpa pre polaska nije rukovanje (std ispod [RELAXED_CALM_BEFORE_STD]). Teren 17.11.2026, NTP L1 I -> P u
+ * ruci: polazak 2 s (std korpi 0,75 / 0,23 / 0,43 / 0,45 - prosek 0,47), pa 6 "koraka" za 2,3 s (std 1,0-1,2; okretao se u
+ * kabini), kočenje |dv| 0,65 - vožnja nije prepoznata ("samo je bio problem sa liftom"). Na svim snimcima 29.09.-17.11.2026
+ * (180) labava klasa daje samo tu vožnju; bez uslova (3) i lažnu "vožnju" 11.10. kod kuće (telefon u džep stojeći, Start kod L1
+ * u NTP-u: posle rukovanja std 1,1-4,1 ravan pomeraj +0,2 m/s² 3,5 s). PROCENA.
+ */
+private const val RELAXED_HANDLED_MIN_DV = 0.6
+private const val RELAXED_CALM_BEFORE_STD = 1.0
+
 /** Brzina koju polazak doda i kočenje oduzme mora biti slična (odnos; na snimcima 0,85-0,95). */
 private val DV_RATIO = 0.5..2.0
 
@@ -76,7 +89,7 @@ private const val BEFORE_RIDE_BINS = 6
  * Prepoznata vožnja liftom: od početka polaska [startNs] do kraja kočenja [endNs], vertikalni pomeraj [heightM] (+ gore).
  * Pomeraj je dvostruka integracija ubrzanja uz brzinu 0 na oba kraja - na snimcima 08.10.2026 tačan na ~0,3 m po spratu.
  */
-data class LiftRide(val startNs: Long, val endNs: Long, val heightM: Double) {
+data class LiftRide(val startNs: Long, val endNs: Long, val heightM: Double, val relaxed: Boolean = false) {
     val up: Boolean get() = heightM > 0
 }
 
@@ -102,6 +115,19 @@ class LiftRideDetector {
         var noisy: Pair<Bin, Double>? = null
         var quietBins = 0
         val std: Double get() = stdSum / quietBins
+
+        /** std prve tihe korpe (labava vožnja - [LiftRide.relaxed]). */
+        var firstStd: Double? = null
+
+        /** Impuls je prošao samo bez bučne prve korpe - vožnja sa njim je labava. */
+        var loose = false
+
+        /** Prosečna std bez prve korpe, kad je ona bučna i ostaju bar dve tihe; inače [Double.MAX_VALUE]. */
+        val stdWithoutFirst: Double
+            get() {
+                val first = firstStd ?: return Double.MAX_VALUE
+                return if (quietBins >= 3 && first >= PULSE_MAX_STD) (stdSum - first) / (quietBins - 1) else Double.MAX_VALUE
+            }
     }
 
     /** Treći red matrice rotacije: "gore" u koordinatama telefona. */
@@ -222,6 +248,7 @@ class LiftRideDetector {
         bins++
         dv += a * BIN_S
         if (!noisy) {
+            if (firstStd == null) firstStd = bin.stdMag
             stdSum += bin.stdMag
             quietBins++
         }
@@ -230,21 +257,32 @@ class LiftRideDetector {
 
     /** Impuls se završio: ako je kočenje posle polaska - vožnja; inače čeka kao mogući polazak. */
     private fun finish(pulse: Pulse): LiftRide? {
-        if (pulse.bins < PULSE_MIN_BINS || pulse.std >= PULSE_MAX_STD || abs(pulse.dv) < MIN_PULSE_DV) return null
+        if (pulse.bins < PULSE_MIN_BINS || abs(pulse.dv) < MIN_PULSE_DV) return null
+        if (pulse.std >= PULSE_MAX_STD) {
+            if (pulse.stdWithoutFirst >= PULSE_MAX_STD) return null
+            pulse.loose = true
+        }
         val start = pending
         if (start != null && start.sign == -pulse.sign && pulse.startNs - start.endNs <= MAX_RIDE_NS) {
             val between = steps.count { t -> t >= start.endNs && t < pulse.startNs && !quietAt(t) }
             val inRide = steps.filter { it >= start.endNs && it < pulse.startNs }
-            val handled = abs(start.dv) >= HANDLED_RIDE_MIN_DV && abs(pulse.dv) >= HANDLED_RIDE_MIN_DV &&
+            fun handled(minDv: Double) = abs(start.dv) >= minDv && abs(pulse.dv) >= minDv &&
                 inRide.size <= HANDLED_MAX_STEPS && (inRide.isEmpty() || inRide.last() - inRide.first() <= HANDLED_SPAN_NS)
-            if ((between <= MAX_STEPS_IN_RIDE || handled) && abs(pulse.dv) / abs(start.dv) in DV_RATIO) {
+            val ratio = abs(pulse.dv) / abs(start.dv) in DV_RATIO
+            val strict = ratio && !start.loose && !pulse.loose && (between <= MAX_STEPS_IN_RIDE || handled(HANDLED_RIDE_MIN_DV))
+            val relaxed = !strict && ratio && (between <= MAX_STEPS_IN_RIDE || handled(RELAXED_HANDLED_MIN_DV)) && calmBefore(start)
+            if (strict || relaxed) {
                 pending = null
-                return LiftRide(start.startNs, pulse.endNs, height(start, pulse))
+                return LiftRide(start.startNs, pulse.endNs, height(start, pulse), relaxed)
             }
         }
         pending = pulse
         return null
     }
+
+    /** Korpa pre polaska [start] nije rukovanje telefonom ([RELAXED_CALM_BEFORE_STD]); bez nje - da. */
+    private fun calmBefore(start: Pulse): Boolean =
+        bins.lastOrNull { it.startNs == start.startNs - BIN_NS }?.let { it.stdMag < RELAXED_CALM_BEFORE_STD } ?: true
 
     /**
      * Pomeraj od korpe pre polaska do korpe posle kočenja: brzina je 0 na oba kraja (ostatak brzine na kraju je greška

@@ -733,6 +733,12 @@ private const val SECOND_FLIGHT_NO_CHANGE_STEPS = FLIGHT_STEPS + 2
 private const val LIFT_RIDE_NEAR_M = 15.0
 
 /**
+ * Labava vožnja ([LiftRide.relaxed]) samo kad je tačka najviše ovoliko od lifta. Teren 17.11.2026 (NTP L1 I -> P): tačka je za
+ * vreme čekanja stajala na čvoru lifta, a lažni "koraci" u kabini su je odneli 2,4 m. PROCENA.
+ */
+private const val LIFT_RELAXED_NEAR_M = 4.0
+
+/**
  * Visina sprata za broj spratova iz pomeraja vožnje. NTP (08.10.2026, 6 vožnji): 3,5-4,05 m po spratu, P -> V 19,2 m.
  * NB i Kula: ista vrednost je PRETPOSTAVKA (nije mereno).
  */
@@ -1868,9 +1874,11 @@ class PdrLocator(
         val raw = raw ?: return null
         if (passage != null || spiralWalk != null || place.isCampus) return null
         val here = match?.let { local(it.shownX, it.shownY) } ?: local(raw.x, raw.y)
+        // Labava vožnja ([LiftRide.relaxed]) samo tik uz lift.
+        val near = if (ride.relaxed) LIFT_RELAXED_NEAR_M else LIFT_RIDE_NEAR_M
         val lift = lifts[place].orEmpty()
             .minByOrNull { distance(local(it.x, it.y), here) }
-            ?.takeIf { distance(local(it.x, it.y), here) <= LIFT_RIDE_NEAR_M }
+            ?.takeIf { distance(local(it.x, it.y), here) <= near }
             ?: return null
         val targets = graph.neighbors(lift.id)
             .filter { (other, type) -> type == EdgeType.LIFT && other.buildingId == lift.buildingId }
@@ -2536,6 +2544,14 @@ class PdrLocator(
             } ?: towardStair
             val gaitDown = node.id.endsWith(DOWN_FOOT_SUFFIX) && gaitDescends(recentScores) && alongFlight <= STAIR_ENTER_GAIT_DEG
             if (min(towardStair, alongFlight) > STAIR_ENTER_DEG && !gaitDown) return false
+            // Krak naniže koji vodi od odredišta ([descentAwayFromDestination]): samo uz znak silaska iz ubrzanja i pravcem ka
+            // stepeništu ili kraku (bez šireg praga za kompas). Teren 17.11.2026 (NB P, odredište Čitaonica kroz Kulu): posle ulaska
+            // tačka je dvaput otišla niz krak ka suterenu - prvo pravcem 35° (ulazak 4-8 m pre korisnika, znak 0,1-0,3), pa posle
+            // "Ovde sam" pri skretanju ka Kuli (korak 295°, krak 0°, znak 0,4-0,8 u holu); "Ovde sam" 9 i 12 m. Isto 13.11. i 16.11.
+            // (odredište 208, II sprat).
+            if (node.id.endsWith(DOWN_FOOT_SUFFIX) && descentAwayFromDestination(stair) &&
+                (!gaitDescends(recentScores) || min(towardStair, alongFlight) > STAIR_ENTER_DEG)
+            ) return false
         }
         // Sa dna kraka naniže se (verovatno) silazi; putanju potvrđuje ili menja strana okreta na međupodestu.
         beginClimb(stair, up = !node.id.endsWith(DOWN_FOOT_SUFFIX), progress, onFlight, azimuthDeg)
@@ -2589,6 +2605,18 @@ class PdrLocator(
     /** Bar jedan od poslednja dva razmaka koraka je korak hoda ([STAIR_ENTER_MAX_GAP_NS]); bez vremena (ili manje koraka) - da. */
     private fun walkingCadence(): Boolean =
         recentStepNs.size < 3 || (1 until recentStepNs.size).any { recentStepNs[it] - recentStepNs[it - 1] in STAIR_ENTER_MIN_GAP_NS..STAIR_ENTER_MAX_GAP_NS }
+
+    /**
+     * Silazak stepeništem [stair] sa ovog sprata vodi od odredišta: odredište je u istoj zgradi na ovom ili višem spratu, ili u
+     * drugoj zgradi, a nijedan niži sprat stepeništa nema izlaz ni prolaz ([gateways]; NB P -> suteren). Bez odredišta - ne.
+     * Replay 29.10.2026 (NB III -> NTP-307): sa III se silazi preko II (bez izlaza) do P - niži spratovi se gledaju svi.
+     */
+    private fun descentAwayFromDestination(stair: Stair): Boolean {
+        val dest = destination ?: return false
+        if (dest.buildingId == stair.buildingId) return dest.floor >= place.floor
+        return (stair.nodes.keys + stair.downNodes.keys).filter { it < place.floor }
+            .all { gateways[PdrPlace(stair.buildingId, it)].isNullOrEmpty() }
+    }
 
     private fun beginClimb(stair: Stair, up: Boolean, progress: Double, onFlight: Boolean, azimuthDeg: Float, variant: Int = 0) {
         trace?.invoke(String.format(Locale.ROOT, "stepenište %s: ulaz (%s, varijanta %d, krak %.2f%s)", stair.key, if (up) "gore" else "dole",

@@ -112,6 +112,22 @@ class StairWalkTest {
     }
 
     /**
+     * Teren 17.11.2026 (hod-20261117-142602, 468-501 s; smer na planu): hodnikom AMF −1 ~23 koraka ka S1, srednjim krakom (smer
+     * klizi 181° -> 144° -> 173°), okret udesno na međupodestu, levim bočnim krakom gore. Let pre okreta je klizni prozor sa
+     * stepeništa; njegova dužina se meri od ulaska, ne od smera niza okreta unazad kroz hodnik istog pravca ("let" od 30 koraka =
+     * hodnik) - sprat nije bio promenjen ("drugi krak bez promene sprata").
+     */
+    @Test
+    fun corridorThenFlightSameDirection_driftedFlight_counts() {
+        val corridor = listOf(180f, 179f, 182f, 188f, 196f, 188f, 182f, 171f, 170f, 176f, 182f, 187f, 191f, 193f, 203f, 200f, 208f, 208f,
+            194f, 186f, 181f, 176f, 175f, 173f)
+        val stairs = listOf(181f, 181f, 181f, 169f, 160f, 150f, 144f, 153f, 162f, 165f, 160f, 162f, 173f, 188f, 207f, 222f, 229f, 238f,
+            252f, 283f, 306f, 318f, 327f, 340f, 344f, 344f, 344f, 347f, 350f, 352f, 355f, 354f)
+        val turns = StairWalk().onStairs(corridor + stairs, entry = corridor.size)
+        assertEquals("$turns", 1, turns.firstOrNull { it != 0 })
+    }
+
+    /**
      * Replay 30.10.2026, NTP I, S2: hod hodnikom (~20 koraka), polukrug ka kraku i tri koraka niz krak. Klizni letovi samo od
      * ulaska na krak - inače je to bilo "let - okret - let" i lažno II sprat tri koraka posle ulaska.
      */
