@@ -13,10 +13,14 @@ class DepartureAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // Alarm zakazan pre isključivanja obaveštenja (setEnabled ga briše, ali za svaki slučaj).
         val enabled = DepartureScheduler.isEnabled(context)
-        if (enabled) DepartureNotifications.show(context, intent)
         val notifyAtMs = intent.getLongExtra(DepartureNotifications.EXTRA_NOTIFY_AT_MS, 0)
-        DepartureLog.alarm(context, notifyAtMs, enabled)
-        DepartureScheduler.markNotified(context, notifyAtMs)
+        // Zakasneli alarm, a obaveštenje je već stiglo kao propušteno (aplikacija otvorena u međuvremenu).
+        val show = enabled && !DepartureScheduler.alreadyNotified(context, notifyAtMs)
+        if (show) {
+            DepartureNotifications.show(context, intent)
+            DepartureScheduler.markNotified(context, notifyAtMs)
+        }
+        DepartureLog.alarm(context, notifyAtMs, show)
         rescheduleAsync(context, "alarm")
     }
 }

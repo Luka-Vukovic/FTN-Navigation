@@ -28,11 +28,13 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Zakazuje jedan alarm - za sledeći polazak na čas ili događaj ([nextDeparture]). Kad alarm
- * okine, [DepartureAlarmReceiver] prikaže obaveštenje i zakaže sledeći. Ponovo se zakazuje i
+ * Zakazuje alarme za sledeća obaveštenja o polasku na čas ili događaj ([nextDeparture], [ALARMS_AHEAD]). Kad alarm
+ * okine, [DepartureAlarmReceiver] prikaže obaveštenje i zakaže sledeće. Ponovo se zakazuje i
  * pri pokretanju aplikacije, promeni izbora rasporeda ili događaja, restartu telefona i
  * promeni vremena; tada stiže i obaveštenje koje je u međuvremenu propušteno.
  */
@@ -40,6 +42,15 @@ object DepartureScheduler {
     /** Bez dozvole za tačne alarme obaveštenje stiže u ovom prozoru pre [Departure.notifyAt]. */
     const val INEXACT_WINDOW_MIN = 10L
     private const val INEXACT_WINDOW_MS = INEXACT_WINDOW_MIN * 60 * 1000
+
+    /**
+     * Toliko sledećih obaveštenja ima svoj alarm. Bio je jedan, a sledeći se zakazivao tek kad prethodni okine - sistem (Xiaomi) proces
+     * posle prikazanog obaveštenja zamrzne, pa je zakazivanje kasnilo. Teren 23.11.2026: prvo obaveštenje 11:33, a zakazivanje drugog
+     * podsetnika (12:22) je završeno tek u 16:02, kad je aplikacija otvorena - drugi podsetnik nije stigao (i 12.-20.11. 15 s - 19 min kasno).
+     */
+    private const val ALARMS_AHEAD = 2
+
+    private val mutex = Mutex()
 
     private const val PREFS = "departure"
     private const val KEY_LAST_NOTIFY_AT = "last_notify_at"
@@ -55,28 +66,39 @@ object DepartureScheduler {
     }
 
     /** [reason]: ko traži zakazivanje - samo za [DepartureLog]. */
-    suspend fun reschedule(context: Context, reason: String = "aplikacija") {
+    suspend fun reschedule(context: Context, reason: String = "aplikacija") = mutex.withLock {
         val context = context.applicationContext
         val alarms = context.getSystemService(AlarmManager::class.java)
         val zone = ZoneId.systemDefault()
         val planner = if (isEnabled(context)) Planner.load(context) else null
-        // Svi povodi za novo zakazivanje (izmena rasporeda/događaja, podešavanja, restart, vreme) menjaju i widget.
+        planner?.let { showMissed(context, it, zone) }
+        var departures = planner?.nextAlarms(context, zone).orEmpty()
+        // Računanje može da potraje (sistem zamrzne proces) - ako je vreme alarma u međuvremenu prošlo, računa se ponovo.
+        while (planner != null && departures.isNotEmpty() && !departures.first().notifyAt.isAfter(LocalDateTime.now(zone))) {
+            departures = planner.nextAlarms(context, zone)
+        }
+        for (slot in 0 until ALARMS_AHEAD) {
+            // Neprecizni alarmi (prozor pre notifyAt) mogu da okinu van reda - tada samo prvi.
+            val departure = departures.getOrNull(slot)?.takeIf { slot == 0 || alarms.canScheduleExactAlarms() }
+            if (planner == null || departure == null) alarms.cancel(alarmIntent(context, Intent(), slot))
+            else schedule(context, alarms, departure, planner, zone, slot, reason)
+        }
+        if (departures.isEmpty()) DepartureLog.nothing(context, reason)
+        // Svi povodi za novo zakazivanje (izmena rasporeda/događaja, podešavanja, restart, vreme) menjaju i widget. Posle alarma - oni su
+        // važniji ako sistem zamrzne proces.
         NextClassWidget.updateAll(context, planner)
-        val departure = planner?.run {
-            showMissed(context, this, zone)
-            next(scheduledAfter(context).toLocalDateTime(zone))
-        }
-        if (planner == null || departure == null) {
-            alarms.cancel(alarmIntent(context, Intent()))
-            DepartureLog.nothing(context, reason)
-            return
-        }
+    }
+
+    private fun schedule(
+        context: Context, alarms: AlarmManager, departure: Departure, planner: Planner, zone: ZoneId, slot: Int, reason: String,
+    ) {
         val notifyAtMs = departure.notifyAt.toEpochMilli(zone)
-        val pending = alarmIntent(context, content(context, departure, planner.location(context, departure), zone))
+        val pending = alarmIntent(context, content(context, departure, planner.location(context, departure), zone), slot)
         val exact = alarms.canScheduleExactAlarms()
-        if (exact && departure.reminder) {
-            // Drugi podsetnik kao budilnik: `setExactAndAllowWhileIdle` je kasnio 35-154 s (teren 10.11., 12.11., 13.11.2026), a prvi
-            // podsetnik nikad. Budilnik sistem uvek isporučuje tačno; cena je ikonica budilnika u statusnoj traci dok čeka (korisnik: "Može").
+        if (exact) {
+            // Kao budilnik: `setExactAndAllowWhileIdle` kasni - drugi podsetnik 35-154 s (teren 10.-13.11.2026), ostali 214-216 s (18.11.,
+            // 20.11. i 23.11.2026), a drugi podsetnici kao budilnik od 14.11. svi 0-1 s. Ikonica budilnika se na HyperOS-u ne vidi
+            // (korisnik 23.11.; ni za budilnik Xiaomi kalendara koji stalno čeka u 00:00).
             val open = PendingIntent.getActivity(
                 context,
                 0,
@@ -84,8 +106,6 @@ object DepartureScheduler {
                 PendingIntent.FLAG_IMMUTABLE,
             )
             alarms.setAlarmClock(AlarmManager.AlarmClockInfo(notifyAtMs, open), pending)
-        } else if (exact) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, notifyAtMs, pending)
         } else {
             alarms.setWindow(AlarmManager.RTC_WAKEUP, notifyAtMs - INEXACT_WINDOW_MS, INEXACT_WINDOW_MS, pending)
         }
@@ -125,6 +145,13 @@ object DepartureScheduler {
         DepartureLog.missed(context, missed.notifyAt, logItem(missed))
         markNotified(context, now)
     }
+
+    /** Sledećih [ALARMS_AHEAD] obaveštenja, po vremenu. */
+    private fun Planner.nextAlarms(context: Context, zone: ZoneId): List<Departure> =
+        generateSequence(next(scheduledAfter(context).toLocalDateTime(zone))) { next(it.notifyAt) }.take(ALARMS_AHEAD).toList()
+
+    /** Obaveštenje sa ovim notifyAt je već prikazano (alarm, ili kao propušteno pri zakazivanju). */
+    fun alreadyNotified(context: Context, notifyAtMs: Long): Boolean = notifyAtMs <= prefs(context).getLong(KEY_LAST_NOTIFY_AT, 0)
 
     /** Neprecizan alarm okida i pre notifyAt - već prikazan polazak se ne zakazuje ponovo. */
     private fun scheduledAfter(context: Context): Long =
@@ -207,10 +234,10 @@ object DepartureScheduler {
             .putExtra(DepartureNotifications.EXTRA_START_AT, departure.startAt.format(TIME_FORMAT))
     }
 
-    /** Uvek isti PendingIntent (extras se ne porede), pa novi alarm zamenjuje stari. */
-    private fun alarmIntent(context: Context, content: Intent): PendingIntent = PendingIntent.getBroadcast(
+    /** Po mestu ([slot]) uvek isti PendingIntent (extras se ne porede), pa novi alarm zamenjuje stari. */
+    private fun alarmIntent(context: Context, content: Intent, slot: Int): PendingIntent = PendingIntent.getBroadcast(
         context,
-        0,
+        slot,
         content.setClass(context, DepartureAlarmReceiver::class.java),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )

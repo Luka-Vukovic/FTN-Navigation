@@ -768,7 +768,9 @@ class PdrLocatorTest {
 
     @Test
     fun gps_singleJumpIgnored_persistentJumpTrusted() {
-        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+        // Start (ne "Ovde sam" - posle njega se GPS koji se ne slaže ne sluša odmah).
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
+            .apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor), measure = false) }
         val far = PointM(outdoor.x, outdoor.y + 60)
         assertNull(locator.onGps(GpsFix(far, 8f), tracking = true))
         assertTrue(distance(locator.position(), outdoor) < 0.01)
@@ -776,6 +778,37 @@ class PdrLocatorTest {
         val reasons = List(4) { locator.onGps(GpsFix(far, 8f), tracking = true) }
         assertEquals(PlaceReason.GPS_SKOK, reasons.last())
         assertTrue(distance(locator.position(), far) < 0.01)
+    }
+
+    /**
+     * Teren 23.11.2026, ispred NB-a: "Ovde sam" 19 m ispred ulaza, a GPS (tačnost 4 m) uporno 20 m južnije - tri puta je posle 4-7 s
+     * skokom vratio tačku. Posle "Ovde sam" GPS se ne koristi dok se ne složi sa tačkom ili dok se ne pređe 30 m.
+     */
+    @Test
+    fun gps_afterManualMark_ignoredUntilAgreesOrWalkedAway() {
+        fun marked() = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths)
+            .apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+        val offset = 20.0
+
+        // Stoji: GPS ne pomera tačku.
+        val standing = marked()
+        val wrong = PointM(outdoor.x, outdoor.y + offset)
+        assertTrue(List(30) { standing.onGps(GpsFix(wrong, 4f), tracking = true) }.all { it == null })
+        assertTrue(distance(standing.position(), outdoor) < 0.01)
+
+        // Hoda, a GPS i dalje pogrešan: najkasnije posle 30 m skok na GPS.
+        val walking = marked()
+        val jumps = (1..60).filter { i ->
+            walking.step(90f - declination, stepM)
+            walking.onGps(GpsFix(PointM(outdoor.x + i * stepM, outdoor.y + offset), 4f), tracking = true) == PlaceReason.GPS_SKOK
+        }
+        assertTrue("skok posle ${jumps.firstOrNull()} koraka", jumps.first() * stepM in 30f..36f)
+
+        // GPS se vratio do tačke: opet se koristi kao i inače.
+        val agreed = marked()
+        agreed.step(90f - declination, stepM)
+        assertNull(agreed.onGps(GpsFix(PointM(outdoor.x + stepM, outdoor.y + 4), 4f), tracking = true))
+        assertTrue("GPS povlači tačku", agreed.position().y - outdoor.y > 0.5)
     }
 
     /** Bez praćenja (nema koraka) pozicija napolju je GPS lokacija. */
@@ -861,7 +894,8 @@ class PdrLocatorTest {
     @Test
     fun gpsWhileStandingAfterMark_doesNotPull() {
         val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
-        val gps = PointM(outdoor.x + 6, outdoor.y)
+        // Do 6 m od oznake - dalji GPS se posle "Ovde sam" uopšte ne koristi ([gps_afterManualMark_ignoredUntilAgreesOrWalkedAway]).
+        val gps = PointM(outdoor.x + 5.5, outdoor.y)
         repeat(15) { assertNull(locator.onGps(GpsFix(gps, 3.5f), tracking = true)) }
         assertTrue(distance(locator.position(), outdoor) < 0.01)
         locator.onGps(GpsFix(gps, 1f), tracking = true)
@@ -1979,6 +2013,106 @@ class PdrLocatorTest {
         val reasons = recorded.mapNotNull { locator.walk(if (it.timeS in 657.0..659.0) "F" else "AMF", it) }
         assertEquals("$reasons", listOf(PlaceReason.PROLAZ), reasons.distinct())
         assertEquals(PdrPlace("F", 0), locator.place)
+    }
+
+    /**
+     * Teren 23.11.2026 (hod-20261123-160225, 157-183 s, 016 -> A1): uz krak NB prizemlja, popreko preko međupodesta, pa u stakleni
+     * prolaz - tačka je čekala na međupodestu do "Ovde sam" na vratima prolaza. Okret ka podestu pa nazad na pravac kraka (drugi krak bi
+     * bio okret od ~180°), a odredište je u AMF-u - u prolaz, bez 4 koraka pravo.
+     */
+    @Test
+    fun nbLandingToGlassPassage_acrossAndBack_leavesStairsEarly() {
+        val recorded = timedSteps(
+            """
+            87|0.82|0.59|157.10 90|0.82|0.70|157.64 90|0.64|0.92|158.25 90|0.54|0.06|158.80 94|0.82|0.01|159.46
+            93|0.82|0.68|160.01 90|0.82|0.64|160.65 85|0.82|0.54|161.15 79|0.82|0.53|161.73 72|0.82|0.33|162.31
+            69|0.82|0.73|162.92 68|0.82|0.05|163.51 67|0.82|-0.43|164.11 63|0.82|0.28|164.68 52|0.71|0.60|165.26
+            40|0.82|-0.25|165.87 26|0.82|0.48|166.51 15|0.82|0.27|167.12 8|0.82|0.17|167.70 4|0.82|0.16|168.16
+            359|0.82|0.17|168.62 352|0.82|0.69|169.22 351|0.82|0.28|169.86 352|0.82|1.35|170.44 354|0.82|1.26|171.05
+            351|0.82|0.93|171.63 345|0.82|0.48|172.24 343|0.82|1.13|172.79 343|0.82|0.93|173.40 341|0.82|1.58|173.97
+            337|0.82|0.74|174.62 343|0.30|1.40|175.29 21|0.82|-0.32|176.39 48|0.82|0.29|177.06 66|0.61|0.21|177.77
+            57|0.82|0.03|178.41 35|0.82|-0.19|179.14 8|0.82|0.15|179.85 353|0.82|0.32|180.52 343|0.82|0.62|181.10
+            340|0.82|0.62|181.70 339|0.82|0.38|182.30
+            """,
+        )
+        fun walked(destination: PdrPlace?): PdrLocator {
+            val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+                setPosition(PdrPlace("NB", 0), Offset(0.24077053f, 0.4020976f), measure = false)
+                this.destination = destination
+            }
+            assertTrue(recorded.mapNotNull { locator.walk("NB", it) }.isEmpty())
+            return locator
+        }
+        val toAmf = walked(PdrPlace("AMF", 0))
+        assertFalse("na vratima prolaza", toAmf.onStairs)
+        assertEquals("NB-0-PROLAZ-AMF", toAmf.match!!.point.to.id)
+        // Odredište na višem spratu NB-a: kao ranije (tek posle 4 koraka pravo).
+        assertTrue(walked(PdrPlace("NB", 2)).onStairs)
+    }
+
+    /**
+     * Teren 23.11.2026 (hod-20261123-160225, 539-546 s, F 006 -> A2): sa kraka F prizemlja desno na pasarelu (drugi krak je levo) - tačka
+     * je 4 koraka išla podestom na suprotnu stranu, pa skočila na vrata pasarele ("kao da je bilo malo kašnjenje na prelazu sa stepenica
+     * F-bloka u prolaz"). Okret na stranu pasarele i dva koraka ka njoj - na vratima.
+     */
+    @Test
+    fun fFlightToPasarela_turnAwayFromSecondFlight_leavesStairsEarly() {
+        val recorded = timedSteps(
+            """
+            78|0.82|0.42|539.13 78|0.82|0.97|539.74 82|0.82|0.80|540.36 81|0.82|1.58|540.88 79|0.82|1.16|541.50
+            81|0.82|1.39|542.09 89|0.82|1.32|542.77 96|0.82|0.52|543.52 125|0.82|0.05|544.28 150|0.82|0.42|544.87
+            167|0.82|0.05|545.48 173|0.82|0.33|546.08
+            """,
+        )
+        val mark = Offset(0.7301811f, 0.7358861f)
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("F", 0), mark, measure = false, timeNs = 538_840_000_000L)
+            destination = PdrPlace("AMF", 0)
+        }
+        for (step in recorded) {
+            locator.walk("F", step)
+            // Tačka ne ide podestom ka drugom kraku (na planu naviše od kraka).
+            assertTrue("${step.timeS}: ${locator.raw!!.y}", locator.raw!!.y > 0.70f)
+        }
+        assertFalse(locator.onStairs)
+        assertEquals("F-0-PROLAZ-AMF", locator.match!!.point.to.id)
+    }
+
+    /**
+     * Teren 23.11.2026 (hod-20261123-160225, 484-538 s, F 006 -> A2): hodnikom F prizemlja (put 108 %), pa ukoso preko hola na krak ka
+     * pasareli - tačka je hol već prošla i išla hodnikom uporedo sa krakom ("Ovde sam" na kraku, 7 m). Koraci su stepenice, pravcem
+     * kraka, a odredište je u drugoj zgradi -> na krak. Bez odredišta, ili sa odredištem u prizemlju - hodnikom kao ranije.
+     */
+    @Test
+    fun fGroundFloor_stairGaitBesideFlight_destinationElsewhere_entersFlight() {
+        val recorded = timedSteps(
+            """
+            75|0.23|-1.20|484.25 83|0.30|-1.16|501.20 92|0.82|-0.51|501.97 93|0.77|-0.18|502.62 89|0.79|-0.85|503.33
+            89|0.82|-0.37|503.98 86|0.82|-0.51|504.73 88|0.82|0.08|505.33 88|0.82|-0.15|506.06 89|0.82|-0.24|506.71
+            90|0.74|-0.69|507.43 92|0.82|-0.34|508.03 93|0.82|-0.22|508.68 94|0.82|-0.21|509.29 89|0.82|-0.66|509.98
+            90|0.82|-0.29|510.58 89|0.82|-0.23|511.27 82|0.82|0.07|511.95 77|0.74|0.06|512.57 77|0.44|-0.82|512.83
+            84|0.82|-0.27|513.16 81|0.82|0.12|513.80 81|0.82|0.19|514.44 79|0.82|-0.25|515.11 79|0.82|0.03|515.73
+            81|0.82|0.08|516.36 86|0.82|-0.08|516.95 92|0.82|0.14|517.63 97|0.19|-0.01|518.22 97|0.82|-0.70|518.88
+            95|0.65|-0.22|519.52 86|0.25|-0.12|520.23 85|0.68|-0.04|520.87 86|0.82|-0.53|521.66 87|0.55|0.08|522.25
+            89|0.82|-0.48|523.00 91|0.82|0.16|523.60 94|0.26|0.18|524.27 99|0.82|-0.00|524.95 102|0.71|-0.79|525.67
+            109|0.82|0.06|526.26 116|0.74|-0.50|527.05 126|0.78|-0.13|527.66 136|0.49|-0.69|528.47 144|0.75|-0.33|529.17
+            150|0.82|-0.24|529.97 151|0.40|0.21|530.62 145|0.82|-0.61|531.24 133|0.82|0.23|532.02 120|0.35|-0.28|532.66
+            104|0.82|-0.26|533.33 94|0.82|0.34|534.19 89|0.82|0.68|534.96 84|0.82|0.49|535.78 82|0.82|1.04|536.53
+            80|0.82|0.73|537.40 78|0.82|0.83|538.18
+            """,
+        )
+        fun walked(destination: PdrPlace?): PdrLocator {
+            val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+                setPosition(PdrPlace("F", 0), Offset(0.1658587f, 0.4621717f), measure = false)
+                this.destination = destination
+            }
+            recorded.forEach { locator.walk("F", it) }
+            return locator
+        }
+        assertTrue("odredište u AMF-u", walked(PdrPlace("AMF", 0)).onStairs)
+        assertTrue("odredište na I spratu", walked(PdrPlace("F", 1)).onStairs)
+        assertFalse("odredište u prizemlju", walked(PdrPlace("F", 0)).onStairs)
+        assertFalse("bez odredišta", walked(null).onStairs)
     }
 
     /**
