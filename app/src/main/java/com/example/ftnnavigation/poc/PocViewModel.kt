@@ -102,6 +102,11 @@ data class PocUiState(
     val steps: Int = 0,
     val isTracking: Boolean = false,
     val isPickingStart: Boolean = false,
+    /**
+     * "Ovde sam" bez praćenja - Mapa podseća na Start (teren 24.11.2026: "Zaboravio sam start da stisnem"; korisnik je izabrao podsetnik,
+     * ne automatsko praćenje). Sklanja ga Start (i Reset); posle Stop-a se ne vraća dok se opet ne označi pozicija.
+     */
+    val startReminder: Boolean = false,
     /** Prikaz i ruta sa grafa (map-matching); isključeno = čist PDR (provera smera hoda). */
     val snapToGraph: Boolean = true,
     /** Ispravka smera iz rekalibracije uključena; isključeno = samo se meri ([PdrLocator.applyCorrection]). */
@@ -884,7 +889,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
         AppSettings.setStairTurns(getApplication(), locator.learnedStairTurns)
         AppSettings.setHeadingErrors(getApplication(), locator.learnedHeadingErrors)
         // Označavanje sklanja i pitanje za lift i za nivo (sprat je izabran na planu).
-        state = state.copy(isPickingStart = false, liftPrompt = null, levelPrompt = null)
+        state = state.copy(isPickingStart = false, startReminder = !state.isTracking, liftPrompt = null, levelPrompt = null)
         updatePosition(before, PlaceReason.RUCNO)
         if (check != null) {
             recorder?.headingCheck(SystemClock.elapsedRealtimeNanos(), place, check)
@@ -990,7 +995,7 @@ class PocViewModel(application: Application) : AndroidViewModel(application) {
             onHeadingFrozen = { locator?.headingFrozen = it },
         ).also { it.start() }
         PdrTrackingService.start(app)
-        state = state.copy(isTracking = true)
+        state = state.copy(isTracking = true, startReminder = false)
         updateGps()
     }
 

@@ -154,6 +154,7 @@
     <string name="building_with_floor">%1$s · %2$s</string>
     <string name="poc_hint_no_start">Dodirni „Ovde sam“ i označi gde si (napolju praćenje može i sa GPS-a)</string>
     <string name="poc_hint_pick_start">Dodirni mapu na mestu gde stojiš</string>
+    <string name="poc_hint_start_tracking">Praćenje nije uključeno - pritisni Start da tačka ide sa tobom</string>
     <string name="poc_hint_position_elsewhere">Pozicija je na planu: %1$s</string>
     <string name="poc_hint_position_outside">Pozicija je napolju (mapa kampusa)</string>
     <!-- Posle „Ovde sam“: greška smera (PDR − stvarni, bez ispravke) i PDR put u odnosu na stvarni. -->

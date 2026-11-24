@@ -107,6 +107,13 @@ private const val MARK_AGREE_M = 6.0
 private const val MARK_TRUST_M = 30.0
 
 /**
+ * Isto bez praćenja (koraka nema, pa se ne zna koliko je pređeno): GPS se ne koristi dok se sam ne pomeri ovoliko (a bar za svoju
+ * tačnost) od prve lokacije posle "Ovde sam". Teren 24.11.2026, ispred NB-a: zaboravljen Start, "Ovde sam" stojeći - već prva GPS
+ * lokacija je odnela tačku 9 m ("Odmah je pobegla tačka"). Procena.
+ */
+private const val MARK_GPS_MOVED_M = 10.0
+
+/**
  * Smer zamrznut napolju ([PdrLocator.headingFrozen]): korak ide pravcem kojim se GPS pomerio u poslednjih ovoliko
  * sekundi ... Teren 19.10.2026, NB -> NTP u džepu sa ugašenim ekranom (415 s): koraci zamrznutim smerom su odvlačili tačku
  * do 20-23 m od GPS-a (tačnost 6-9 m), tri GPS skoka; tačka je posle toga u NTP ušla ~10 koraka kasno.
@@ -135,6 +142,14 @@ private const val INDOOR_GPS_MAX_ACCURACY_M = 10f
  * Replay svih snimaka: 0,82 najbolje (0,80 i niže kvare prelaze - tačka kasni do stepeništa i ugla hodnika; vidi CLAUDE.md).
  */
 private const val INDOOR_MAX_STEP_M = 0.82f
+
+/**
+ * Isto, po zgradi (dugi hodnici). Deonice između dva "Ovde sam" u zgradama (46 pravih, 9-40 m): stvarni korak 0,72-0,76 m, bez veze sa
+ * kadencom i vrhom ubrzanja; NB prizemlje je uz 0,82 tačno (put 99 %), AMF i F 109 %, NTP I 116 %. Teren 24.11.2026 (hodnik AMF-a 40 m:
+ * put 119 %, tačka 8,6 m ispred - "Dosta problema sa nepreciznošću koraka danas"), isto 23.11. U NB-u i Kuli niža granica kvari prelaze (Kula: tačka kasni do ugla ka prolazu i skrene pogrešno) - tamo ostaje. U AMF-u
+ * sa 0,75 tačka kasni do pasarele (do 12 s) - 0,79 (replay svih snimaka; vidi CLAUDE.md).
+ */
+private val INDOOR_MAX_STEP_BY_BUILDING = mapOf("AMF" to 0.79f, "F" to 0.75f, "NTP" to 0.75f)
 
 /** Korak bez poznatog smera je nesigurniji ([STEP_VARIANCE_M2]): GPS jače povlači tačku. */
 private const val FROZEN_STEP_VARIANCE_M2 = 1.5
@@ -616,6 +631,10 @@ private const val DESCENT_STAIR_SCORE = 0.4f
 /** ... najviše ovoliko koraka preko broja gazišta. */
 private const val DESCENT_EXTRA_TREADS = 4
 
+/** Penjanje, kraj prvog kraka ispred prolaza ([PdrLocator] stillClimbing): medijana znaka od bar ovoliko = još se penje, najviše ovoliko koraka. */
+private const val CLIMB_STAIR_SCORE = 0.4f
+private const val CLIMB_EXTRA_TREADS = 8
+
 /**
  * Silazak po znaku ([GAIT_START_STEPS] od [GAIT_STEPS] koraka bar [DESCENT_START_SCORE]): ulazak sa dna kraka naniže i
  * korakom do ovoliko od pravca kraka (inače [STAIR_ENTER_DEG]), a na prvom kraku koraci dalje od [OFF_FLIGHT_DEG] ne vraćaju
@@ -1083,6 +1102,9 @@ class PdrLocator(
 
     // "Ovde sam" napolju, a GPS se još nije složio sa tim mestom: koliko je pređeno od tada; null = GPS se koristi ([MARK_TRUST_M]).
     private var markedOutdoors: Double? = null
+
+    // Prva GPS lokacija posle "Ovde sam" napolju bez praćenja ([MARK_GPS_MOVED_M]).
+    private var markedFix: GpsFix? = null
 
     // Koraci napolju od poslednje GPS lokacije koja je povukla tačku (0 = korisnik stoji).
     private var stepsSinceGps = 0
@@ -2006,7 +2028,8 @@ class PdrLocator(
     }
 
     /** Dužina punog koraka za sledeći korak: podešena ([setM]; napolju se uči iz GPS-a), u zgradi najviše [INDOOR_MAX_STEP_M]. */
-    fun baseStepM(setM: Float): Float = if (place.isCampus) setM else minOf(setM, INDOOR_MAX_STEP_M)
+    fun baseStepM(setM: Float): Float =
+        if (place.isCampus) setM else minOf(setM, INDOOR_MAX_STEP_BY_BUILDING[place.buildingId] ?: INDOOR_MAX_STEP_M)
 
     /**
      * Jedan korak u pravcu [azimuthDeg] (magnetski, sa senzora). Ako [redoSteps] > 0, toliko prethodnih
@@ -2182,7 +2205,13 @@ class PdrLocator(
         markedOutdoors?.let { walkedM ->
             val p = meters(PdrPlace.CAMPUS, raw)
             val off = distance(p, fix.point)
-            if (tracking && off > maxOf(MARK_AGREE_M, fix.accuracyM.toDouble()) && walkedM < MARK_TRUST_M) return null
+            if (tracking) {
+                if (off > maxOf(MARK_AGREE_M, fix.accuracyM.toDouble()) && walkedM < MARK_TRUST_M) return null
+            } else {
+                val first = markedFix ?: fix.also { markedFix = it }
+                val noise = maxOf(MARK_GPS_MOVED_M, first.accuracyM.toDouble(), fix.accuracyM.toDouble())
+                if (distance(first.point, fix.point) <= noise) return null
+            }
             trace?.invoke(String.format(Locale.ROOT, "GPS posle \"Ovde sam\": %.1f m od tačke (tačnost %.0f m), pređeno %.0f m - koristi se", off,
                 fix.accuracyM, walkedM))
             markedOutdoors = null
@@ -2392,6 +2421,7 @@ class PdrLocator(
         stepStarts.clear()
         gpsOutliers = 0
         markedOutdoors = null
+        markedFix = null
         exitDetector = if (place.isCampus) null else BuildingDetector(campus)
         stepsSinceChange = MIN_STEPS_BETWEEN_CHANGES
         pendingEntry = null
@@ -3559,6 +3589,10 @@ class PdrLocator(
                         c.progress = (c.progress + 1.0 / treads(c)).coerceAtMost(1.0)
                         return false
                     }
+                    if (stillClimbing(c)) {
+                        c.extraTreads++
+                        return false
+                    }
                     c.straight++
                     // Na kraju prvog kraka pravo dalje u prolaz sa podesta (AMF S1: niz krak u trem ka Kuli).
                     if (c.part == ClimbPart.FIRST && c.straight >= EXIT_OVERFLOW_STEPS) {
@@ -3666,6 +3700,17 @@ class PdrLocator(
                 val exitSteps = if (c.part == ClimbPart.LANDING) LANDING_EXIT_STEPS_BY_STAIR[c.stair.key] ?: LANDING_EXIT_STEPS
                 else LANDING_EXIT_STEPS
                 if (c.straight < exitSteps) return false
+                if (c.part == ClimbPart.LANDING && stillClimbing(c)) {
+                    // "Okret" je bio klizanje kompasa na kraku - i dalje se penje prvim krakom.
+                    c.extraTreads += c.straight
+                    c.part = ClimbPart.FIRST
+                    c.progress = 1.0
+                    c.flightHeading = heading
+                    c.turned = 0f
+                    c.maxTurned = 0f
+                    c.straight = 0
+                    return false
+                }
                 if (c.part == ClimbPart.LANDING) {
                     val gate = if (c.up) c.stair.nodes[place.floor]?.let { landingGate(c.stair, it) } ?: landingGateBeside(c, heading)
                     else sideGateDown(c, heading)
@@ -3797,6 +3842,20 @@ class PdrLocator(
         val ahead = (g.x - b.x) * ux + (g.y - b.y) * uy
         val aside = abs((g.x - b.x) * uy - (g.y - b.y) * ux)
         return gate.takeIf { ahead >= -0.5 && aside <= 3.5 }
+    }
+
+    /**
+     * Penjanje, kraj prvog kraka po broju gazišta, a pravo ispred je prolaz ([gateAhead]) koji ne vodi u zgradu odredišta: koraci po
+     * ubrzanju i dalje liče na stepenice ([CLIMB_STAIR_SCORE], najviše [CLIMB_EXTRA_TREADS] koraka) - tačka čeka na međupodestu umesto da
+     * izađe u prolaz. Teren 24.11.2026 (Biblioteka -> F 006, AMF S1 −1 -> P): tačka je na krak ušla ~5 koraka pre korisnika, a kompas je na
+     * kraku klizio 45° - to je bio "okret na međupodestu", pa posle 4 koraka pravo izlazak u prolaz ka Kuli dok se korisnik još penjao
+     * (znak 0,3-0,8): pravi okret i drugi krak nisu prepoznati, ostala je na −1 ("Ovde sam" na P tek ručno).
+     */
+    private fun stillClimbing(c: Climb): Boolean {
+        if (!c.up || c.part == ClimbPart.SECOND || c.changes > 0 || c.extraTreads >= CLIMB_EXTRA_TREADS) return false
+        if (!gaitAtLeast(c, CLIMB_STAIR_SCORE)) return false
+        val gate = gateAhead(c) ?: return false
+        return !leadsToDestination(gate.second)
     }
 
     /** Prolaz [gate] ovog mesta vodi u drugu zgradu, a odredište je u njoj. */

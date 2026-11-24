@@ -114,6 +114,10 @@ class PdrLocatorTest {
         val inside = locatorAt("NB-0-ULAZ")
         assertEquals(0.82f, inside.baseStepM(0.87f))
         assertEquals(0.76f, inside.baseStepM(0.76f))
+        // Dugi hodnici (teren 24.11.2026: hodnik AMF-a 40 m, put 119 %).
+        assertEquals(0.79f, locatorAt("AMF-0-H250_-10").baseStepM(0.87f))
+        assertEquals(0.75f, locatorAt("NTP-1-M1470").baseStepM(0.87f))
+        assertEquals(0.75f, locatorAt("F-0-H175_96").baseStepM(0.87f))
     }
 
     /** Pravac (jedinični) spoljnog zida zgrade [id] najbližeg tački [p]. */
@@ -814,10 +818,24 @@ class PdrLocatorTest {
     /** Bez praćenja (nema koraka) pozicija napolju je GPS lokacija. */
     @Test
     fun gps_withoutTracking_followsGps() {
-        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply { startFromGps(GpsFix(outdoor, 8f)) }
         val there = PointM(outdoor.x + 10, outdoor.y)
         locator.onGps(GpsFix(there, 8f), tracking = false)
         assertTrue(distance(locator.position(), there) < 0.01)
+    }
+
+    /**
+     * Teren 24.11.2026 (ispred NB-a, zaboravljen Start): "Ovde sam" stojeći, a već prva GPS lokacija (9 m pored) je odnela tačku.
+     * Bez praćenja GPS se posle "Ovde sam" koristi tek kad se sam pomeri (korisnik hoda) - ni sporo lutanje GPS-a ne pomera tačku.
+     */
+    @Test
+    fun gps_withoutTracking_afterManualMark_usedOnlyWhenGpsMoves() {
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply { setPosition(PdrPlace.CAMPUS, campusOffset(outdoor)) }
+        repeat(20) { i -> locator.onGps(GpsFix(PointM(outdoor.x + 9 + i * 0.1, outdoor.y), 4f), tracking = false) }
+        assertTrue("stoji", distance(locator.position(), outdoor) < 0.01)
+        val walked = PointM(outdoor.x + 9, outdoor.y + 11)
+        locator.onGps(GpsFix(walked, 4f), tracking = false)
+        assertTrue("GPS se pomerio", distance(locator.position(), walked) < 0.01)
     }
 
     /**
@@ -3263,6 +3281,35 @@ class PdrLocatorTest {
         )
         val locator = locatorAt("AMF-m1-S1").apply { restoreBias(-20.413982f, -1.4156921f) }
         val reasons = azimuths.indices.mapNotNull { i -> locator.step(azimuths[i], lengths[i]) }
+        assertEquals("$reasons", listOf(PlaceReason.STEPENICE), reasons)
+        assertEquals(PdrPlace("AMF", 0), locator.place)
+    }
+
+    /**
+     * Teren 24.11.2026 (hod-20261124-151120, 286-314 s, Biblioteka -> F 006): iz suterena srednjim krakom S1, na međupodestu okret
+     * udesno i bočnim krakom u prizemlje. Kompas je na kraku klizio 45° (187 -> 138°) - to je bio "okret na međupodestu", pa izlazak
+     * u prolaz ka Kuli dok se korisnik još penjao (znak 0,3-0,9); sprat nije promenjen. Bez znaka stepenica - u trem, kao ranije.
+     */
+    @Test
+    fun amfS1_fromBasement_compassDriftsOnFlight_stairGait_staysOnFlight_upToGroundFloor() {
+        val recorded = timedSteps(
+            """
+            233|0.82|0.26|287.38 221|0.82|-0.21|287.64 206|0.82|-0.56|287.89 211|0.82|-0.71|288.31 206|0.82|-0.37|288.90
+            202|0.82|-0.51|289.45 194|0.82|0.14|290.02 187|0.82|0.14|290.60 187|0.82|0.32|291.17 187|0.82|0.28|291.73
+            188|0.82|-0.04|292.30 182|0.82|0.23|292.85 173|0.82|0.21|293.44 166|0.82|0.07|294.09 160|0.82|0.51|294.58
+            153|0.82|0.24|295.14 142|0.82|0.32|295.83 137|0.82|0.51|296.40 138|0.82|0.79|297.00 138|0.82|0.34|297.65
+            139|0.82|0.73|298.24 144|0.82|0.77|298.89 147|0.82|0.57|299.49 146|0.82|0.87|300.15 137|0.82|0.57|300.79
+            140|0.82|0.84|301.47 143|0.82|0.78|302.09 158|0.82|0.92|302.84 184|0.82|0.17|303.68 218|0.82|-0.90|304.33
+            256|0.82|0.37|305.03 280|0.82|-0.87|305.66 296|0.82|0.17|306.36 311|0.82|0.08|307.05 319|0.82|0.10|307.72
+            319|0.82|0.63|308.37 317|0.82|0.28|309.04 328|0.82|0.27|309.79 332|0.82|0.69|310.51 331|0.82|1.12|311.16
+            328|0.82|0.53|311.83 337|0.82|0.48|312.53 341|0.82|0.93|313.21 339|0.82|0.28|314.00
+            """,
+        )
+        val locator = PdrLocator(graph, campus, declination, stairPaths, openAreas, spiralPaths).apply {
+            setPosition(PdrPlace("AMF", -1), Offset(0.29780754f, 0.5705616f), measure = false)
+            destination = PdrPlace("F", 0)
+        }
+        val reasons = recorded.mapNotNull { locator.walk("AMF", it) }
         assertEquals("$reasons", listOf(PlaceReason.STEPENICE), reasons)
         assertEquals(PdrPlace("AMF", 0), locator.place)
     }

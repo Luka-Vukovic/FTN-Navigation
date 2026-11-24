@@ -74,6 +74,38 @@ class MapMatcherTest {
         end.assertOn("A", "B", 0.43f, 0.5f)
     }
 
+    /**
+     * Teren 24.11.2026 (AMF prizemlje): tačka je raskrsnicu B prešla za 7 m (duži korak u dugom hodniku), a korisnik je skrenuo u
+     * ogranak. Posle 5 m popreko na hodnik prelazi na ogranak, za pređeni hod od raskrsnice (10 koraka = 7 m).
+     */
+    @Test
+    fun missedTurn_pointPastJunction_movesToBranch() {
+        val end = checkNotNull(matcher.start(0.57f, 0.5f)).walk(headingDeg = 10.0, steps = 10)
+        assertEquals("B" to "D", end.point.from.id to end.point.to.id)
+        assertEquals(0.43f, end.point.y, 2e-3f)
+    }
+
+    /**
+     * Isto kad tački do raskrsnice fali 5 m (NTP I): korak 74° od hodnika pomera tačku za 0,28 koraka, pa nije "zaglavljena" - i
+     * dalje klizi hodnikom od raskrsnice.
+     */
+    @Test
+    fun missedTurn_pointBeforeJunction_movesToBranch() {
+        val end = checkNotNull(matcher.start(0.45f, 0.5f)).walk(headingDeg = 344.0, steps = 10)
+        assertEquals("B" to "D", end.point.from.id to end.point.to.id)
+        assertEquals(0.433f, end.point.y, 5e-3f)
+    }
+
+    /** Popreko na hodnik, a raskrsnica je dalje od 8 m, ili je krak kraći od tog hoda - nije propušteno skretanje. */
+    @Test
+    fun walkingAcross_noBranchInReach_staysInCorridor() {
+        val far = checkNotNull(matcher.start(0.6f, 0.5f)).walk(headingDeg = 5.0, steps = 12)
+        assertEquals("B" to "C", far.point.from.id to far.point.to.id)
+        // Ka jugu kraka nema (P2 je 3 m južnije, kraći od 5 m hoda).
+        val short = checkNotNull(matcher.start(0.85f, 0.5f)).walk(headingDeg = 180.0, steps = 8)
+        assertEquals("B" to "C", short.point.from.id to short.point.to.id)
+    }
+
     @Test
     fun walkingPastCorridorEnd_stopsAtEndNode() {
         val end = checkNotNull(matcher.start(0.12f, 0.5f)).walk(headingDeg = 270.0, steps = 10)

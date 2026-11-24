@@ -45,6 +45,8 @@ class PdrLocatorReplayTest {
     // PDR_CORRECTION=1: "Ispravi smer" uključen ceo snimak (kako god je bio na telefonu) - za proveru učenja smera.
     private val forceCorrection = System.getenv("PDR_CORRECTION") == "1"
 
+    private val indoorMaxM = System.getenv("PDR_INDOOR_MAX")?.toFloat()
+
     // Snimci bez `K` reda (pre 08.10.2026) su hodani sa 0,8 m.
     private var stepM = 0.8f
 
@@ -189,7 +191,8 @@ class PdrLocatorReplayTest {
         locator.trace = { m -> log(traceT, "locator: $m") }
         var confirm: Confirm? = null
         fun apply(s: HandlingGate.Step) {
-            val baseM = locator.baseStepM(stepM)
+            // PDR_INDOOR_MAX=0.78: niža granica dužine koraka u zgradi, za poređenje.
+            val baseM = locator.baseStepM(stepM).let { b -> indoorMaxM?.takeIf { !locator.place.isCampus }?.let { minOf(b, it) } ?: b }
             val lengthM = if (fullSteps) baseM else baseM * AccelStepDetector.stepLengthFactor(s.peak)
             if (locator.place.isCampus && !locator.headingFrozen) {
                 stepLearner.onStep(locator.headingOnPlan(s.walk.headingDeg), AccelStepDetector.stepLengthFactor(s.peak))

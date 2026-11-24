@@ -340,11 +340,12 @@ fun PocScreen(
                 // Na planu: ako je pozicija na drugom planu (ili napolju), piše gde je. Kampus crta poziciju sa svakog plana.
                 val hint = when {
                     state.isPickingStart -> stringResource(R.string.poc_hint_pick_start)
-                    building == null -> null
-                    state.position == null -> stringResource(R.string.poc_hint_no_start)
-                    !pdrHere -> place.building?.let {
+                    building != null && state.position == null -> stringResource(R.string.poc_hint_no_start)
+                    building != null && !pdrHere -> place.building?.let {
                         stringResource(R.string.poc_hint_position_elsewhere, stringResource(it.locationRes(), floorName(place.floor)))
                     } ?: stringResource(R.string.poc_hint_position_outside)
+                    // "Ovde sam" bez praćenja: tačka bez Start-a ne prati korake (i na mapi kampusa).
+                    state.startReminder -> stringResource(R.string.poc_hint_start_tracking)
                     else -> null
                 }
                 // Ruta je u donjem panelu - gore je samo kratka napomena, da mapa ostane slobodna.

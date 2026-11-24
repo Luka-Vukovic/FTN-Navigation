@@ -21,7 +21,7 @@ data class EdgePoint(val from: Node, val to: Node, val t: Double) {
  * korak poprečno na hodnik se tako ne gubi (skretanje u ogranak hodnika), a drift kompasa se ne
  * nagomilava. [stuckXM]/[stuckYM]: zbir koraka (m) od kad se tačka na grafu ne pomera.
  * [free]: korisnik je u otvorenom prostoru (hol, [MapMatcher] areas) - prikazuje se slobodna pozicija, a [point] je
- * najbliža tačka grafa (za rutu i prelaze).
+ * najbliža tačka grafa (za rutu i prelaze). [cross]: hod popreko na hodnik koji traje ([CrossRun]).
  */
 data class MatchedPosition(
     val point: EdgePoint,
@@ -30,11 +30,31 @@ data class MatchedPosition(
     val stuckXM: Double = 0.0,
     val stuckYM: Double = 0.0,
     val free: Boolean = false,
+    val cross: CrossRun? = null,
 ) {
     /** Gde je korisnik (relativno na plan): u otvorenom prostoru slobodna pozicija, inače tačka na grafu. */
     val shownX: Float get() = if (free) x else point.x
     val shownY: Float get() = if (free) y else point.y
 }
+
+/**
+ * Uzastopni koraci popreko na hodnik ([CROSS_DEG]), istim pravcem: odakle (tačka na grafu) i zbir koraka (m). Hodnik je širok 2-3 m, pa
+ * duži takav hod znači da je korisnik skrenuo na raskrsnici koju je tačka prešla ili do nje još nije stigla ([MapMatcher] missedTurn).
+ */
+data class CrossRun(val start: EdgePoint, val xM: Double, val yM: Double, val pathM: Double)
+
+/** Korak bar ovoliko od pravca hodnika je popreko na njega ([CrossRun]); pravac niza: pomeraj bar ovoliki deo puta. */
+private const val CROSS_DEG = 60.0
+private const val CROSS_STRAIGHT = 0.9
+
+/** Posle ovoliko metara hoda popreko traži se raskrsnica (duž hodnika do [TURN_REACH_M]) sa krakom tog pravca (do [TURN_BRANCH_DEG]) ... */
+private const val TURN_RUN_M = 5.0
+private const val TURN_REACH_M = 8.0
+private const val TURN_BRANCH_DEG = 30.0
+
+/** ... koji nije kraći od tog hoda za više od ovoga; do stepeništa, lifta i izlaza na kraju kraka tačka ostaje bar ovoliko. */
+private const val TURN_SHORT_M = 2.0
+private const val TURN_CLEAR_M = 1.0
 
 /** Koliko slobodna pozicija sme da odstupi od ivice (m). TODO: proveriti na terenu (širina hodnika). */
 const val MATCH_TOLERANCE_M = 2.0
@@ -193,6 +213,13 @@ class MapMatcher(
             return if (norm == 0.0) 1.0 else abs((dx * (bx - ax) + dy * (by - ay)) / norm)
         }
 
+        /** cos ugla između ivice od čvora [from] i jediničnog vektora. */
+        fun forward(from: Node, ux: Double, uy: Double): Double {
+            if (length == 0.0) return -1.0
+            val cos = ((bx - ax) * ux + (by - ay) * uy) / length
+            return if (from.id == a.id) cos else -cos
+        }
+
         fun sameDirection(other: Segment) = alignment(other.bx - other.ax, other.by - other.ay) >= cos(Math.toRadians(SAME_DIRECTION_DEG))
 
         /** Udeo ivice (0..1) najbliži tački. */
@@ -279,13 +306,88 @@ class MapMatcher(
             .filter { it == current || allowed(it, current) }
             .filter { it == current || current.sameDirection(it) || it.alignment(dxM, dyM) > along }
             .minBy { it.distance(px, py) }
-        val next = fix(nearest, px, py)
+        val cross = crossRun(from, current, stepX, stepY).takeIf { current.sameDirection(nearest) }
+        cross?.let { missedTurn(it) }?.let { return it }
+        val next = fix(nearest, px, py).copy(cross = cross)
         if (stepM == 0.0 || distanceM(from.point, next.point) >= STUCK_PROGRESS * stepM) return next
         val stuckX = from.stuckXM + dxM
         val stuckY = from.stuckYM + dyM
         return escapeRoom(next.point, stuckX, stuckY)
             ?: escapeStuck(next.point, stuckX, stuckY)
             ?: next.copy(stuckXM = stuckX, stuckYM = stuckY)
+    }
+
+    /** Niz koraka popreko na hodnik [current] sa ovim korakom ([CrossRun]); null ako korak nije popreko. */
+    private fun crossRun(from: MatchedPosition, current: Segment, dx: Double, dy: Double): CrossRun? {
+        val stepM = hypot(dx, dy)
+        if (stepM == 0.0) return from.cross
+        if (current.isRoom || current.alignment(dx, dy) > cos(Math.toRadians(CROSS_DEG))) return null
+        val before = from.cross
+        if (before != null) {
+            val run = CrossRun(before.start, before.xM + dx, before.yM + dy, before.pathM + stepM)
+            if (hypot(run.xM, run.yM) >= CROSS_STRAIGHT * run.pathM) return run
+        }
+        return CrossRun(from.point, dx, dy, stepM)
+    }
+
+    /**
+     * Propušteno skretanje: korisnik hoda popreko na hodnik bar [TURN_RUN_M] ([run]) -> najbliža raskrsnica tog hodnika (do
+     * [TURN_REACH_M], napred ili nazad) sa krakom tog pravca i dovoljne dužine; tačka ide na krak, za pređeni hod od raskrsnice.
+     * Teren 24.11.2026: AMF prizemlje - u hodniku od 40 m tačka je otišla 7 m predaleko (put 116 %), pa je 12 koraka skretanja u
+     * glavni hodnik stajala kod pasarele ("Ovde sam" 16,6 m); NTP I - do ugla joj je falilo 5 m, pa je 16 koraka klizila nazad
+     * bočnim hodnikom (korak 74° od njega - "napreduje" 0,3 koraka, pa nije zaglavljena) i kasnila 11 m. Isto 23.11. i 22.10.
+     */
+    private fun missedTurn(run: CrossRun): MatchedPosition? {
+        val runM = hypot(run.xM, run.yM)
+        if (runM < TURN_RUN_M) return null
+        val corridor = segmentOf(run.start)
+        // Kratke ivice do stepeništa, lifta i izlaza nisu hodnik - tu se tek ušlo (ili sišlo), a pravac hoda po holu je bilo koji.
+        if (corridor.area >= 0 || corridor.a.type in AREA_EXCLUDED_TYPES || corridor.b.type in AREA_EXCLUDED_TYPES) return null
+        val settled = HashSet<String>()
+        val queue = PriorityQueue<Pair<Double, Node>>(compareBy { it.first })
+        queue += run.start.t * corridor.length to run.start.from
+        queue += (1 - run.start.t) * corridor.length to run.start.to
+        while (queue.isNotEmpty()) {
+            val (distance, node) = queue.poll()!!
+            if (distance > TURN_REACH_M) return null
+            if (!settled.add(node.id)) continue
+            for (segment in incident[node.id].orEmpty()) {
+                if (segment.isRoom || segment.area >= 0) continue
+                if (corridor.sameDirection(segment)) queue += distance + segment.length to segment.other(node)
+                else alongBranch(segment, node, run, runM)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    /** Tačka na kraku koji od [junction] počinje ivicom [first] i ide pravcem hoda [run], [runM] od raskrsnice; null ako krak nije takav. */
+    private fun alongBranch(first: Segment, junction: Node, run: CrossRun, runM: Double): MatchedPosition? {
+        val limit = cos(Math.toRadians(TURN_BRANCH_DEG))
+        var segment = first
+        var node = junction
+        var left = runM
+        val seen = HashSet<String>()
+        while (true) {
+            val next = segment.other(node)
+            if (segment.forward(node, run.xM / runM, run.yM / runM) < limit || !seen.add(node.id)) return null
+            val clear = if (next.type in AREA_EXCLUDED_TYPES) TURN_CLEAR_M else 0.0
+            if (left <= segment.length - clear) return onSegment(segment, node, left)
+            if (next.type in AREA_EXCLUDED_TYPES) return null
+            left -= segment.length
+            node = next
+            segment = incident[node.id].orEmpty()
+                .filter { it != segment && !it.isRoom && it.area < 0 }
+                .maxByOrNull { it.forward(node, run.xM / runM, run.yM / runM) }
+                ?.takeIf { it.forward(node, run.xM / runM, run.yM / runM) >= limit }
+                ?: return if (left <= TURN_SHORT_M) onSegment(segment, next, 0.0, end = true) else null
+        }
+    }
+
+    /** Tačka na [segment], [distanceM] od čvora [from]; [end]: u samom čvoru [from]. */
+    private fun onSegment(segment: Segment, from: Node, distanceM: Double, end: Boolean = false): MatchedPosition {
+        val share = if (end || segment.length == 0.0) 0.0 else (distanceM / segment.length).coerceIn(0.0, 1.0)
+        val t = if (from.id == segment.a.id) share else 1 - share
+        return fix(segment, segment.ax + (segment.bx - segment.ax) * t, segment.ay + (segment.by - segment.ay) * t)
     }
 
     /**
