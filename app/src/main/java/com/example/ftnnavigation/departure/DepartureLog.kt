@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter
  *
  * CSV (vremena lokalno, `yyyy-MM-dd HH:mm:ss`):
  * - `Z,sada,povod,notifyAt,tačan|prozor,stavka` - zakazan alarm (povod: ko je pozvao zakazivanje),
+ * - `R,sada,povod,notifyAt` - vraćen sačuvan alarm posle restarta/ažuriranja (pre računanja),
  * - `N,sada,povod` - nema polaska (alarm obrisan),
  * - `A,sada,notifyAt,kašnjenje_s,prikazano` - alarm stigao u receiver (prikazano = obaveštenja uključena),
  * - `P,sada,notifyAt,stavka` - prikazano propušteno obaveštenje (pri zakazivanju).
@@ -26,6 +27,8 @@ object DepartureLog {
 
     fun scheduled(context: Context, reason: String, notifyAt: LocalDateTime, exact: Boolean, item: String) =
         write(context, "Z,${now()},$reason,${notifyAt.format(TIME)},${if (exact) "tačan" else "prozor"},${clean(item)}")
+
+    fun restored(context: Context, reason: String, notifyAtMs: Long) = write(context, "R,${now()},$reason,${format(notifyAtMs)}")
 
     fun nothing(context: Context, reason: String) = write(context, "N,${now()},$reason")
 

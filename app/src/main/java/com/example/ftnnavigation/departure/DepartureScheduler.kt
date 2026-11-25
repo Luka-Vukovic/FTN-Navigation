@@ -56,6 +56,9 @@ object DepartureScheduler {
     private const val KEY_LAST_NOTIFY_AT = "last_notify_at"
     private const val KEY_ENABLED = "enabled"
 
+    /** Sadržaj zakazanog alarma po mestu (`saved0`, `saved1`) - za [restore]. */
+    private const val KEY_SAVED = "saved"
+
     fun isEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ENABLED, true)
 
     /** Uključuje/isključuje obaveštenja; isključivanje briše alarm i već prikazano obaveštenje. */
@@ -80,8 +83,12 @@ object DepartureScheduler {
         for (slot in 0 until ALARMS_AHEAD) {
             // Neprecizni alarmi (prozor pre notifyAt) mogu da okinu van reda - tada samo prvi.
             val departure = departures.getOrNull(slot)?.takeIf { slot == 0 || alarms.canScheduleExactAlarms() }
-            if (planner == null || departure == null) alarms.cancel(alarmIntent(context, Intent(), slot))
-            else schedule(context, alarms, departure, planner, zone, slot, reason)
+            if (planner == null || departure == null) {
+                alarms.cancel(alarmIntent(context, Intent(), slot))
+                prefs(context).edit { remove(KEY_SAVED + slot) }
+            } else {
+                schedule(context, alarms, departure, planner, zone, slot, reason)
+            }
         }
         if (departures.isEmpty()) DepartureLog.nothing(context, reason)
         // Svi povodi za novo zakazivanje (izmena rasporeda/događaja, podešavanja, restart, vreme) menjaju i widget. Posle alarma - oni su
@@ -93,7 +100,14 @@ object DepartureScheduler {
         context: Context, alarms: AlarmManager, departure: Departure, planner: Planner, zone: ZoneId, slot: Int, reason: String,
     ) {
         val notifyAtMs = departure.notifyAt.toEpochMilli(zone)
-        val pending = alarmIntent(context, content(context, departure, planner.location(context, departure), zone), slot)
+        val content = content(context, departure, planner.location(context, departure), zone)
+        prefs(context).edit { putString(KEY_SAVED + slot, content.toUri(Intent.URI_INTENT_SCHEME)) }
+        val exact = setAlarm(context, alarms, notifyAtMs, alarmIntent(context, content, slot))
+        DepartureLog.scheduled(context, reason, departure.notifyAt, exact, logItem(departure))
+    }
+
+    /** Alarm u [notifyAtMs]; true = tačan (kao budilnik), false = prozor pre tog vremena (bez dozvole za tačne alarme). */
+    private fun setAlarm(context: Context, alarms: AlarmManager, notifyAtMs: Long, pending: PendingIntent): Boolean {
         val exact = alarms.canScheduleExactAlarms()
         if (exact) {
             // Kao budilnik: `setExactAndAllowWhileIdle` kasni - drugi podsetnik 35-154 s (teren 10.-13.11.2026), ostali 214-216 s (18.11.,
@@ -109,7 +123,29 @@ object DepartureScheduler {
         } else {
             alarms.setWindow(AlarmManager.RTC_WAKEUP, notifyAtMs - INEXACT_WINDOW_MS, INEXACT_WINDOW_MS, pending)
         }
-        DepartureLog.scheduled(context, reason, departure.notifyAt, exact, logItem(departure))
+        return exact
+    }
+
+    /**
+     * Alarmi poslednjeg zakazivanja, bez računanja (posle restarta telefona i ažuriranja aplikacije ih sistem obriše): sadržaj
+     * obaveštenja je sačuvan pri zakazivanju. [reschedule] ih posle zameni (isti PendingIntent po mestu). Obaveštenje kome je vreme u
+     * međuvremenu prošlo stiže odmah, ako rok za polazak još nije prošao.
+     */
+    fun restore(context: Context, reason: String) {
+        val context = context.applicationContext
+        if (!isEnabled(context)) return
+        val alarms = context.getSystemService(AlarmManager::class.java)
+        val now = System.currentTimeMillis()
+        for (slot in 0 until ALARMS_AHEAD) {
+            val uri = prefs(context).getString(KEY_SAVED + slot, null) ?: continue
+            // Samo extras: `parseUri` dodaje akciju, a po njoj bi se PendingIntent razlikovao od onog iz [reschedule].
+            val content = runCatching { Intent().putExtras(Intent.parseUri(uri, Intent.URI_INTENT_SCHEME)) }.getOrNull() ?: continue
+            val notifyAtMs = content.getLongExtra(DepartureNotifications.EXTRA_NOTIFY_AT_MS, 0)
+            val leaveAtMs = content.getLongExtra(DepartureNotifications.EXTRA_LEAVE_AT_MS, 0)
+            if (alreadyNotified(context, notifyAtMs) || maxOf(notifyAtMs, leaveAtMs) <= now) continue
+            setAlarm(context, alarms, notifyAtMs, alarmIntent(context, content, slot))
+            DepartureLog.restored(context, reason, notifyAtMs)
+        }
     }
 
     private fun logItem(departure: Departure) =

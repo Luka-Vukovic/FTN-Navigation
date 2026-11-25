@@ -311,6 +311,15 @@ class BuildingGraph(
         result
     }
 
+    /** Prolaz (id) sa ravnom vezom samo za lociranje ([passageLocateOnlyEdges]) -> dno kraka kojim se do njega stvarno ide. */
+    fun passagesByFlight(): Map<String, Node> = passageLocateOnlyEdges.map { it.first }.distinct().mapNotNull { byId[it] }
+        .filter { it.type == NodeType.PROLAZ }
+        .mapNotNull { gate ->
+            neighbors(gate.id).map { it.first }
+                .firstOrNull { it.type == NodeType.STEPENISTE && it.floor == gate.floor && edge(gate.id, it.id)?.let(::routeOnly) == true }
+                ?.let { gate.id to it }
+        }.toMap()
+
     /** Sale (prostorije sa nazivom); toaleti su prostorije bez naziva i nisu odredište po nazivu. */
     val rooms: List<Node> get() = nodes.filter { it.type == NodeType.PROSTORIJA && it.name != null }
 
@@ -478,11 +487,15 @@ class BuildingGraph(
 
     /**
      * Ruta od tačke na ivici (PDR pozicija posle map-matching-a): kroz onaj kraj ivice koji daje
-     * kraće ukupno vreme. Deo ivice do tog kraja je uračunat; [Route.nodes] počinje tim krajem.
+     * kraće ukupno vreme. Deo ivice do tog kraja je uračunat; [Route.nodes] počinje tim krajem. Sa ravne veze prolaza samo za lociranje
+     * ([passageLocateOnlyEdges]) kroz bliži kraj - njom se ne ide. Teren 25.11.2026 (F prizemlje, tačka kod pasarele): linija rute je išla
+     * preko podesta pravo u hodnik ("nemoguća putanja, treba da se ide preko stepenica").
      */
     fun routeFrom(point: EdgePoint, toId: String, profile: RoutingProfile = RoutingProfile()): Route? {
         val edgeM = distanceM(point.from, point.to)
-        return listOf(point.from to point.t * edgeM, point.to to (1 - point.t) * edgeM)
+        val ends = listOf(point.from to point.t * edgeM, point.to to (1 - point.t) * edgeM)
+        val usable = if ((point.from.id to point.to.id) in passageLocateOnlyEdges) listOf(ends.minBy { it.second }) else ends
+        return usable
             .mapNotNull { (end, legM) -> route(end.id, toId, profile)?.withLeg(legM, profile) }
             .minByOrNull { it.durationSec }
     }

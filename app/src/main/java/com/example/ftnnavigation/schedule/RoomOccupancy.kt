@@ -5,6 +5,7 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Čas u sali jednog dana. Isti čas je često u više rasporeda (zajednička predavanja više smerova) -
@@ -47,8 +48,15 @@ class RoomSchedule(data: ScheduleData, val calendar: AcademicCalendar) {
     fun hasClasses(room: String): Boolean = canonicalRoom(room) in byRoom
 
     /** Časovi svih sala na dan [date] (oznake kao na planu), samo sale koje tog dana imaju časove. */
-    fun allOn(date: LocalDate): Map<String, List<RoomSlot>> =
+    /*
+     * Dan se računa jednom (gužva u ruti ga traži za svaki polazak). Teren 25.11.2026: zakazivanje obaveštenja posle restarta telefona je
+     * 60 s računalo baš ovo - ceo kalendar i parsiranje datuma za svaki od 3862 časa, za svaku rutu iznova.
+     */
+    fun allOn(date: LocalDate): Map<String, List<RoomSlot>> = days.getOrPut(date) {
         byRoom.keys.associateWith { on(it, date) }.filterValues { it.isNotEmpty() }
+    }
+
+    private val days = ConcurrentHashMap<LocalDate, Map<String, List<RoomSlot>>>()
 
     /** Rasporedi za [date] su učitani (van semestra nastave ih i ne treba); letnji PDF-ovi izlaze kasnije. */
     fun knows(date: LocalDate): Boolean = calendar.dayInfo(date).semester.let { it == null || it in semesters }
@@ -68,9 +76,10 @@ class RoomSchedule(data: ScheduleData, val calendar: AcademicCalendar) {
     }
 
     /** Časovi u sali [room] na dan [date], po početku. */
-    fun on(room: String, date: LocalDate): List<RoomSlot> =
-        byRoom[canonicalRoom(room)].orEmpty()
-            .filter { (timetable, entry) -> entry.occursOn(date, calendar, timetable.semesterKind) }
+    fun on(room: String, date: LocalDate): List<RoomSlot> {
+        val info = calendar.dayInfo(date)
+        return byRoom[canonicalRoom(room)].orEmpty()
+            .filter { (timetable, entry) -> entry.occursOn(info, timetable.semesterKind) }
             .groupBy { (_, entry) -> SlotKey(entry.startTime, entry.endTime, entry.subject, entry.type) }
             .map { (key, classes) ->
                 RoomSlot(
@@ -83,6 +92,7 @@ class RoomSchedule(data: ScheduleData, val calendar: AcademicCalendar) {
                 )
             }
             .sortedWith(compareBy({ it.start }, { it.end }))
+    }
 
     private data class SlotKey(val start: LocalTime, val end: LocalTime, val subject: String, val type: ClassType)
 }

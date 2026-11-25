@@ -2,6 +2,7 @@ package com.example.ftnnavigation.campus
 
 import com.example.ftnnavigation.graph.AmfPlan
 import com.example.ftnnavigation.graph.BuildingGraph
+import com.example.ftnnavigation.graph.EdgePoint
 import com.example.ftnnavigation.graph.FPlan
 import com.example.ftnnavigation.graph.INDOOR_BUILDINGS
 import com.example.ftnnavigation.graph.IndoorPlan
@@ -216,6 +217,22 @@ class FGraphTest {
         assertTrue(graph.routeOnly(checkNotNull(graph.edge("F-0-S", "F-0-PROLAZ-AMF"))))
         // I sprat: pasarela samo krakom (bez ravne veze) - ništa samo za lociranje (u F-bloku; AMF ima sredinu hodnika pred S1).
         assertFalse(graph.edges.any { graph.locateOnly(it) && it.fromId.startsWith("F-") && "F-0-PROLAZ-AMF" !in listOf(it.fromId, it.toId) })
+    }
+
+    /**
+     * Tačka na ravnoj vezi pasarele (samo za lociranje), bliže pasareli: ruta kreće od pasarele niz krak, ne vezom pravo u hodnik. Teren
+     * 25.11.2026 (F 006, snimak ekrana): "ponuđena je nemoguća putanja, treba da se ide preko stepenica". Bliže hodniku - od hodnika.
+     */
+    @Test
+    fun fromPasarela_onLocateOnlyEdge_routeDownTheFlight() {
+        val gate = checkNotNull(graph.node("F-0-PROLAZ-AMF"))
+        val corridor = checkNotNull(graph.node("F-0-H470_96"))
+        val target = room("F 006").id
+        val near = checkNotNull(graph.routeFrom(EdgePoint(gate, corridor, 0.2), target)).nodes.map { it.id }
+        assertEquals(near.toString(), listOf("F-0-PROLAZ-AMF", "F-0-S"), near.take(2))
+        val far = checkNotNull(graph.routeFrom(EdgePoint(corridor, gate, 0.2), target)).nodes.map { it.id }
+        assertEquals(far.toString(), "F-0-H470_96", far.first())
+        assertEquals("F-0-S", graph.passagesByFlight()["F-0-PROLAZ-AMF"]?.id)
     }
 
     /** Iz Amfiteatara na III sprat F-bloka: pasarelom (bez staza) pa stepeništem. */

@@ -59,6 +59,16 @@ private const val TURN_CLEAR_M = 1.0
 /** Koliko slobodna pozicija sme da odstupi od ivice (m). TODO: proveriti na terenu (širina hodnika). */
 const val MATCH_TOLERANCE_M = 2.0
 
+/**
+ * Ivice kroz širok hol: slobodna pozicija sme ovoliko (m) od ivice umesto [MATCH_TOLERANCE_M]. F prizemlje, hol ispred stepeništa (x 350-400,
+ * ivica na x 385): sa dna kraka se ide ukoso preko hola u hodnik - uz 2 m se gubio deo koraka ka hodniku, pa je tačka stajala na ivici hola i
+ * preskakala 5-7 m (teren 24. i 25.11.2026).
+ */
+private val WIDE_EDGES: Map<Set<String>, Double> = mapOf(
+    setOf("F-0-S", "F-0-H385_150") to 4.0,
+    setOf("F-0-H385_150", "F-0-H385_96") to 4.0,
+)
+
 /** Korak u kome se tačka na grafu pomeri manje od ovog dela koraka - tačka ne napreduje. */
 private const val STUCK_PROGRESS = 0.3
 
@@ -538,7 +548,8 @@ class MapMatcher(
         val mx = segment.ax + (segment.bx - segment.ax) * t
         val my = segment.ay + (segment.by - segment.ay) * t
         val offset = hypot(px - mx, py - my)
-        val k = if (offset > toleranceM) toleranceM / offset else 1.0
+        val limit = WIDE_EDGES[setOf(segment.a.id, segment.b.id)] ?: toleranceM
+        val k = if (offset > limit) limit / offset else 1.0
         return MatchedPosition(
             EdgePoint(segment.a, segment.b, t),
             ((mx + (px - mx) * k) / scale.widthM).toFloat(),

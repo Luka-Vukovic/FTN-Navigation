@@ -38,8 +38,11 @@ enum class DayType {
 
 @Serializable
 data class SemesterPeriod(val kind: SemesterKind, val start: String, val end: String) {
-    fun contains(date: LocalDate): Boolean =
-        !date.isBefore(LocalDate.parse(start)) && !date.isAfter(LocalDate.parse(end))
+    // Jednom, ne pri svakom poređenju (vidi [RoomSchedule.allOn]).
+    private val startDate by lazy { LocalDate.parse(start) }
+    private val endDate by lazy { LocalDate.parse(end) }
+
+    fun contains(date: LocalDate): Boolean = !date.isBefore(startDate) && !date.isAfter(endDate)
 }
 
 /** Dan ili niz dana ([from]..[to], uključivo) sa posebnim režimom. */
@@ -52,8 +55,10 @@ data class CalendarRange(
     /** Za [DayType.NADOKNADA]: dan u nedelji (1 = ponedeljak) čiji se raspored izvodi. */
     val asDay: Int? = null,
 ) {
-    fun contains(date: LocalDate): Boolean =
-        !date.isBefore(LocalDate.parse(from)) && !date.isAfter(LocalDate.parse(to ?: from))
+    private val fromDate by lazy { LocalDate.parse(from) }
+    private val toDate by lazy { LocalDate.parse(to ?: from) }
+
+    fun contains(date: LocalDate): Boolean = !date.isBefore(fromDate) && !date.isAfter(toDate)
 }
 
 /**
@@ -94,7 +99,11 @@ data class AcademicCalendar(
  * semestra [semester] - na praznik ne, a na nadoknadu po rasporedu zamenjenog dana.
  */
 fun ClassEntry.occursOn(date: LocalDate, calendar: AcademicCalendar, semester: SemesterKind): Boolean {
-    localDate?.let { return it == date }
-    val info = calendar.dayInfo(date)
+    return occursOn(calendar.dayInfo(date), semester)
+}
+
+/** Isto, za već izračunat dan [info] (više časova istog dana). */
+fun ClassEntry.occursOn(info: DayInfo, semester: SemesterKind): Boolean {
+    localDate?.let { return it == info.date }
     return info.semester == semester && info.scheduleDay == day
 }
