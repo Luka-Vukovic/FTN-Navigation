@@ -196,7 +196,8 @@ class CampusGraphTest {
             "Nastavni blok" to PlaceLocation.Named(campus.building("NB")!!.name!!),
             "Menza" to PlaceLocation.Named("Menza"),
             "ITC04" to PlaceLocation.Room(ItcPlan, 0), "ITCA1" to PlaceLocation.Room(ItcPlan, 3),
-            "MI 24-A" to PlaceLocation.Named(campus.building("MI")!!.name!!),
+            "MI 24-A" to PlaceLocation.Room(MiPlan, 0), "MI 125" to PlaceLocation.Room(MiPlan, 1),
+            "MI B5" to PlaceLocation.Named(campus.building("MI")!!.name!!),
         ).forEach { (place, location) -> assertEquals(place, location, placeLocation(place, graph, campus)) }
         assertNull(placeLocation("Hodnik", graph, campus))
     }

@@ -34,7 +34,8 @@ class NearestPlaceTest {
             // Kula (08.11.2026, evakuacioni planovi): blok toaleta ispod stepeništa na svakom spratu (jedan čvor). F III: na mestu
             // pretpostavljenog toaleta su sobe 324 i 325 (korisnik).
             // ITC suteren 2 (teren 10.11.2026); DGG (10.11.2026): P 2, I 1, II i III po 2.
-            mapOf("NB" to 11, "AMF" to 2, "KULA" to 10, "F" to 3, "NTP" to 9, "ITC" to 10, "DGG" to 7),
+            // MI (25.11.2026, kabine na evakuacionim planovima, isto na tabli iz 2008): prizemlje 5, I sprat 2 (uz oba jezgra).
+            mapOf("NB" to 11, "AMF" to 2, "KULA" to 10, "F" to 3, "NTP" to 9, "MI" to 7, "ITC" to 10, "DGG" to 7),
             toilets.groupingBy { it.buildingId }.eachCount(),
         )
         for (toilet in toilets) {

@@ -11,8 +11,9 @@ y -1160..-470, 1800 px širine = 1,475 px slike po px plana), isečci sa mrežom
 Koordinate su px plana u zajedničkom sistemu (kao build_mi.py): desno sever, dole istok (glavni ulaz), gore zapad (krila).
 Tačnost ~1 px plana (0,1 m).
 
-Za sada je ovo izvor stranice "MI prostorije" (indeksi soba = redosled u ROOMS); build_mi.py (aplikacija) još koristi stari
-crtež - prelazi se na ovu geometriju kad korisnik obeleži sobe na stranici.
+Izvor stranice "MI prostorije" (indeksi soba = redosled u ROOMS - nove sobe samo na KRAJ liste) i, od 25.11.2026, aplikacije
+(build_mi.py). 25.11.2026 dopunjeno po oznakama korisnika koje su bile van soba (G2-2, G2-4, V4-3 - bile su uračunate u
+predvorja stepeništa) i ponovo pogledanim isečcima (dva stepeništa u G: SG i SG2; G2-3 i D4-C do pravih zidova).
 
 Soba: (oblik, krilo, vrsta). Oblik je (x0, x1, y0, y1) ili lista tačaka. Krilo: "A", "B", "V", "G", "D", "Đ", kolona hodnika
 između krila "AB", "VG", "DĐ", ili None (dugački deo, jezgra, dogradnje). Vrsta: None (soba), "WC" (toalet sa plana).
@@ -61,7 +62,7 @@ ROOMS_0 = (
        (rect(257.5, 356, *N0), None, None), (rect(357.5, 379.5, -730, -689), None, None), (rect(379.5, 422.5, -730, -689), None, "WC"),
        (rect(357.5, 422.5, -689, -659), None, None),
        (rect(454.5, 519, -730, -691), None, None), (rect(454.5, 519, -691, -659), None, None),  # trafostanica / GRO, soba ispod
-       (rect(520, 619, *N0), None, None), (rect(620, 651, -713, -659), None, None), (rect(682.5, 714, -713, -659), None, None),
+       (rect(520, 619, *N0), None, None), (rect(620, 651, -713, -659), None, None), (rect(682.5, 714, -713, -659), None, "WC"),
        (rect(714, 814, *N0), None, None), (rect(815, 879, -730, -688), None, "WC"), (rect(815, 879, -688, -659), None, None),
        (rect(911, 976, *N0), None, None)]
     # krilo A
@@ -100,7 +101,13 @@ ROOMS_0 = (
     + [(rect(914, 1012, -1121, -1054), "Đ", None), (rect(914, 1012, -1054, -989), "Đ", None), (rect(914, 1012, -989, -892.5), "Đ", None),
        (rect(914, 1012, -892.5, -859), "Đ", None), (rect(914, 1012, -859, -794), "Đ", None),
        ([(914, -794), (1012, -794), (1012, -730), (961, -730), (961, -764), (914, -764)], "Đ", None), (rect(914, 961, -764, -730), "Đ", None)]
+    # dopuna 25.11.2026 (indeks 102): soba ispod stepeništa SG2 - korisnik obeležio G2-2; do tada deo predvorja
+    + [(rect(457, 503, -904, -860), "G", None)]
 )
+WALLS_0 = [  # zidovi koji ne zatvaraju sobu (samo crtež)
+    [(457, -925), (503, -925)],  # između predvorja SG i SG2
+    [(950, -924), (1012, -924)], [(-33, -1069), (-14, -1069)],
+]
 
 CORRIDORS_0 = [
     rect(-81, 910, -659, -631.5),  # hodnik dugačkog dela
@@ -112,21 +119,22 @@ CORRIDORS_0 = [
     rect(424, 453, -992.5, -659),  # hodnik V|G
     rect(375, 425, -957.5, -924),  # predvorje stepeništa SV
     rect(386, 425, -762, -730),  # predvorje stepeništa SV2
-    rect(457, 503, -955, -860),  # predvorje stepeništa SG
+    rect(457, 503, -955, -904),  # predvorja stepeništa SG (gore) i SG2 (dole)
     rect(883, 913, -1054, -659),  # hodnik D|Đ
 ]
-STAIRS_0 = [
-    (195, -722.5, 226, -660),  # S1 (jezgro A/B - V/G)
-    (652, -722.5, 681, -660),  # S2 (jezgro V/G - D/Đ)
-    (-69, -796, -35, -779),  # SAB
-    (388, -956, 410, -945),  # SV
-    (386, -762, 415, -732),  # SV2
-    (469, -945, 504, -901),  # SG
-    (855, -1054, 879, -1012),  # SD1
-    (829, -922, 861, -906),  # SD2
-    (836, -825, 879, -811),  # SD3
-    (914, -989, 954, -973),  # SĐ
-]
+STAIRS_0 = {
+    "S1": [(195, -713, 226, -660)],  # jezgro A/B - V/G
+    "S2": [(652, -713, 681, -660)],  # jezgro V/G - D/Đ
+    "SAB": [(-60, -796, -35, -779)],  # iz "tehničkog pregleda" (A3) ka A3Gal./2
+    "SV": [(388, -956, 410, -945)],
+    "SV2": [(386, -762, 415, -732)],
+    "SG": [(469, -945, 503, -925)],  # dva kraka; iz gornjeg predvorja ka G3-1A/B/C/K
+    "SG2": [(469, -925, 503, -911), (490, -911, 503, -904)],  # iz donjeg predvorja ka G2-1, G2-3, G2-4
+    "SD1": [(855, -1054, 879, -1012)],
+    "SD2": [(829, -922, 861, -906)],
+    "SD3": [(836, -825, 879, -811)],
+    "SĐ": [(914, -989, 954, -973)],
+}
 ENTRANCE_0 = (404.5, -576)  # glavni ulaz (dvokrilna vrata u južnom zidu; na planu nema predvorja koje OSM crta do -507)
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -185,12 +193,14 @@ ROOMS_1 = (
        (rect(325, 386, -794, -731), "V", None), (rect(386, 424, -794, -762.5), "V", None)]
     # krilo G
     + [(rect(457.5, 552.5, -1121, -1054), "G", None), (rect(475, 552.5, -1052.5, -1021), "G", None), (rect(475, 552.5, -1021, -956), "G", None),
-       (rect(500, 552.5, -956, -925), "G", None), (rect(500, 552.5, -925, -902), "G", None), (rect(457.5, 552.5, -890, -827.5), "G", None)]
+       (rect(500, 552.5, -956, -925), "G", None), (rect(502, 552.5, -925, -891), "G", None), (rect(457.5, 552.5, -891, -827.5), "G", None)]
     # kolona D|Đ: soba na kraju hodnika
     + [(rect(884, 914, -1121, -1087.5), "DĐ", None)]
     # krilo D
     + [(rect(784, 852.5, -1121, -1055), "D", None), (rect(854, 881, -1121, -1055), "D", None),
-       (rect(784, 827.5, -924, -891), "D", None), (rect(860, 881, -924, -891), "D", None), (rect(783, 881, -891, -826), "D", None),
+       (rect(784, 827.5, -924, -891), "D", None),
+       ([(860, -924), (881, -924), (881, -891), (845, -891), (845, -907.5), (860, -907.5)], "D", None),
+       (rect(783, 881, -891, -826), "D", None),
        (rect(784, 819, -826, -805), "D", None), (rect(836, 881, -812.5, -792.5), "D", None),
        ([(783, -805), (820, -805), (820, -799), (836, -799), (836, -792.5), (881, -792.5), (881, -760), (783, -760)], "D", None)]
     # krilo Đ
@@ -198,7 +208,10 @@ ROOMS_1 = (
        (rect(915, 951, -956, -925), "Đ", None), (rect(969, 1012, -1052.5, -989), "Đ", None), (rect(969, 1012, -989, -925), "Đ", None),
        (rect(913, 1010, -924, -859), "Đ", None),
        ([(913, -791), (1010, -791), (1010, -731), (958.75, -731), (958.75, -764), (913, -764)], "Đ", None)]
+    # dopuna 25.11.2026 (indeksi 112, 113): V4-3 desno od stepeništa SV, G2-4 levo od hola SG2 - do tada delovi predvorja
+    + [(rect(405, 424, -956, -924), "V", None), (rect(457.5, 489, -911, -891), "G", None)]
 )
+WALLS_1 = [[(457.5, -925), (502, -925)], [(369, -936), (375, -936)], [(375, -956), (375, -936)]]
 
 CORRIDORS_1 = [
     rect(-33.75, 943, -658.5, -632.5),  # hodnik dugačkog dela
@@ -209,26 +222,31 @@ CORRIDORS_1 = [
     rect(-31, -1, -1074, -730),  # hodnik A|B (sa stepenicama u hodniku)
     rect(1, 16, -1086, -1056),  # predvorje krila B na kraju
     [(1, -956), (56, -956), (56, -924), (36, -924), (36, -945), (1, -945)],  # predvorje krila B kod sredine
-    rect(368, 425, -956, -924),  # krilo V: predvorje stepeništa SV
+    rect(369, 405, -936, -924),  # krilo V: predvorje stepeništa SV
     rect(457.5, 474, -1054, -956),  # krilo G: hodnik uz levi zid
-    rect(457.5, 500, -956, -902), rect(457.5, 552.5, -902, -890),  # krilo G: predvorje stepeništa SG i prolaz
+    rect(457.5, 500, -956, -925),  # krilo G: predvorje stepeništa SG
+    rect(489, 502, -911, -891),  # krilo G: hol stepeništa SG2 (troja vrata)
     rect(783, 855, -1055, -1042.5), rect(830, 845, -907.5, -891), rect(820, 836, -825, -799),  # krilo D: holovi stepeništa
     rect(952.5, 969, -1054, -925),  # krilo Đ: hodnik po sredini
     rect(881, 911, -1087.5, -717), rect(900, 910, -717, -659.5),  # hodnik D|Đ
 ]
-STAIRS_1 = [
-    (196, -714, 226, -660),  # S1
-    (651, -714, 681, -660),  # S2
-    (-65, -796, -34, -779),  # SAB
-    (-31, -827.5, -16, -762.5),  # stepenice u hodniku A|B (samo crtež)
-    (375, -956, 405, -935),  # SV
-    (386, -762.5, 417.5, -731),  # SV2
-    (467.5, -944, 500, -911),  # SG
-    (855, -1054, 879, -1019),  # SD1
-    (827.5, -924, 860, -907.5),  # SD2
-    (836, -826, 865, -812.5),  # SD3
-    (915, -990, 951, -975),  # SĐ
-]
+STAIRS_1 = {
+    "S1": [(196, -714, 226, -660)],
+    "S2": [(651, -714, 681, -660)],
+    "SAB": [(-57, -796, -34, -779)],  # levo od gazišta (-65..-57) podest sa vratima A3Gal./2 i sobe 73
+    "SV": [(385, -956, 405, -946), (375, -956, 385, -936)],
+    "SV2": [(386, -747, 417.5, -731), (400, -762.5, 417.5, -747)],  # ostatak (386-400, -762..-747) je podest
+    "SG": [(467.5, -945, 500, -925)],
+    "SG2": [(467.5, -925, 500, -911), (490, -911, 501, -902)],
+    "SD1": [(855, -1054, 879, -1019)],
+    "SD2": [(827.5, -924, 860, -907.5)],
+    "SD3": [(836, -826, 865, -812.5)],
+    "SĐ": [(915, -990, 951, -975)],
+}
+# Stepenice u hodniku A|B (krak, podest, krak u nizu). Plan prizemlja ih ne crta, plan I sprata da (evakuacioni put);
+# korisnik (25.11.2026): na sprat do A2 i B4 penje se "u hodniku između A i B, mislim da je obeleženo na mapi".
+AB_LOWER, AB_LANDING, AB_UPPER = (-31, -786, -16, -762.5), (-31, -803, -16, -786), (-31, -827.5, -16, -803)
+MINI_STEPS_B_1 = (12, -955.5, 18, -946)  # I sprat: tri stepenika u mini hodniku ka B4-2, B4-3, B4-A i B4-B
 VOIDS_1 = [  # šrafirano na planu: hale bez poda na spratu, spoljne stepenice krila A, okno u Đ; kolona V|G nema pod
     (-131, -827.5, -31, -797.5), (326, -1121, 425, -956), (325, -860, 424, -795), (426, -1109, 452.5, -730),
     (456, -827.5, 552.5, -731), (783, -1042.5, 881, -924), (783, -760, 881, -731), (913, -859, 1010, -792.5),

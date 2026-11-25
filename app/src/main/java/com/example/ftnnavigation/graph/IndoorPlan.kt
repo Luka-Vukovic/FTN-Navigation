@@ -288,7 +288,7 @@ object FPlan : IndoorBuilding {
 /**
  * Mašinski institut: prizemlje i I sprat, sa fotografija evakuacionih planova (tools/zgrade/build_mi.py), u
  * zajedničkom sistemu sa NB (desno sever, dole istok - glavni ulaz). Dugački deo sa tri krila (A|B, V|G, D|Đ);
- * sale krila su na pravom krilu i spratu, ali mesto unutar krila je pretpostavka (planovi nemaju brojeve).
+ * sale je korisnik obeležio na licu mesta (25.11.2026), brojevi soba dugačkog dela su otprilike (tabla iz 2008).
  */
 object MiPlan : IndoorBuilding {
     const val BUILDING_ID = "MI"

@@ -31,18 +31,12 @@ private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
  * crticom, a ostale sale F-bloka razmakom ("F 315") - na planu su sve sa razmakom. NTP (teren 03.10.2026): na
  * vratima jedne sobe na II spratu piše 221 i 222 (119-123 na I spratu su od 04.10.2026 posebne sobe). F-blok (table
  * na spratovima): 202 i 203 su na tabli dve sobe, a na crtežu jedna; 224/225 sa table II sprata nije na crtežu (od 30.10.2026
- * gornji red počinje sa 209 uz 208, pa ide do 223). "MI A20" iz rasporeda je
- * A2-0 sa liste lamele A. MI (10.10.2026): sobe su nacrtane tačno kao na evakuacionom planu, a sala ima više nego
- * soba u krilu - oznake koje se razlikuju samo slovom (B4-0A ... B4-0D) i višak oznaka dele sobu (PRETPOSTAVKA,
- * ispis tools/zgrade/build_mi.py).
+ * gornji red počinje sa 209 uz 208, pa ide do 223). MI (25.11.2026): sale je korisnik obeležio na licu mesta; samo 125 nije
+ * našao ("to možeš računati kao da je 125A"). Raniji aliasi (A20 -> A2-0, B1-A -> B1...) su bili pogrešne pretpostavke.
  */
 private val ROOM_ALIASES = mapOf(
     "204A" to "204", "205A" to "205", "208A" to "208", "O12" to "012", "F-208" to "F 208", "NTP-222" to "NTP-221",
-    "F 203" to "F 202", "MI A20" to "MI A2-0",
-    "MI B1-A" to "MI B1", "MI B1-B" to "MI B1", "MI B4-0B" to "MI B4-0A", "MI B4-0C" to "MI B4-0A",
-    "MI B4-0D" to "MI B4-0A", "MI D4-A" to "MI D4", "MI D4-D" to "MI D4", "MI A2-1" to "MI A2-0", "MI A2-4A" to "MI A2-4",
-    "MI A3-3" to "MI A2-4", "MI B4-1A" to "MI B4-1", "MI B4-B" to "MI B4-A", "MI B4-4A" to "MI B4-4",
-    "MI B4-5A" to "MI B4-5", "MI V4-1" to "MI V3-5", "MI G3-1C" to "MI G3-1A",
+    "F 203" to "F 202", "MI 125" to "MI 125A",
     // Teren 09.11.2026, korisnik: "Pretpostavljam da su 003 i 004 neke od učionica koje mi trebaju" (ITC prizemlje).
     "ITC03" to "ITC 003", "ITC04" to "ITC 004",
     // Teren 10.11.2026 uveče, korisnik: na I spratu F-bloka tabla "F-125, Laboratorija za fiziku" ("nema table sa rasporedom ... nisam skroz
