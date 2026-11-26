@@ -3937,11 +3937,15 @@ class PdrLocator(
         val extra = if (c.up) CLIMB_EXTRA_TREADS else DESCENT_EXTRA_TREADS
         if (c.part == ClimbPart.SECOND || c.changes > 0 || c.extraTreads >= extra) return false
         // Trem ka Kuli se i sam spušta (znak stepenica i u njemu): silazak samo kad je odredište ispod, u istoj zgradi.
-        if (!c.up && destination?.let { it.buildingId == c.stair.buildingId && it.floor < place.floor } != true) return false
+        if (!c.up && !destinationBelow(c)) return false
         if (!gaitAtLeast(c, if (c.up) CLIMB_STAIR_SCORE else DESCENT_STAIR_SCORE)) return false
         val gate = gateAhead(c) ?: return false
         return !leadsToDestination(gate.second)
     }
+
+    /** Odredište je ispod sprata na kome je tačka, u zgradi stepeništa [c]. */
+    private fun destinationBelow(c: Climb): Boolean =
+        destination?.let { it.buildingId == c.stair.buildingId && it.floor < place.floor } == true
 
     /** Prolaz [gate] ovog mesta vodi u drugu zgradu, a odredište je u njoj. */
     private fun leadsToDestination(gate: Node): Boolean {
@@ -3954,8 +3958,14 @@ class PdrLocator(
      * Silazak, međupodest posle prvog kraka: prolaz sa strane međupodesta do koga vodi samo ivica za rutu ([Gateway.viaFlight];
      * F-blok: sa I sprata niz južni krak, pa desno na pasarelu ka Amfiteatrima) - ako korisnik posle okreta hoda ka njemu (do
      * [SIDE_GATE_DEG]). Inače null (NB: prolaz je pravo ispred kraka - [gateAhead]; okret na međupodestu je ka drugom kraku).
+     *
+     * Ne kad je odredište ispod, u istoj zgradi ([destinationBelow]) - prolaz sa međupodesta vodi u drugu zgradu. Teren 26.11.2026 (A2 ->
+     * Biblioteka, AMF S1 levim bočnim krakom): okret ulevo na podestu ka srednjem kraku (157° -> 135° -> 116° -> 92°, 14-24° po koraku) je
+     * prošao kroz pravac trema ka Kuli, pa je tačka izašla u trem, a srednji krak naniže (ka severu) uzela za desni bočni krak naviše
+     * ("Otišla na bočni kad sam išao centralnim", ostala na P).
      */
     private fun sideGateDown(c: Climb, heading: Float): Pair<Node, Node>? {
+        if (destinationBelow(c)) return null
         val foot = c.stair.downNodes[place.floor] ?: return null
         val gate = landingGate(c.stair, foot, viaFlight = true) ?: return null
         val path = pathOf(c) ?: return null

@@ -35,12 +35,6 @@ class NbGraphTest {
 
     private val nbNodes = graph.nodes.filter { it.buildingId == NbPlan.BUILDING_ID }
 
-    /**
-     * Sale iz rasporeda koje su privremeno u NB, a nisu ucrtane (AH6A, AH7A i 012 ucrtane posle terena 01.10.2026; Fizika je od 10.11.2026
-     * F 125).
-     */
-    private val notDrawn = setOf("Hemija", "Hemija 2")
-
     @Test
     fun entranceAndPassages_areConstants() {
         assertEquals(NbPlan.ENTRANCE_ID, nb.entranceId)
@@ -71,7 +65,7 @@ class NbGraphTest {
         val schedule = Json { ignoreUnknownKeys = true }
             .decodeFromString<ScheduleData>(File("src/main/assets/schedule.json").readText())
         val rooms = schedule.timetables.flatMap { it.classes }.map { it.room }.distinct()
-            .filter { buildingOfRoom(it) == NbPlan.BUILDING_ID && it !in notDrawn }
+            .filter { buildingOfRoom(it) == NbPlan.BUILDING_ID }
         assertTrue(rooms.size > 40)
         for (room in rooms) {
             val target = checkNotNull(resolveTarget(room, graph, campus)) { room }
@@ -86,7 +80,6 @@ class NbGraphTest {
             }
             assertEquals(room, floor, target.node.floor)
         }
-        notDrawn.forEach { assertTrue(it, checkNotNull(resolveTarget(it, graph, campus)).approximate) }
     }
 
     /** "L1" iz rasporeda NIJE "L1 (RC)": to je sala iznad hodnika iza amfiteatara (stepenice naviše iz prolaza). */

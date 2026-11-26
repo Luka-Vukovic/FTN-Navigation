@@ -21,6 +21,9 @@ object DepartureNotifications {
     const val EXTRA_FIRST_OF_DAY = "first_of_day"
     const val EXTRA_START_AT = "start_at"
 
+    /** Mesto stavke (naziv sale, zgrade...); dodir na obaveštenje otvara Mapu sa rutom do njega. Događaj bez mesta ga nema. */
+    const val EXTRA_PLACE = "place"
+
     // Podešavanja kanala se posle kreiranja ne mogu menjati iz koda - zato nov id kad treba vibracija.
     const val CHANNEL_ID = "departure_v2"
     private const val OLD_CHANNEL_ID = "departure"
@@ -75,12 +78,13 @@ object DepartureNotifications {
         val classLine = extras.getStringExtra(EXTRA_CLASS)
         // Događaj bez mesta nema red sa rutom.
         val text = listOfNotNull(classLine, extras.getStringExtra(EXTRA_ROUTE)).joinToString("\n")
-        val open = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            PendingIntent.FLAG_IMMUTABLE,
-        )
+        // Dodir otvara Mapu sa rutom do mesta stavke (26.11.2026; ranije samo Početnu, pa još "Prikaži rutu").
+        // SINGLE_TOP: otvorena aplikacija dobija onNewIntent umesto ponovnog pravljenja aktivnosti (praćenje ostaje).
+        val launch = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        extras.getStringExtra(EXTRA_PLACE)?.let { launch.putExtra(MainActivity.EXTRA_ROUTE_TO, it) }
+        // UPDATE_CURRENT: isti requestCode za svako obaveštenje, a mesto se menja od stavke do stavke.
+        val open = PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_place)
             .setColor(context.getColor(R.color.ftn_teal))

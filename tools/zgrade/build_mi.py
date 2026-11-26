@@ -116,7 +116,10 @@ BAR = -645  # srednja linija hodnika dugačkog dela (oba sprata)
 PATHS = {
     0: [
         [(-81, BAR), (952, BAR)],
-        [(405, BAR), (405, -540), (434, -540), ENTRANCE],  # predvorje, pored portirnice
+        # Predvorje, pored portirnice. Završava se pre ulaza: ulaz se kači na kraj ivicom ka vratima. Do 26.11.2026 je putanja išla do
+        # same tačke ulaza - čvor hodnika na istom mestu kao ULAZ (ivica dužine 0), pa izlazak kroz spoljna vrata nije znao pravac kroz zid
+        # (teren 26.11.2026: "Zaglavila se tačka, neće da izađe").
+        [(405, BAR), (405, -540), (434, -540)],
         [(378, BAR), (378, -617), (290.75, -617)],  # kroz sobe 13 i 12 do 11
         [(895, BAR), (895, -622), (910, -622)],  # mali hol južnog reda
         [(952, BAR), (952, -622), (975, -622)],  # istočni hol, kroz sobu 27 do 28

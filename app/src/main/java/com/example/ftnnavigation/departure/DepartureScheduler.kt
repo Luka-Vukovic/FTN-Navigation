@@ -4,6 +4,8 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
+import android.os.UserManager
 import androidx.core.content.edit
 import com.example.ftnnavigation.MainActivity
 import com.example.ftnnavigation.R
@@ -129,7 +131,7 @@ object DepartureScheduler {
     /**
      * Alarmi poslednjeg zakazivanja, bez računanja (posle restarta telefona i ažuriranja aplikacije ih sistem obriše): sadržaj
      * obaveštenja je sačuvan pri zakazivanju. [reschedule] ih posle zameni (isti PendingIntent po mestu). Obaveštenje kome je vreme u
-     * međuvremenu prošlo stiže odmah, ako rok za polazak još nije prošao.
+     * međuvremenu prošlo stiže odmah, ako rok za polazak još nije prošao. Radi i dok je telefon zaključan (samo device-protected skladište).
      */
     fun restore(context: Context, reason: String) {
         val context = context.applicationContext
@@ -255,7 +257,26 @@ object DepartureScheduler {
         prefs(context).edit { putLong(KEY_LAST_NOTIFY_AT, notifyAtMs) }
     }
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    /**
+     * Podešavanja obaveštenja i sačuvani alarmi su u device-protected skladištu: čitaju se i dok telefon posle paljenja još nije
+     * otključan ([DepartureRescheduleReceiver] na LOCKED_BOOT_COMPLETED, [DepartureAlarmReceiver]). Teren 26.11.2026: telefon se
+     * gasi i pali po rasporedu (Xiaomi, upaljen u 06:28), otključan tek oko 08:30 - BOOT_COMPLETED stiže tek posle otključavanja,
+     * pa alarmi za 07:15 i 08:03 nisu bili vraćeni i obaveštenja nisu stigla. Ranije (do 26.11.) su bila u običnom skladištu -
+     * premeštaju se pri prvom pristupu dok je telefon otključan.
+     */
+    private fun prefs(context: Context): SharedPreferences {
+        val storage = context.createDeviceProtectedStorageContext()
+        if (!movedToDeviceStorage && isUnlocked(context)) {
+            movedToDeviceStorage = storage.moveSharedPreferencesFrom(context, PREFS)
+        }
+        return storage.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    }
+
+    @Volatile
+    private var movedToDeviceStorage = false
+
+    /** false = telefon je posle paljenja još zaključan: raspored, događaji i podešavanja aplikacije (obično skladište) se ne mogu čitati. */
+    fun isUnlocked(context: Context): Boolean = context.getSystemService(UserManager::class.java).isUserUnlocked
 
     /** Tekst obaveštenja se sastavlja pri zakazivanju, pa receiver ne mora ponovo da računa rutu. */
     private fun content(context: Context, departure: Departure, location: String?, zone: ZoneId): Intent {
@@ -268,6 +289,7 @@ object DepartureScheduler {
             // Drugi podsetnik prve stavke ima uobičajen naslov ("Kreni najkasnije u").
             .putExtra(DepartureNotifications.EXTRA_FIRST_OF_DAY, departure.firstOfDay && !departure.reminder)
             .putExtra(DepartureNotifications.EXTRA_START_AT, departure.startAt.format(TIME_FORMAT))
+            .putExtra(DepartureNotifications.EXTRA_PLACE, departure.item.place)
     }
 
     /** Po mestu ([slot]) uvek isti PendingIntent (extras se ne porede), pa novi alarm zamenjuje stari. */

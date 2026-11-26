@@ -48,8 +48,11 @@
             android:exported="false"
             android:foregroundServiceType="health|location" />
 
+        <!-- directBootAware: alarm polaska i vraćanje alarma rade i pre prvog otključavanja posle paljenja telefona
+             (podaci obaveštenja su u device-protected skladištu, DepartureScheduler.prefs). -->
         <receiver
             android:name=".departure.DepartureAlarmReceiver"
+            android:directBootAware="true"
             android:exported="false" />
         <!-- Widget "Sledeće" na početnom ekranu telefona. -->
         <receiver
@@ -65,8 +68,10 @@
         </receiver>
         <receiver
             android:name=".departure.DepartureRescheduleReceiver"
+            android:directBootAware="true"
             android:exported="true">
             <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />

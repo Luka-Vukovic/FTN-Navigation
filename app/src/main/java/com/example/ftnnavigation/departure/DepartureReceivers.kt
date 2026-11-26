@@ -22,7 +22,9 @@ class DepartureAlarmReceiver : BroadcastReceiver() {
             DepartureScheduler.markNotified(context, notifyAtMs)
         }
         DepartureLog.alarm(context, notifyAtMs, show)
-        rescheduleAsync(context, "alarm")
+        // Telefon posle paljenja još zaključan: raspored se ne može čitati. Sledeći alarm je već zakazan (dva unapred, vraćeni na
+        // LOCKED_BOOT_COMPLETED), a posle otključavanja BOOT_COMPLETED zakazuje iznova.
+        if (DepartureScheduler.isUnlocked(context)) rescheduleAsync(context, "alarm")
     }
 }
 
@@ -36,11 +38,14 @@ class DepartureRescheduleReceiver : BroadcastReceiver() {
         val reason = intent.action.orEmpty().substringAfterLast('.')
         // Sistem je alarme obrisao: odmah oni poslednji zakazani, pa tek onda računanje (koje može da se ne završi).
         if (intent.action in ALARMS_LOST) DepartureScheduler.restore(context, reason)
-        rescheduleAsync(context, reason, BACKGROUND_LIMIT_MS)
+        // Zaključan telefon (LOCKED_BOOT_COMPLETED): samo vraćeni alarmi - računanje posle otključavanja, na BOOT_COMPLETED.
+        if (DepartureScheduler.isUnlocked(context)) rescheduleAsync(context, reason, BACKGROUND_LIMIT_MS)
     }
 
     private companion object {
         val ACTIONS = setOf(
+            // Odmah posle paljenja, i pre prvog otključavanja (BOOT_COMPLETED tek posle njega) - teren 26.11.2026, vidi DepartureScheduler.prefs.
+            Intent.ACTION_LOCKED_BOOT_COMPLETED,
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIME_CHANGED,
@@ -48,7 +53,7 @@ class DepartureRescheduleReceiver : BroadcastReceiver() {
             AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED,
         )
 
-        val ALARMS_LOST = setOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED)
+        val ALARMS_LOST = setOf(Intent.ACTION_LOCKED_BOOT_COMPLETED, Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED)
     }
 }
 

@@ -95,11 +95,20 @@ data class RoutingProfile(
     val uncommonVerticalSec: Double = 60.0,
     /** Stepeništa i liftovi ([BuildingGraph.firstVertical] ključ) kojima se sprat ne menja - za drugu ponudu rute ([preferNearerVertical]). */
     val excludedVerticals: Set<String> = emptySet(),
+    /**
+     * Zgrade čiji se spoljni ulaz (ULAZ kampusa - ulaz zgrade) koristi samo kad je početak ili cilj rute u toj zgradi: kazna
+     * [uncommonEntranceSec] za prolazak kroz njega, samo za izbor rute. Teren 26.11.2026 (ispred NB-a -> Biblioteka, snimak ekrana): ruta
+     * spolja do glavnog ulaza Kule, pa kroz Kulu i trem; korisnik: "inače je uobičajeno da se koriste ulazi NB i AMF, ovaj samo ako se
+     * baš ide do prostorije u Kuli".
+     */
+    val uncommonEntranceBuildings: Set<String> = UNCOMMON_ENTRANCE_BUILDINGS,
+    val uncommonEntranceSec: Double = 60.0,
 ) {
     init {
         require(walkingSpeedMps > 0) { "walkingSpeedMps mora biti > 0" }
         require(stairwellChangeSec >= 0) { "stairwellChangeSec mora biti >= 0" }
         require(uncommonVerticalSec >= 0) { "uncommonVerticalSec mora biti >= 0" }
+        require(uncommonEntranceSec >= 0) { "uncommonEntranceSec mora biti >= 0" }
         require(crowdFactor >= 1.0) { "crowdFactor mora biti >= 1" }
         require(buildingCrowd.values.all { it >= 1.0 }) { "gužva po zgradi mora biti >= 1" }
         require(!(avoidStairs && avoidLift)) { "bez stepenica i bez lifta - nema promene sprata" }
@@ -119,7 +128,10 @@ data class RoutingProfile(
         /** Podrazumevano retka stepeništa u prolazu kroz zgradu ([uncommonTransitVerticals]). */
         val UNCOMMON_TRANSIT_VERTICALS = setOf("KULA/S")
 
-        /** "Najbrže": svako stepenište i lift ravnopravno, i lift NB-a. */
+        /** Podrazumevano zgrade sa spoljnim ulazom samo za tu zgradu ([uncommonEntranceBuildings]). */
+        val UNCOMMON_ENTRANCE_BUILDINGS = setOf(KulaPlan.BUILDING_ID)
+
+        /** "Najbrže": svako stepenište i lift ravnopravno, i lift NB-a. Spoljni ulaz Kule i dalje samo za Kulu (navika, ne brzina). */
         val FASTEST = RoutingProfile(liftOnlyAvoidingStairs = emptySet(), uncommonVerticals = emptySet(), uncommonTransitVerticals = emptySet())
     }
 }
@@ -350,6 +362,7 @@ class BuildingGraph(
         open += Triple(heuristic(start, goal, profile), 0.0, startState)
         val uncommon = profile.uncommonVerticals +
             profile.uncommonTransitVerticals.filter { it.substringBefore('/') != start.buildingId && it.substringBefore('/') != goal.buildingId }
+        val uncommonEntrances = profile.uncommonEntranceBuildings - start.buildingId - goal.buildingId
 
         while (open.isNotEmpty()) {
             val (_, g, state) = open.poll()!!
@@ -376,7 +389,8 @@ class BuildingGraph(
                 val vertical = if (type == EdgeType.HOD) state.vertical else verticalOf(next)
                 val changed = vertical != state.vertical
                 val penalty = (if (state.vertical != null && changed) profile.stairwellChangeSec else 0.0) +
-                    (if (changed && vertical != null && vertical in uncommon) profile.uncommonVerticalSec else 0.0)
+                    (if (changed && vertical != null && vertical in uncommon) profile.uncommonVerticalSec else 0.0) +
+                    (if (uncommonEntrances.isNotEmpty() && throughEntrance(node, next, uncommonEntrances)) profile.uncommonEntranceSec else 0.0)
                 val nextState = SearchState(next.id, vertical)
                 val nextG = g + step + penalty
                 if (nextG < (best[nextState] ?: Double.POSITIVE_INFINITY)) {
@@ -391,6 +405,14 @@ class BuildingGraph(
     }
 
     private data class SearchState(val nodeId: String, val vertical: String?)
+
+    /**
+     * Ivica [a] - [b] je spoljni ulaz zgrade iz [buildings] ([RoutingProfile.uncommonEntranceBuildings]): spaja ulaz kampusa
+     * (K-U-...) i ulaz zgrade - oba čvora su ULAZ, iz različitih zgrada. Spojni prolazi (PROLAZ) se ne računaju.
+     */
+    private fun throughEntrance(a: Node, b: Node, buildings: Set<String>): Boolean =
+        a.buildingId != b.buildingId && a.type == NodeType.ULAZ && b.type == NodeType.ULAZ &&
+            (a.buildingId in buildings || b.buildingId in buildings)
 
     /**
      * Prvo stepenište ili lift kojim [route] menja sprat (ključ kao [RoutingProfile.excludedVerticals], npr. "NTP/S2") i hod do

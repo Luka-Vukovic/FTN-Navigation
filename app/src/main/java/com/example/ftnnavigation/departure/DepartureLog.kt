@@ -50,8 +50,23 @@ object DepartureLog {
         if (!BuildConfig.DEBUG) return
         // Dnevnik ne sme da obori zakazivanje ni receiver.
         runCatching {
+            // Telefon posle paljenja još zaključan (alarm i vraćanje alarma rade i tada): obično skladište se ne može pisati - red čeka u
+            // device-protected skladištu i prepisuje se u dnevnik pri prvom upisu posle otključavanja (redosled ostaje).
+            val waiting = File(context.createDeviceProtectedStorageContext().filesDir, LOCKED_FILE)
+            if (!DepartureScheduler.isUnlocked(context)) {
+                waiting.parentFile?.mkdirs()
+                waiting.appendText(line + "\n")
+                return
+            }
             val dir = File(context.filesDir, "obavestenja").apply { mkdirs() }
-            File(dir, "obavestenja.csv").appendText(line + "\n")
+            val log = File(dir, "obavestenja.csv")
+            if (waiting.exists()) {
+                log.appendText(waiting.readText())
+                waiting.delete()
+            }
+            log.appendText(line + "\n")
         }
     }
+
+    private const val LOCKED_FILE = "obavestenja-zakljucano.csv"
 }

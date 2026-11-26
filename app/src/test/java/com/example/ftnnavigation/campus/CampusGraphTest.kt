@@ -12,6 +12,7 @@ import com.example.ftnnavigation.graph.NbPlan
 import com.example.ftnnavigation.graph.NodeType
 import com.example.ftnnavigation.graph.NtpPlan
 import com.example.ftnnavigation.graph.PointM
+import com.example.ftnnavigation.graph.RoutingProfile
 import com.example.ftnnavigation.schedule.ScheduleData
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -109,6 +110,34 @@ class CampusGraphTest {
         assertEquals(route.lengthM / 1.3, route.durationSec, 1e-6)
     }
 
+    /**
+     * Teren 26.11.2026 (snimak ekrana, ispred NB-a -> Biblioteka): ruta je išla spolja do glavnog ulaza Kule, pa kroz Kulu i trem.
+     * Korisnik: uobičajeni su ulazi NB-a i AMF-a, ulaz Kule "samo ako se baš ide do prostorije u Kuli". Sa staze ispred ulaza Kule do
+     * kancelarije u Kuli i dalje kroz njega.
+     */
+    @Test
+    fun kulaEntrance_onlyForKula() {
+        val types = setOf(NodeType.STAZA, NodeType.ULAZ)
+        // Mesto korisnika pri izboru odredišta (GPS iz replay-a snimka 20261126-155549), metri kampusa.
+        fun toLibrary(profile: RoutingProfile) = checkNotNull(
+            graph.routeFrom(
+                CAMPUS_ID, 0, (394.4 / campus.widthM).toFloat(), (95.3 / campus.heightM).toFloat(), graph.room("Biblioteka")!!.id, profile,
+                startTypes = types,
+            ),
+        )
+        // Bez kazne - ruta sa snimka ekrana.
+        assertTrue("K-U-KULA-1" in toLibrary(RoutingProfile(uncommonEntranceBuildings = emptySet())).nodes.map { it.id })
+        val ids = toLibrary(RoutingProfile()).nodes.map { it.id }
+        assertFalse(ids.toString(), "K-U-KULA-1" in ids)
+        assertTrue(ids.toString(), ids.any { it.startsWith("K-U-NB") || it.startsWith("K-U-AMF") })
+
+        val outside = graph.edges.filter { it.fromId == "K-U-KULA-1" || it.toId == "K-U-KULA-1" }
+            .map { if (it.fromId == "K-U-KULA-1") it.toId else it.fromId }
+            .first { graph.node(it)!!.type == NodeType.STAZA }
+        val toKula = checkNotNull(graph.route(outside, graph.room("Kula 101")!!.id))
+        assertTrue(toKula.nodes.map { it.id }.toString(), toKula.nodes.any { it.id == "K-U-KULA-1" })
+    }
+
     /** Ručne dijagonale "romba" staza severozapadno od ITC-a (teren 29.10.2026): suprotna temena pravom linijom, preko ukrštanja. */
     @Test
     fun extraPathsNearItc_crossDiamond() {
@@ -126,7 +155,7 @@ class CampusGraphTest {
             "A2" to "AMF", "INT 1" to "AMF", "AH4A" to "NB", "AH-CRT" to "NB", "L1" to "AMF", "L1 (RC)" to "NB",
             "L4 (RC)" to "NB", "108A" to "NB", "312" to "NB", "ITC04" to "ITC", "ITCA1" to "ITC", "ITCS-RC" to "ITC",
             "F-208" to "F", "LG 005" to "DGG", "LG 107" to "DGG", "Scen-LAB" to "AMF", "O12" to "NB",
-            "GRID-1" to "AMF", "Fizika" to "F", "Hemija" to "NB", "Hemija 2" to "NB", "AR0" to "AMF", "AR6" to "AMF",
+            "GRID-1" to "AMF", "Fizika" to "F", "Hemija" to "MI", "Hemija 2" to "MI", "AR0" to "AMF", "AR6" to "AMF",
         ).forEach { (room, building) -> assertEquals(room, building, buildingOfRoom(room)) }
         listOf("MF-27", "MF-Sala 1").forEach {
             assertNull(it, buildingOfRoom(it))
@@ -181,8 +210,37 @@ class CampusGraphTest {
         assertEquals("NTP-0-ULAZ-FTN", nearest.nodes.last().id)
         assertTrue(checkNotNull(resolveTarget(campus.building("NTP")!!.name!!, graph, campus)).isBuilding)
         assertFalse(checkNotNull(resolveTarget("204", graph, campus)).isBuilding)
-        val unmapped = checkNotNull(resolveTarget("Hemija", graph, campus))
+        // Izmišljena sala NB-a (sve sale iz rasporeda su od 26.11.2026 ucrtane, osim Medicinskog fakulteta).
+        val unmapped = checkNotNull(resolveTarget("999", graph, campus))
+        assertTrue(unmapped.approximate)
         assertFalse(unmapped.isBuilding)
+    }
+
+    /**
+     * Ulaz i prolaz zgrade su odvojeni od čvora iza sebe: izlazak kroz spoljna vrata uzima pravac kroz zid od tog čvora. MI (do 26.11.2026):
+     * hodnik predvorja je išao do same tačke ulaza - ivica dužine 0, tačka nije izlazila napolje. Prag kao u PdrLocator.leaveThroughOuterDoor
+     * (0,1 m); ITC glavni ulaz je 0,2 m od hodnika.
+     */
+    @Test
+    fun entrancesAndPassages_haveLengthToInnerNode() {
+        for (edge in graph.edges) {
+            val a = graph.node(edge.fromId)!!
+            val b = graph.node(edge.toId)!!
+            if (a.buildingId != b.buildingId || a.buildingId == CAMPUS_ID) continue
+            if (setOf(a.type, b.type).none { it == NodeType.ULAZ || it == NodeType.PROLAZ }) continue
+            assertTrue("${a.id} - ${b.id}", distance(graph.position(a), graph.position(b)) >= 0.1)
+        }
+    }
+
+    /** Hemija i Hemija 2 iz rasporeda su MI 11 u prizemlju MI-a (teren 26.11.2026; do tada privremeno NB, bez mesta na planu). */
+    @Test
+    fun chemistry_isMi11() {
+        for (room in listOf("Hemija", "Hemija 2")) {
+            val target = checkNotNull(resolveTarget(room, graph, campus))
+            assertFalse(room, target.approximate)
+            assertEquals(room, "MI 11", target.node.name)
+            assertEquals(room, PlaceLocation.Room(MiPlan, 0), placeLocation(room, graph, campus))
+        }
     }
 
     /** Početna i obaveštenje: ucrtana sala -> zgrada i sprat, inače samo naziv zgrade / mesta van kampusa. */

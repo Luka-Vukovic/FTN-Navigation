@@ -89,9 +89,12 @@ private fun NavController.navigateToTopLevel(route: Any) = navigate(route) {
     restoreState = true
 }
 
-/** Koren aplikacije: donja navigaciona traka + NavHost sa ekranima. */
+/**
+ * Koren aplikacije: donja navigaciona traka + NavHost sa ekranima. [routeRequest]: mesto iz obaveštenja "kreni" - Mapa sa
+ * rutom do njega (kao "Prikaži rutu" na Početnoj); [onRouteRequestHandled] kad je prikazana.
+ */
 @Composable
-fun FtnApp() {
+fun FtnApp(routeRequest: String? = null, onRouteRequestHandled: () -> Unit = {}) {
     val navController = rememberNavController()
     // Vezani za aktivnost (poziv je van NavHost-a): raspored dele Početna i Raspored,
     // a mapu (graf, odredište) Početna i Mapa.
@@ -109,6 +112,15 @@ fun FtnApp() {
         return
     }
     DepartureNotificationsEffect(scheduleViewModel.selection)
+    // Dodir na obaveštenje "kreni": čeka se graf (pri hladnom pokretanju se učitava), da bi Mapa odmah pokazala plan i rutu.
+    val graphLoaded = mapViewModel.graph != null
+    LaunchedEffect(routeRequest, graphLoaded) {
+        val place = routeRequest ?: return@LaunchedEffect
+        if (!graphLoaded) return@LaunchedEffect
+        mapViewModel.selectDestination(place)
+        navController.navigateToTopLevel(MapRoute)
+        onRouteRequestHandled()
+    }
     // Zauzetost sala po svim rasporedima: pop-up sale na Mapi i slobodne prostorije na Početnoj.
     val scheduleData = scheduleViewModel.data
     val calendar = scheduleViewModel.calendar

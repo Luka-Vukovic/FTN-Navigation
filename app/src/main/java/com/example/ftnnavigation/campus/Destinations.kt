@@ -16,12 +16,6 @@ private val COMPUTER_LAB = Regex("""L\d( \(RC\))?""")
 private val NUMBERED_ROOM = Regex("""\d{3}[A-Z]?""")
 private val AR_ROOM = Regex("""AR\d""") // AR0...AR6: prizemlje Amfiteatara, zapadna strana (FtnGO)
 
-/**
- * Privremeno u Nastavnom bloku dok se ne sazna tačno (korisnik, 29.09.2026): "neka bude nastavni
- * blok dok ne saznam". "Hemija 2" je uz "Hemija". "Fizika" je od 10.11.2026 F 125 ([ROOM_ALIASES]).
- */
-private val PROVISIONAL_NB = listOf("Hemija")
-
 /** Mesta van kampusa, predaleko da bi bila na mapi (korisnik): prefiks oznake sale -> naziv. */
 private val OFF_CAMPUS = mapOf("MF-" to "Medicinski fakultet")
 
@@ -42,6 +36,10 @@ private val ROOM_ALIASES = mapOf(
     // Teren 10.11.2026 uveče, korisnik: na I spratu F-bloka tabla "F-125, Laboratorija za fiziku" ("nema table sa rasporedom ... nisam skroz
     // siguran da je to Fizika"). U rasporedu je "Fizika" samo laboratorijske vežbe (Fizika, Tehnička fizika, Odabrana poglavlja iz fizike).
     "Fizika" to "F 125",
+    // Teren 26.11.2026, korisnik (MI prizemlje): "Definitivno jeste, i tu piše 11. To je Hemija. Odmah pored je i tabla na kojoj piše
+    // Hemija 2, ali nema vrata, možda su unutra dve laboratorije" (stari sajt FTN-a: laboratorija za primenjenu hemiju, 011). Do tada
+    // privremeno NB ("neka bude nastavni blok dok ne saznam", 29.09.2026).
+    "Hemija" to "MI 11", "Hemija 2" to "MI 11",
 )
 
 /** Oznaka sale iz rasporeda kako je ucrtana na planu (O12 -> 012, 204A -> 204), inače ista oznaka. */
@@ -152,7 +150,7 @@ fun buildingOfRoom(room: String): String? {
         name == "L1" -> "AMF"
         name == "Scen-LAB" -> "AMF" // FtnGO: suteren Amfiteatara (ranije NB - korisnik prihvatio ispravku)
         name == "Fizika" -> "F" // F 125, "Laboratorija za fiziku" (teren 10.11.2026; do tada privremeno NB)
-        PROVISIONAL_NB.any { name.startsWith(it) } -> "NB"
+        name == "Hemija" || name == "Hemija 2" -> "MI" // MI 11 (teren 26.11.2026; do tada privremeno NB)
         name.startsWith("GRID-") -> "AMF" // suteren Amfiteatara, sa svojim ulazom sa zapada
         AR_ROOM.matches(name) -> "AMF"
         name.startsWith("NTP") -> "NTP"
