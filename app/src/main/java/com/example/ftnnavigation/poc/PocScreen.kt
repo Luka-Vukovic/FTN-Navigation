@@ -118,6 +118,7 @@ import com.example.ftnnavigation.campus.nextManeuver
 import com.example.ftnnavigation.campus.routeSteps
 import com.example.ftnnavigation.campus.StepKind
 import com.example.ftnnavigation.campus.searchDestinations
+import com.example.ftnnavigation.campus.destinationLabel
 import com.example.ftnnavigation.graph.BuildingGraph
 import com.example.ftnnavigation.graph.Node
 import com.example.ftnnavigation.graph.NodeType
@@ -1233,7 +1234,7 @@ internal fun DestinationSheet(
                             indoorBuilding(node.buildingId)?.let { stringResource(it.locationRes(), floorName(node.floor)) }
                         }
                         DestinationItem(
-                            name, location, isSelected = name == selected, isFavorite = name in favorites,
+                            destinationLabel(name), location, isSelected = name == selected, isFavorite = name in favorites,
                             onClick = { onSelect(name) }, onToggleFavorite = { onToggleFavorite(name) },
                         )
                     }

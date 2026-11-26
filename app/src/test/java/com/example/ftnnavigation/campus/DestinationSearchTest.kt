@@ -48,6 +48,20 @@ class DestinationSearchTest {
         assertEquals(listOf("204"), search("204a"))
     }
 
+    /** Laboratorije iz rasporeda: pretraga po nazivu iz rasporeda, a u listi naziv u zagradi uz oznaku sale (korisnik, 26.11.2026). */
+    @Test
+    fun scheduleLabNames_foundAndShownInParentheses() {
+        val rooms = listOf("F 125", "F 126", "MI 11", "MI 12", "204")
+        assertEquals(listOf("F 125"), searchDestinations(rooms, "fizika"))
+        assertEquals(listOf("MI 11"), searchDestinations(rooms, "hemija 2"))
+        assertEquals(listOf("MI 11"), searchDestinations(rooms, "hemija"))
+        assertEquals("F 125 (Fizika)", destinationLabel("F 125"))
+        assertEquals("MI 11 (Hemija, Hemija 2)", destinationLabel("MI 11"))
+        // Druga oznaka iste sale (204A) nije naziv - ne dopisuje se.
+        assertEquals("204", destinationLabel("204"))
+        assertEquals("Nastavni blok", destinationLabel("Nastavni blok"))
+    }
+
     @Test
     fun noMatch_isEmpty() {
         assertEquals(emptyList<String>(), search("menza"))

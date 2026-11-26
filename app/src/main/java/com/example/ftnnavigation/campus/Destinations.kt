@@ -42,6 +42,19 @@ private val ROOM_ALIASES = mapOf(
     "Hemija" to "MI 11", "Hemija 2" to "MI 11",
 )
 
+/** Nazivi iz rasporeda koji nisu oznaka sale nego laboratorija ([ROOM_ALIASES]) - u izboru odredišta stoje uz salu ([destinationLabel]). */
+private val SCHEDULE_ROOM_NAMES = setOf("Fizika", "Hemija", "Hemija 2")
+
+/**
+ * Naziv odredišta za listu izbora: sala sa nazivom iz rasporeda ([SCHEDULE_ROOM_NAMES]) ima ga u zagradi - "F 125 (Fizika)", "MI 11 (Hemija,
+ * Hemija 2)"; ostala odredišta kao [name]. Korisnik (26.11.2026): "u pretrazi za Fiziku i Hemiju trebalo da stoje u zagradi i ti nazivi, da bi
+ * bilo jasnije, a na mapi ne mora". Druge oznake iste sale (204A, O12) se ne dopisuju.
+ */
+fun destinationLabel(name: String): String {
+    val names = ROOM_ALIASES.filter { (alias, room) -> room == name && alias in SCHEDULE_ROOM_NAMES }.keys
+    return if (names.isEmpty()) name else "$name (${names.joinToString(", ")})"
+}
+
 /** Oznaka sale iz rasporeda kako je ucrtana na planu (O12 -> 012, 204A -> 204), inače ista oznaka. */
 fun canonicalRoom(room: String): String = room.trim().let { ROOM_ALIASES[it] ?: it }
 
